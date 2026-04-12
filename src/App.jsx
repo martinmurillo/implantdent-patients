@@ -130,14 +130,19 @@ const exportToPDF = async (patient, lang, setExporting) => {
   const apptRows = appointments.map((appt, idx) => {
     const apptTxs = (appt.treatmentIds||[]).map(id => txMap[id]).filter(Boolean);
     const dateStr = appt.date ? `${fmtDate(appt.date)}${appt.time?" "+appt.time:""}` : t.toConfirm;
-    const txLines = apptTxs.map(tr=>`<div style="padding:3px 0;border-bottom:1px solid #f0f0f0">${tr.name}</div>`).join("");
+    const txGrid = apptTxs.length === 0 ? "-" :
+      `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;max-height:none;overflow:visible">` +
+      apptTxs.slice(0,20).map(tr=>
+        `<div style="font-size:10px;line-height:1.3;white-space:normal;word-break:break-word">☑ ${tr.name}</div>`
+      ).join("") +
+      `</div>`;
     return `
     <tr>
-      <td style="font-weight:700;color:#1a1a2e;vertical-align:top;white-space:nowrap">${ordinal(idx+1, lang)}</td>
-      <td style="vertical-align:top">${dateStr}</td>
-      <td style="vertical-align:top">${appt.doctors || "-"}</td>
-      <td style="vertical-align:top">${txLines || "-"}</td>
-      <td style="vertical-align:top;white-space:nowrap">${fmtEur(appt.payment)}</td>
+      <td style="font-weight:700;color:#1a1a2e;vertical-align:middle;white-space:nowrap">${ordinal(idx+1, lang)}</td>
+      <td style="vertical-align:middle;white-space:nowrap">${dateStr}</td>
+      <td style="vertical-align:middle;white-space:nowrap">${appt.doctors || "-"}</td>
+      <td style="vertical-align:middle;padding:6px 12px">${txGrid}</td>
+      <td style="vertical-align:middle;white-space:nowrap">${fmtEur(appt.payment)}</td>
     </tr>`;
   }).join("");
 
@@ -154,7 +159,7 @@ const exportToPDF = async (patient, lang, setExporting) => {
   .info-item{display:flex;gap:6px}
   .lbl{font-weight:bold;color:#c9a84c;white-space:nowrap}
   table{width:100%;border-collapse:collapse;margin-bottom:26px}
-  th{background:#1a1a2e;color:#c9a84c;padding:10px 12px;text-align:left;font-size:11px;letter-spacing:1px}
+  th{background:#1a1a2e;color:#c9a84c;padding:10px 12px;text-align:left;font-size:11px;letter-spacing:1px;white-space:nowrap}
   td{padding:9px 12px;border-bottom:1px solid #eee;vertical-align:middle}
   tr:nth-child(even) td{background:#f9f8f5}
   .totals{margin-left:auto;width:290px;margin-bottom:26px}
@@ -224,6 +229,7 @@ const exportToPDF = async (patient, lang, setExporting) => {
   const win = window.open("","_blank");
   win.document.write(html);
   win.document.close();
+  win.document.title = (patient.hc||"") + "-" + (patient.name||"");
   setTimeout(()=>win.print(), 800);
 };
 
