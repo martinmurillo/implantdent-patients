@@ -133,7 +133,7 @@ const exportToPDF = async (patient, lang, setExporting) => {
     const txGrid = apptTxs.length === 0 ? "-" :
       `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;max-height:none;overflow:visible">` +
       apptTxs.slice(0,20).map(tr=>
-        `<div style="font-size:10px;line-height:1.3;white-space:normal;word-break:break-word">☑ ${tr.name}</div>`
+        `<div style="font-size:10px;line-height:1.3;white-space:normal;word-break:break-word">☐ ${tr.name}</div>`
       ).join("") +
       `</div>`;
     return `
