@@ -518,7 +518,7 @@ function AlertCard({ patient, onOpen }) {
 }
 
 // ─── PatientCard ──────────────────────────────────────────────────────────────
-function PatientCard({ patient, onEdit, onToggleClosed }) {
+function PatientCard({ patient, onEdit, onToggleClosed, onDelete }) {
   const [exporting, setExp] = useState(null);
   const sub  = (patient.treatments||[]).reduce((a,t)=>a+(parseFloat(t.value)||0),0);
   const disc = (patient.treatments||[]).reduce((a,t)=>a+(parseFloat(t.discount)||0),0);
@@ -555,6 +555,10 @@ function PatientCard({ patient, onEdit, onToggleClosed }) {
             <button onClick={()=>onToggleClosed(patient)}
               style={{background:patient.closed?"#0d2014":"#1a1e2a",border:`1px solid ${patient.closed?"#2ecc7144":"#44444444"}`,borderRadius:6,color:patient.closed?"#2ecc71":"#777",padding:"5px 12px",cursor:"pointer",fontSize:12}}>
               {patient.closed?"✓ Cerrado":"Cerrar"}
+            </button>
+            <button onClick={()=>onDelete(patient)}
+              style={{...s.btnSm,background:"#2a0a0a",border:"1px solid #e74c3c88",color:"#e74c3c",padding:"5px 12px",fontSize:12}}>
+              Eliminar
             </button>
           </div>
         </div>
@@ -609,6 +613,12 @@ export default function App() {
 
   const toggleClosed = async (patient) => {
     await supabase.from("patients").update({closed:!patient.closed,last_contact:today()}).eq("id",patient.id);
+    await fetchPatients();
+  };
+
+  const deletePatient = async (patient) => {
+    if (!confirm(`¿Seguro que querés eliminar a ${patient.name}? Esta acción no se puede deshacer`)) return;
+    await supabase.from("patients").delete().eq("id", patient.id);
     await fetchPatients();
   };
 
@@ -687,7 +697,7 @@ export default function App() {
             {filtered.length===0 && (
               <div style={{textAlign:"center",color:"#333",padding:56,fontSize:14}}>Sin pacientes. Creá el primero con "+ Nuevo paciente"</div>
             )}
-            {filtered.map(p=><PatientCard key={p.id} patient={p} onEdit={openEdit} onToggleClosed={toggleClosed}/>)}
+            {filtered.map(p=><PatientCard key={p.id} patient={p} onEdit={openEdit} onToggleClosed={toggleClosed} onDelete={deletePatient}/>)}
           </>
         )}
 
@@ -696,7 +706,7 @@ export default function App() {
             <div style={{fontSize:12,color:"#8e44ad",letterSpacing:2,marginBottom:16,fontWeight:700}}>❄️ PACIENTES FRÍOS</div>
             {cold.length===0
               ? <div style={{textAlign:"center",color:"#333",padding:56,fontSize:14}}>No hay pacientes fríos</div>
-              : cold.map(p=><PatientCard key={p.id} patient={p} onEdit={openEdit} onToggleClosed={toggleClosed}/>)
+              : cold.map(p=><PatientCard key={p.id} patient={p} onEdit={openEdit} onToggleClosed={toggleClosed} onDelete={deletePatient}/>)
             }
           </>
         )}
