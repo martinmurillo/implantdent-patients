@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase";
 import { translateTreatment } from "./treatments";
-import { ChatProvider, useChat } from "./contexts/ChatContext";
-import ChatFloat from "./components/ChatFloat";
 
 // ─── PDF.js ───────────────────────────────────────────────────────────────────
 const loadPdfJs = () => new Promise((resolve) => {
@@ -570,8 +568,7 @@ function PatientCard({ patient, onEdit, onToggleClosed, onDelete }) {
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
-function AppInner() {
-  const { setPacienteActualId } = useChat();
+export default function App() {
   const [patients, setPatients] = useState([]);
   const [view, setView]         = useState("dashboard");
   const [editing, setEditing]   = useState(null);
@@ -625,8 +622,8 @@ function AppInner() {
     await fetchPatients();
   };
 
-  const openEdit  = (p) => { setEditing(p); setView("form"); setPacienteActualId(p.id); };
-  const newPt     = ()  => { const p = emptyPatient(); setEditing(p); setView("form"); setPacienteActualId(p.id); };
+  const openEdit  = (p) => { setEditing(p); setView("form"); };
+  const newPt     = ()  => { setEditing(emptyPatient()); setView("form"); };
 
   const active   = patients.filter(p=>p.status!=="cold");
   const cold     = patients.filter(p=>p.status==="cold");
@@ -714,15 +711,6 @@ function AppInner() {
           </>
         )}
       </div>
-      <ChatFloat />
     </div>
-  );
-}
-
-export default function App() {
-  return (
-    <ChatProvider>
-      <AppInner />
-    </ChatProvider>
   );
 }
