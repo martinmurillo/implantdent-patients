@@ -272,54 +272,6 @@ function PatientForm({ patient, onSave, onCancel, templates }) {
   const updAppt = (id,f,v) => setP(prev=>({...prev, appointments:prev.appointments.map(a=>a.id===id?{...a,[f]:v}:a)}));
   const remAppt = (id) => setP(prev=>({...prev, appointments:prev.appointments.filter(a=>a.id!==id)}));
 
-  const [generatingNotes, setGeneratingNotes] = useState(false);
-
-  const generateNotes = async () => {
-    if (!p.appointments || p.appointments.length === 0) {
-      alert("Primero agregá citas y asignales tratamientos.");
-      return;
-    }
-
-    // Build ordered treatment list by appointment
-    const citasSummary = p.appointments.map((appt, idx) => {
-      const apptTxs = p.treatments.filter(t => (appt.treatmentIds||[]).includes(t.id));
-      const txNames = apptTxs.map(t => t.name).join(", ");
-      return `Cita ${idx+1}: ${txNames || "sin tratamientos asignados"}`;
-    }).join("\n");
-
-    if (!citasSummary.includes(":") || citasSummary.split("\n").every(l => l.endsWith(": "))) {
-      alert("Asigná tratamientos a las citas antes de generar.");
-      return;
-    }
-
-    setGeneratingNotes(true);
-    try {
-      const prompt = `Eres el asistente de una clínica dental llamada Implantdent. 
-Tu tarea es redactar un texto de observaciones clínicas para el paciente, explicando en orden lógico los tratamientos que se realizarán y por qué, usando lenguaje claro y profesional pero comprensible para el paciente.
-
-El plan de tratamiento por citas es el siguiente:
-${citasSummary}
-
-Redactá un texto fluido, con conectores naturales entre los pasos, explicando brevemente el motivo de cada tratamiento y su relación con los demás. Si algún paso no tiene tratamientos asignados, ignóralo. El texto debe ser en español, tener entre 100 y 250 palabras, y sonar como una explicación personalizada, no como una lista.`;
-
-      const res = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=AIzaSyCChoV097BgqaM0uJEkAvunoKLhq3q6wzA",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-        }
-      );
-      const data = await res.json();
-      const generated = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      if (!generated) throw new Error("Respuesta vacía");
-      setP(prev => ({ ...prev, notes: prev.notes ? prev.notes + "\n\n" + generated : generated }));
-    } catch(e) {
-      alert("Error al generar observaciones: " + e.message);
-    }
-    setGeneratingNotes(false);
-  };
-
   const sub   = p.treatments.reduce((a,t)=>a+(parseFloat(t.value)||0),0);
   const disc  = p.treatments.reduce((a,t)=>a+(parseFloat(t.discount)||0),0);
   const grand = sub-disc;
@@ -420,13 +372,8 @@ Redactá un texto fluido, con conectores naturales entre los pasos, explicando b
         </div>
       )}
       <div style={{marginBottom:20}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+        <div style={{marginBottom:5}}>
           <label style={{...s.label,marginBottom:0}}>Notas / Observaciones</label>
-          <button onClick={generateNotes} disabled={generatingNotes}
-            title="Genera texto automáticamente con IA según los tratamientos asignados a las citas"
-            style={{...s.btnDark, padding:"4px 12px", fontSize:11, opacity:generatingNotes?0.6:1}}>
-            {generatingNotes ? "⏳ Generando..." : "✨ Generar con IA"}
-          </button>
         </div>
         <textarea value={p.notes||""} onChange={e=>setF("notes",e.target.value)} rows={3}
           placeholder="Observaciones, indicaciones..." style={{...s.input, resize:"vertical"}}/>
