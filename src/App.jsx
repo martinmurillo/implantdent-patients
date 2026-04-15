@@ -53,6 +53,9 @@ const ordinal  = (n, lang) => {
   return `${n}${n===1?"st":n===2?"nd":n===3?"rd":"th"} Visit`;
 };
 
+const MONTHS_ES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const fmtMonthLabel = (y, m) => `${MONTHS_ES[m]} ${y}`;
+
 // ─── TRANSLATIONS ─────────────────────────────────────────────────────────────
 const T = {
   es:{ budget:"PRESUPUESTO", patient:"Paciente", hc:"HC", budgetNo:"Nº Presupuesto", date:"Fecha",
@@ -84,8 +87,6 @@ const CONSENT = {
 };
 const SIG_LABEL = { es:"Firma Paciente", en:"Patient Signature", fr:"Signature du Patient" };
 
-// ─── LOGO ─────────────────────────────────────────────────────────────────────
-const LOGO = null;
 // ─── DATA SHAPES ──────────────────────────────────────────────────────────────
 const emptyPatient = () => ({
   id:genId(), name:"", hc:"", budgetNo:"", date:today(), time:"",
@@ -94,144 +95,6 @@ const emptyPatient = () => ({
 });
 const emptyTx   = () => ({ id:genId(), name:"", value:"", discount:"0" });
 const emptyAppt = () => ({ id:genId(), label:"", date:"", time:"", doctors:"", payment:"", treatmentIds:[] });
-
-// ─── PDF EXPORT ───────────────────────────────────────────────────────────────
-const exportToPDF = async (patient, lang, setExporting) => {
-  if (setExporting) setExporting(lang);
-
-  let treatments = [...(patient.treatments||[])];
-  const appointments = patient.appointments || [];
-
-  // Sort treatments by name so same names group together
-  treatments.sort((a,b) => a.name.localeCompare(b.name));
-
-  // Translate treatment names using local dictionary (no API needed)
-  if (lang !== "es" && treatments.length > 0) {
-    treatments = treatments.map(tr => ({ ...tr, name: translateTreatment(tr.name, lang) }));
-  }
-
-  const t    = T[lang];
-  const sub  = treatments.reduce((a,tr)=>a+(parseFloat(tr.value)||0),0);
-  const disc = treatments.reduce((a,tr)=>a+(parseFloat(tr.discount)||0),0);
-  const grand = sub-disc;
-
-  // Build treatment rows (already sorted by name = grouped)
-  const txRows = treatments.map(tr=>`
-    <tr>
-      <td>${tr.name}</td>
-      <td>${fmtEur(tr.value)}</td>
-      <td>${fmtEur(tr.discount)}</td>
-      <td>${fmtEur((parseFloat(tr.value)||0)-(parseFloat(tr.discount)||0))}</td>
-    </tr>`).join("");
-
-  // Build appointment schedule
-  // For each appointment, find its treatments (by id)
-  const txMap = Object.fromEntries(treatments.map(tr=>[tr.id, tr]));
-  const apptRows = appointments.map((appt, idx) => {
-    const apptTxs = (appt.treatmentIds||[]).map(id => txMap[id]).filter(Boolean);
-    const dateStr = appt.date ? `${fmtDate(appt.date)}${appt.time?" "+appt.time:""}` : t.toConfirm;
-    const txGrid = apptTxs.length === 0 ? "-" :
-      `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;max-height:none;overflow:visible">` +
-      apptTxs.slice(0,20).map(tr=>
-        `<div style="font-size:10px;line-height:1.3;white-space:normal;word-break:break-word">☐ ${tr.name}</div>`
-      ).join("") +
-      `</div>`;
-    return `
-    <tr>
-      <td style="font-weight:700;color:#1a1a2e;vertical-align:middle;white-space:nowrap">${ordinal(idx+1, lang)}</td>
-      <td style="vertical-align:middle;white-space:nowrap">${dateStr}</td>
-      <td style="vertical-align:middle;white-space:nowrap">${appt.doctors || "-"}</td>
-      <td style="vertical-align:middle;padding:6px 12px">${txGrid}</td>
-      <td style="vertical-align:middle;white-space:nowrap">${fmtEur(appt.payment)}</td>
-    </tr>`;
-  }).join("");
-
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-  *{box-sizing:border-box}
-  body{font-family:'Georgia',serif;margin:36px 40px 60px;color:#1a1a2e;font-size:13px;line-height:1.8}
-  .header{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #c9a84c;padding-bottom:18px;margin-bottom:26px}
-  .header-center{text-align:center;flex:1}
-  .header-center h1{font-size:24px;letter-spacing:5px;margin:0 0 3px}
-  .header-center p{color:#888;margin:0;font-size:12px}
-  .logo{width:80px;height:auto}
-  .spacer{width:80px}
-  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;margin-bottom:26px}
-  .info-item{display:flex;gap:6px}
-  .lbl{font-weight:bold;color:#c9a84c;white-space:nowrap}
-  table{width:100%;border-collapse:collapse;margin-bottom:26px}
-  th{background:#1a1a2e;color:#c9a84c;padding:10px 12px;text-align:left;font-size:11px;letter-spacing:1px;white-space:nowrap}
-  td{padding:9px 12px;border-bottom:1px solid #eee;vertical-align:middle}
-  tr:nth-child(even) td{background:#f9f8f5}
-  .totals{margin-left:auto;width:290px;margin-bottom:26px}
-  .tr{display:flex;justify-content:space-between;padding:6px 12px}
-  .tr-grand{background:#1a1a2e;color:#c9a84c;font-weight:700;font-size:15px;border-radius:4px}
-  .sec{font-size:11px;letter-spacing:3px;text-transform:uppercase;border-left:4px solid #c9a84c;padding-left:10px;margin:26px 0 12px;color:#1a1a2e}
-  .notes-box{background:#f9f8f5;border-left:3px solid #c9a84c;padding:12px 14px;border-radius:4px;font-style:italic}
-  .footer{margin-top:36px;border-top:1px solid #ddd;padding-top:18px}
-  .consent{font-style:italic;margin-bottom:24px;color:#333}
-  .sig-block{display:flex;align-items:flex-end;gap:10px;margin-bottom:28px}
-  .sig-line{border-bottom:1px solid #1a1a2e;width:240px;height:44px}
-  .sig-lbl{font-size:11px;color:#888;letter-spacing:1px}
-  .legal{font-size:10px;color:#999;line-height:1.7;border-top:1px solid #eee;padding-top:12px}
-  </style></head><body>
-
-  <div class="header">
-    <img src="http://localhost:5173/logo.png" class="logo" alt="Logo"/>
-    <div class="header-center">
-      <h1>${t.budget}</h1>
-      <p>${fmtDate(patient.date)}${patient.time?" · "+patient.time:""}</p>
-    </div>
-    <div class="spacer"></div>
-  </div>
-
-  <div class="info-grid">
-    <div class="info-item"><span class="lbl">${t.patient}:</span> ${patient.name}</div>
-    <div class="info-item"><span class="lbl">${t.budgetNo}:</span> ${patient.budget_no||patient.budgetNo||""}</div>
-    <div class="info-item"><span class="lbl">${t.hc}:</span> ${patient.hc||""}</div>
-    <div class="info-item"><span class="lbl">${t.date}:</span> ${fmtDate(patient.date)}</div>
-  </div>
-
-  <table>
-    <thead><tr>
-      <th>${t.treatment}</th><th>${t.value}</th><th>${t.discount}</th><th>${t.total}</th>
-    </tr></thead>
-    <tbody>${txRows}</tbody>
-  </table>
-
-  <div class="totals">
-    <div class="tr"><span>${t.subtotal}</span><span>${fmtEur(sub)}</span></div>
-    <div class="tr"><span>${t.totalDiscount}</span><span>-${fmtEur(disc)}</span></div>
-    <div class="tr tr-grand"><span>${t.grandTotal}</span><span>${fmtEur(grand)}</span></div>
-  </div>
-
-  ${appointments.length > 0 ? `
-  <div class="sec">${t.appointmentDetail}</div>
-  <table>
-    <thead><tr>
-      <th>Cita</th><th>${t.appointment}</th><th>${t.doctors}</th><th>${t.treatment}</th><th>${t.payment}</th>
-    </tr></thead>
-    <tbody>${apptRows}</tbody>
-  </table>` : ""}
-
-  ${patient.notes ? `<div class="sec">${t.notes}</div><div class="notes-box">${patient.notes}</div>` : ""}
-
-  <div class="footer">
-    <p class="consent">${CONSENT[lang]}</p>
-    <div class="sig-block">
-      <div class="sig-line"></div>
-      <span class="sig-lbl">${SIG_LABEL[lang]}</span>
-    </div>
-    <div class="legal">${LEGAL[lang]}</div>
-  </div>
-  </body></html>`;
-
-  if (setExporting) setExporting(null);
-  const win = window.open("","_blank");
-  win.document.write(html);
-  win.document.close();
-  win.document.title = (patient.hc||"") + "-" + (patient.name||"");
-  setTimeout(()=>win.print(), 800);
-};
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const s = {
@@ -245,6 +108,88 @@ const s = {
   btnSm:   { background:"#1a2240", border:"1px solid #c9a84c33", borderRadius:6, color:"#c9a84c", padding:"4px 10px", cursor:"pointer", fontSize:12 },
 };
 
+// ─── PDF EXPORT ───────────────────────────────────────────────────────────────
+const exportToPDF = async (patient, lang, setExporting) => {
+  if (setExporting) setExporting(lang);
+  let treatments = [...(patient.treatments||[])];
+  const appointments = patient.appointments || [];
+  treatments.sort((a,b) => a.name.localeCompare(b.name));
+  if (lang !== "es" && treatments.length > 0) {
+    treatments = treatments.map(tr => ({ ...tr, name: translateTreatment(tr.name, lang) }));
+  }
+  const t    = T[lang];
+  const sub  = treatments.reduce((a,tr)=>a+(parseFloat(tr.value)||0),0);
+  const disc = treatments.reduce((a,tr)=>a+(parseFloat(tr.discount)||0),0);
+  const grand = sub-disc;
+  const txRows = treatments.map(tr=>`
+    <tr>
+      <td>${tr.name}</td><td>${fmtEur(tr.value)}</td>
+      <td>${fmtEur(tr.discount)}</td>
+      <td>${fmtEur((parseFloat(tr.value)||0)-(parseFloat(tr.discount)||0))}</td>
+    </tr>`).join("");
+  const txMap = Object.fromEntries(treatments.map(tr=>[tr.id, tr]));
+  const apptRows = appointments.map((appt, idx) => {
+    const apptTxs = (appt.treatmentIds||[]).map(id => txMap[id]).filter(Boolean);
+    const dateStr = appt.date ? `${fmtDate(appt.date)}${appt.time?" "+appt.time:""}` : t.toConfirm;
+    const txGrid = apptTxs.length === 0 ? "-" :
+      `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px">` +
+      apptTxs.slice(0,20).map(tr=>`<div style="font-size:10px;line-height:1.3;word-break:break-word">☐ ${tr.name}</div>`).join("") + `</div>`;
+    return `<tr>
+      <td style="font-weight:700;color:#1a1a2e;white-space:nowrap">${ordinal(idx+1, lang)}</td>
+      <td style="white-space:nowrap">${dateStr}</td>
+      <td style="white-space:nowrap">${appt.doctors || "-"}</td>
+      <td style="padding:6px 12px">${txGrid}</td>
+      <td style="white-space:nowrap">${fmtEur(appt.payment)}</td>
+    </tr>`;
+  }).join("");
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+  *{box-sizing:border-box}body{font-family:'Georgia',serif;margin:36px 40px 60px;color:#1a1a2e;font-size:13px;line-height:1.8}
+  .header{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #c9a84c;padding-bottom:18px;margin-bottom:26px}
+  .header-center{text-align:center;flex:1}.header-center h1{font-size:24px;letter-spacing:5px;margin:0 0 3px}
+  .header-center p{color:#888;margin:0;font-size:12px}.logo{width:80px;height:auto}.spacer{width:80px}
+  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;margin-bottom:26px}
+  .info-item{display:flex;gap:6px}.lbl{font-weight:bold;color:#c9a84c;white-space:nowrap}
+  table{width:100%;border-collapse:collapse;margin-bottom:26px}
+  th{background:#1a1a2e;color:#c9a84c;padding:10px 12px;text-align:left;font-size:11px;letter-spacing:1px;white-space:nowrap}
+  td{padding:9px 12px;border-bottom:1px solid #eee;vertical-align:middle}tr:nth-child(even) td{background:#f9f8f5}
+  .totals{margin-left:auto;width:290px;margin-bottom:26px}.tr{display:flex;justify-content:space-between;padding:6px 12px}
+  .tr-grand{background:#1a1a2e;color:#c9a84c;font-weight:700;font-size:15px;border-radius:4px}
+  .sec{font-size:11px;letter-spacing:3px;text-transform:uppercase;border-left:4px solid #c9a84c;padding-left:10px;margin:26px 0 12px;color:#1a1a2e}
+  .notes-box{background:#f9f8f5;border-left:3px solid #c9a84c;padding:12px 14px;border-radius:4px;font-style:italic}
+  .footer{margin-top:36px;border-top:1px solid #ddd;padding-top:18px}.consent{font-style:italic;margin-bottom:24px;color:#333}
+  .sig-block{display:flex;align-items:flex-end;gap:10px;margin-bottom:28px}.sig-line{border-bottom:1px solid #1a1a2e;width:240px;height:44px}
+  .sig-lbl{font-size:11px;color:#888;letter-spacing:1px}.legal{font-size:10px;color:#999;line-height:1.7;border-top:1px solid #eee;padding-top:12px}
+  </style></head><body>
+  <div class="header"><img src="http://localhost:5173/logo.png" class="logo" alt="Logo"/>
+  <div class="header-center"><h1>${t.budget}</h1><p>${fmtDate(patient.date)}${patient.time?" · "+patient.time:""}</p></div>
+  <div class="spacer"></div></div>
+  <div class="info-grid">
+    <div class="info-item"><span class="lbl">${t.patient}:</span> ${patient.name}</div>
+    <div class="info-item"><span class="lbl">${t.budgetNo}:</span> ${patient.budget_no||patient.budgetNo||""}</div>
+    <div class="info-item"><span class="lbl">${t.hc}:</span> ${patient.hc||""}</div>
+    <div class="info-item"><span class="lbl">${t.date}:</span> ${fmtDate(patient.date)}</div>
+  </div>
+  <table><thead><tr><th>${t.treatment}</th><th>${t.value}</th><th>${t.discount}</th><th>${t.total}</th></tr></thead>
+  <tbody>${txRows}</tbody></table>
+  <div class="totals">
+    <div class="tr"><span>${t.subtotal}</span><span>${fmtEur(sub)}</span></div>
+    <div class="tr"><span>${t.totalDiscount}</span><span>-${fmtEur(disc)}</span></div>
+    <div class="tr tr-grand"><span>${t.grandTotal}</span><span>${fmtEur(grand)}</span></div>
+  </div>
+  ${appointments.length > 0 ? `<div class="sec">${t.appointmentDetail}</div>
+  <table><thead><tr><th>Cita</th><th>${t.appointment}</th><th>${t.doctors}</th><th>${t.treatment}</th><th>${t.payment}</th></tr></thead>
+  <tbody>${apptRows}</tbody></table>` : ""}
+  ${patient.notes ? `<div class="sec">${t.notes}</div><div class="notes-box">${patient.notes}</div>` : ""}
+  <div class="footer"><p class="consent">${CONSENT[lang]}</p>
+  <div class="sig-block"><div class="sig-line"></div><span class="sig-lbl">${SIG_LABEL[lang]}</span></div>
+  <div class="legal">${LEGAL[lang]}</div></div></body></html>`;
+  if (setExporting) setExporting(null);
+  const win = window.open("","_blank");
+  win.document.write(html); win.document.close();
+  win.document.title = (patient.hc||"") + "-" + (patient.name||"");
+  setTimeout(()=>win.print(), 800);
+};
+
 // ─── TreatmentRow ─────────────────────────────────────────────────────────────
 function TreatmentRow({ tr, onChange, onRemove }) {
   const total = (parseFloat(tr.value)||0)-(parseFloat(tr.discount)||0);
@@ -254,9 +199,7 @@ function TreatmentRow({ tr, onChange, onRemove }) {
   return (
     <div style={{...s.card, padding:"12px 14px", position:"relative", marginBottom:8}}>
       <div style={{display:"grid", gridTemplateColumns:"2.5fr 1fr 1fr auto", gap:8}}>
-        {si("name","Tratamiento")}
-        {si("value","Valor €","number")}
-        {si("discount","Descuento €","number")}
+        {si("name","Tratamiento")}{si("value","Valor €","number")}{si("discount","Descuento €","number")}
         <div style={{background:"#1a2240",borderRadius:6,padding:"7px 12px",color:"#c9a84c",fontWeight:700,fontSize:13,display:"flex",alignItems:"center",whiteSpace:"nowrap"}}>
           €{total.toLocaleString("es-ES",{minimumFractionDigits:2})}
         </div>
@@ -268,18 +211,16 @@ function TreatmentRow({ tr, onChange, onRemove }) {
 
 // ─── AppointmentRow ───────────────────────────────────────────────────────────
 function AppointmentRow({ appt, idx, treatments, allAppointments, onChange, onRemove }) {
-  const si = (f, ph, type="text", grid="1fr") => (
+  const si = (f, ph, type="text") => (
     <div style={{display:"flex",flexDirection:"column",gap:3}}>
       <label style={{...s.label, fontSize:10}}>{ph}</label>
       <input type={type} placeholder={ph} value={appt[f]} onChange={e=>onChange(f,e.target.value)} style={s.smInput}/>
     </div>
   );
-
   const toggleTx = (id) => {
     const ids = appt.treatmentIds||[];
     onChange("treatmentIds", ids.includes(id) ? ids.filter(x=>x!==id) : [...ids, id]);
   };
-
   return (
     <div style={{background:"#0d1117",border:"1px solid #c9a84c33",borderRadius:10,padding:"14px 16px",marginBottom:10,position:"relative"}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
@@ -288,10 +229,7 @@ function AppointmentRow({ appt, idx, treatments, allAppointments, onChange, onRe
         <button onClick={onRemove} style={{background:"none",border:"none",color:"#555",cursor:"pointer",fontSize:15}}>✕</button>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:12}}>
-        {si("date","Fecha","date")}
-        {si("time","Hora","time")}
-        {si("doctors","Doctor(es)")}
-        {si("payment","Pago €","number")}
+        {si("date","Fecha","date")}{si("time","Hora","time")}{si("doctors","Doctor(es)")}{si("payment","Pago €","number")}
       </div>
       <div>
         <label style={{...s.label, fontSize:10, marginBottom:6}}>Tratamientos en esta cita</label>
@@ -299,16 +237,13 @@ function AppointmentRow({ appt, idx, treatments, allAppointments, onChange, onRe
           {treatments.length===0 && <span style={{color:"#444",fontSize:12}}>Primero agregá tratamientos arriba</span>}
           {treatments.map(tr=>{
             const sel = (appt.treatmentIds||[]).includes(tr.id);
-            // Count how many OTHER appointments already have this treatment
             const usedCount = (allAppointments||[]).filter(a => a.id !== appt.id && (a.treatmentIds||[]).includes(tr.id)).length;
             return (
               <button key={tr.id} onClick={()=>toggleTx(tr.id)}
-                style={{background:sel?"#c9a84c":"#12151e",border:`1px solid ${sel?"#c9a84c":"#2a2e3b"}`,borderRadius:20,color:sel?"#0a0d14":"#888",padding:"4px 12px",cursor:"pointer",fontSize:12,transition:"all 0.15s",position:"relative",display:"inline-flex",alignItems:"center",gap:6}}>
+                style={{background:sel?"#c9a84c":"#12151e",border:`1px solid ${sel?"#c9a84c":"#2a2e3b"}`,borderRadius:20,color:sel?"#0a0d14":"#888",padding:"4px 12px",cursor:"pointer",fontSize:12,transition:"all 0.15s",display:"inline-flex",alignItems:"center",gap:6}}>
                 {tr.name||"Sin nombre"}
                 {usedCount > 0 && (
-                  <span style={{background:sel?"#0a0d14":"#c9a84c",color:sel?"#c9a84c":"#0a0d14",borderRadius:"50%",width:16,height:16,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,flexShrink:0}}>
-                    {usedCount}
-                  </span>
+                  <span style={{background:sel?"#0a0d14":"#c9a84c",color:sel?"#c9a84c":"#0a0d14",borderRadius:"50%",width:16,height:16,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,flexShrink:0}}>{usedCount}</span>
                 )}
               </button>
             );
@@ -320,22 +255,70 @@ function AppointmentRow({ appt, idx, treatments, allAppointments, onChange, onRe
 }
 
 // ─── PatientForm ──────────────────────────────────────────────────────────────
-function PatientForm({ patient, onSave, onCancel }) {
-  const [p, setP]             = useState(patient);
-  const [msg, setMsg]         = useState("");
-  const [loading, setL]       = useState(false);
-  const [saving, setSaving]   = useState(false);
-  const [exporting, setExp]   = useState(null);
-  const [tab, setTab]         = useState("treatments"); // treatments | appointments
-  const fileRef               = useRef();
+function PatientForm({ patient, onSave, onCancel, templates }) {
+  const [p, setP]           = useState(patient);
+  const [msg, setMsg]       = useState("");
+  const [loading, setL]     = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [exporting, setExp] = useState(null);
+  const [tab, setTab]       = useState("treatments");
+  const fileRef             = useRef();
 
-  const setF   = (f,v) => setP(prev=>({...prev,[f]:v}));
-  const addTx  = () => setP(prev=>({...prev, treatments:[...prev.treatments, emptyTx()]}));
-  const updTx  = (id,f,v) => setP(prev=>({...prev, treatments:prev.treatments.map(t=>t.id===id?{...t,[f]:v}:t)}));
-  const remTx  = (id) => setP(prev=>({...prev, treatments:prev.treatments.filter(t=>t.id!==id)}));
-  const addAppt= () => setP(prev=>({...prev, appointments:[...prev.appointments, emptyAppt()]}));
-  const updAppt= (id,f,v) => setP(prev=>({...prev, appointments:prev.appointments.map(a=>a.id===id?{...a,[f]:v}:a)}));
-  const remAppt= (id) => setP(prev=>({...prev, appointments:prev.appointments.filter(a=>a.id!==id)}));
+  const setF    = (f,v) => setP(prev=>({...prev,[f]:v}));
+  const addTx   = () => setP(prev=>({...prev, treatments:[...prev.treatments, emptyTx()]}));
+  const updTx   = (id,f,v) => setP(prev=>({...prev, treatments:prev.treatments.map(t=>t.id===id?{...t,[f]:v}:t)}));
+  const remTx   = (id) => setP(prev=>({...prev, treatments:prev.treatments.filter(t=>t.id!==id)}));
+  const addAppt = () => setP(prev=>({...prev, appointments:[...prev.appointments, emptyAppt()]}));
+  const updAppt = (id,f,v) => setP(prev=>({...prev, appointments:prev.appointments.map(a=>a.id===id?{...a,[f]:v}:a)}));
+  const remAppt = (id) => setP(prev=>({...prev, appointments:prev.appointments.filter(a=>a.id!==id)}));
+
+  const [generatingNotes, setGeneratingNotes] = useState(false);
+
+  const generateNotes = async () => {
+    if (!p.appointments || p.appointments.length === 0) {
+      alert("Primero agregá citas y asignales tratamientos.");
+      return;
+    }
+
+    // Build ordered treatment list by appointment
+    const citasSummary = p.appointments.map((appt, idx) => {
+      const apptTxs = p.treatments.filter(t => (appt.treatmentIds||[]).includes(t.id));
+      const txNames = apptTxs.map(t => t.name).join(", ");
+      return `Cita ${idx+1}: ${txNames || "sin tratamientos asignados"}`;
+    }).join("\n");
+
+    if (!citasSummary.includes(":") || citasSummary.split("\n").every(l => l.endsWith(": "))) {
+      alert("Asigná tratamientos a las citas antes de generar.");
+      return;
+    }
+
+    setGeneratingNotes(true);
+    try {
+      const prompt = `Eres el asistente de una clínica dental llamada Implantdent. 
+Tu tarea es redactar un texto de observaciones clínicas para el paciente, explicando en orden lógico los tratamientos que se realizarán y por qué, usando lenguaje claro y profesional pero comprensible para el paciente.
+
+El plan de tratamiento por citas es el siguiente:
+${citasSummary}
+
+Redactá un texto fluido, con conectores naturales entre los pasos, explicando brevemente el motivo de cada tratamiento y su relación con los demás. Si algún paso no tiene tratamientos asignados, ignóralo. El texto debe ser en español, tener entre 100 y 250 palabras, y sonar como una explicación personalizada, no como una lista.`;
+
+      const res = await fetch(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyDCdELTcC451IZbzr6R4nCKL6Si10gJZss",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        }
+      );
+      const data = await res.json();
+      const generated = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      if (!generated) throw new Error("Respuesta vacía");
+      setP(prev => ({ ...prev, notes: prev.notes ? prev.notes + "\n\n" + generated : generated }));
+    } catch(e) {
+      alert("Error al generar observaciones: " + e.message);
+    }
+    setGeneratingNotes(false);
+  };
 
   const sub   = p.treatments.reduce((a,t)=>a+(parseFloat(t.value)||0),0);
   const disc  = p.treatments.reduce((a,t)=>a+(parseFloat(t.discount)||0),0);
@@ -346,14 +329,9 @@ function PatientForm({ patient, onSave, onCancel }) {
     setL(true); setMsg("Leyendo PDF...");
     try {
       const parsed = await parsePDF(file);
-      setP(prev=>({
-        ...prev,
-        name:       parsed.name      || prev.name,
-        hc:         parsed.hc        || prev.hc,
-        budgetNo:   parsed.budgetNo  || prev.budgetNo,
-        date:       parsed.date      || prev.date,
-        treatments: parsed.treatments.length ? parsed.treatments : prev.treatments,
-      }));
+      setP(prev=>({...prev, name:parsed.name||prev.name, hc:parsed.hc||prev.hc,
+        budgetNo:parsed.budgetNo||prev.budgetNo, date:parsed.date||prev.date,
+        treatments:parsed.treatments.length?parsed.treatments:prev.treatments }));
       setMsg(`✓ ${parsed.treatments.length} tratamiento(s) importados`);
     } catch(e) { setMsg("Error al leer el PDF — completá manualmente"); }
     setL(false); e.target.value="";
@@ -368,15 +346,12 @@ function PatientForm({ patient, onSave, onCancel }) {
     </div>
   );
 
-  // Sort treatments by name for display
   const sortedTx = [...p.treatments].sort((a,b)=>a.name.localeCompare(b.name));
 
   return (
     <div style={{maxWidth:920,margin:"0 auto"}}>
-      {/* PDF import */}
       <div style={{...s.card, border:"2px dashed #c9a84c33", display:"flex", alignItems:"center", gap:16, marginBottom:20}}>
-        <button onClick={()=>fileRef.current.click()} disabled={loading}
-          style={{...s.btnGold, opacity:loading?0.6:1, whiteSpace:"nowrap"}}>
+        <button onClick={()=>fileRef.current.click()} disabled={loading} style={{...s.btnGold, opacity:loading?0.6:1, whiteSpace:"nowrap"}}>
           {loading?"⏳ Leyendo...":"📄 Importar PDF"}
         </button>
         <input ref={fileRef} type="file" accept=".pdf" onChange={handlePDF} style={{display:"none"}}/>
@@ -384,34 +359,27 @@ function PatientForm({ patient, onSave, onCancel }) {
           {msg||"Importá un presupuesto PDF o completá manualmente"}
         </span>
       </div>
-
-      {/* Datos básicos */}
       <div style={{...s.card, marginBottom:16}}>
         <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:14,marginBottom:14}}>
           <Field label="Nombre del paciente" field="name"/>
-          <Field label="Expediente / HC"     field="hc"/>
-          <Field label="Nº Presupuesto"      field="budgetNo"/>
+          <Field label="Expediente / HC" field="hc"/>
+          <Field label="Nº Presupuesto" field="budgetNo"/>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
           <Field label="Fecha" field="date" type="date"/>
-          <Field label="Hora"  field="time" type="time"/>
+          <Field label="Hora" field="time" type="time"/>
         </div>
       </div>
-
-      {/* Tabs */}
       <div style={{display:"flex",gap:0,marginBottom:16,background:"#0d1117",borderRadius:10,padding:4,width:"fit-content"}}>
         {[["treatments","Tratamientos"],["appointments","Citas"]].map(([id,label])=>(
           <button key={id} onClick={()=>setTab(id)}
             style={{background:tab===id?"#1a2240":"none",border:"none",borderRadius:8,color:tab===id?"#c9a84c":"#555",padding:"8px 20px",cursor:"pointer",fontSize:13,fontWeight:tab===id?700:400,transition:"all 0.15s"}}>
             {label}
             {id==="appointments" && p.appointments.length>0 &&
-              <span style={{background:"#c9a84c",color:"#0a0d14",borderRadius:"50%",width:16,height:16,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,marginLeft:6}}>{p.appointments.length}</span>
-            }
+              <span style={{background:"#c9a84c",color:"#0a0d14",borderRadius:"50%",width:16,height:16,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,marginLeft:6}}>{p.appointments.length}</span>}
           </button>
         ))}
       </div>
-
-      {/* TRATAMIENTOS */}
       {tab==="treatments" && (
         <div style={{marginBottom:16}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
@@ -419,21 +387,14 @@ function PatientForm({ patient, onSave, onCancel }) {
             <button onClick={addTx} style={s.btnDark}>+ Agregar</button>
           </div>
           {p.treatments.length===0 && (
-            <div style={{textAlign:"center",color:"#333",padding:24,background:"#0d1117",borderRadius:10,fontSize:13}}>
-              Sin tratamientos — importá un PDF o agregá manualmente
-            </div>
+            <div style={{textAlign:"center",color:"#333",padding:24,background:"#0d1117",borderRadius:10,fontSize:13}}>Sin tratamientos — importá un PDF o agregá manualmente</div>
           )}
-          {/* Show sorted visually */}
-          {sortedTx.map(tr=>(
-            <TreatmentRow key={tr.id} tr={tr} onChange={(f,v)=>updTx(tr.id,f,v)} onRemove={()=>remTx(tr.id)}/>
-          ))}
+          {sortedTx.map(tr=>(<TreatmentRow key={tr.id} tr={tr} onChange={(f,v)=>updTx(tr.id,f,v)} onRemove={()=>remTx(tr.id)}/>))}
           {p.treatments.length>0 && (
             <div style={{display:"flex",justifyContent:"flex-end",marginTop:10}}>
               <div style={{width:280}}>
                 {[["Subtotal",fmtEur(sub)],["Descuentos",`-${fmtEur(disc)}`]].map(([l,v])=>(
-                  <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"5px 10px",color:"#666",fontSize:13}}>
-                    <span>{l}</span><span>{v}</span>
-                  </div>
+                  <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"5px 10px",color:"#666",fontSize:13}}><span>{l}</span><span>{v}</span></div>
                 ))}
                 <div style={{display:"flex",justifyContent:"space-between",padding:"10px 14px",background:"#1a2240",borderRadius:8,color:"#c9a84c",fontWeight:700,fontSize:15,marginTop:4}}>
                   <span>TOTAL</span><span>{fmtEur(grand)}</span>
@@ -443,8 +404,6 @@ function PatientForm({ patient, onSave, onCancel }) {
           )}
         </div>
       )}
-
-      {/* CITAS */}
       {tab==="appointments" && (
         <div style={{marginBottom:16}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
@@ -452,41 +411,37 @@ function PatientForm({ patient, onSave, onCancel }) {
             <button onClick={addAppt} style={s.btnDark}>+ Agregar cita</button>
           </div>
           {p.appointments.length===0 && (
-            <div style={{textAlign:"center",color:"#333",padding:24,background:"#0d1117",borderRadius:10,fontSize:13}}>
-              Sin citas — agregá la primera cita y asignale tratamientos
-            </div>
+            <div style={{textAlign:"center",color:"#333",padding:24,background:"#0d1117",borderRadius:10,fontSize:13}}>Sin citas — agregá la primera cita y asignale tratamientos</div>
           )}
           {p.appointments.map((appt,idx)=>(
-            <AppointmentRow key={appt.id} appt={appt} idx={idx}
-              treatments={p.treatments}
-              allAppointments={p.appointments}
-              onChange={(f,v)=>updAppt(appt.id,f,v)}
-              onRemove={()=>remAppt(appt.id)}/>
+            <AppointmentRow key={appt.id} appt={appt} idx={idx} treatments={p.treatments}
+              allAppointments={p.appointments} onChange={(f,v)=>updAppt(appt.id,f,v)} onRemove={()=>remAppt(appt.id)}/>
           ))}
         </div>
       )}
-
-      {/* Notas */}
       <div style={{marginBottom:20}}>
-        <label style={s.label}>Notas</label>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+          <label style={{...s.label,marginBottom:0}}>Notas / Observaciones</label>
+          <button onClick={generateNotes} disabled={generatingNotes}
+            title="Genera texto automáticamente con IA según los tratamientos asignados a las citas"
+            style={{...s.btnDark, padding:"4px 12px", fontSize:11, opacity:generatingNotes?0.6:1}}>
+            {generatingNotes ? "⏳ Generando..." : "✨ Generar con IA"}
+          </button>
+        </div>
         <textarea value={p.notes||""} onChange={e=>setF("notes",e.target.value)} rows={3}
-          placeholder="Observaciones, indicaciones..."
-          style={{...s.input, resize:"vertical"}}/>
+          placeholder="Observaciones, indicaciones..." style={{...s.input, resize:"vertical"}}/>
       </div>
-
-      {/* Acciones */}
       <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
         {["es","en","fr"].map(lang=>(
-          <button key={lang} onClick={()=>exportToPDF(p,lang,setExp)}
-            disabled={!!exporting}
+          <button key={lang} onClick={()=>exportToPDF(p,lang,setExp)} disabled={!!exporting}
             style={{...s.btnDark, opacity:exporting?0.6:1, cursor:exporting?"not-allowed":"pointer"}}>
             {exporting===lang?"⏳ Traduciendo...":`🖨 PDF ${lang.toUpperCase()}`}
           </button>
         ))}
         <div style={{flex:1}}/>
         <button onClick={onCancel} style={s.btnGhost}>Cancelar</button>
-        <button onClick={async()=>{setSaving(true);await onSave(p);setSaving(false);}}
-          disabled={saving} style={{...s.btnGold, opacity:saving?0.7:1}}>
+        <button onClick={async()=>{setSaving(true);await onSave(p);setSaving(false);}} disabled={saving}
+          style={{...s.btnGold, opacity:saving?0.7:1}}>
           {saving?"Guardando...":"Guardar paciente"}
         </button>
       </div>
@@ -527,15 +482,12 @@ function PatientCard({ patient, onEdit, onToggleClosed, onDelete }) {
   if(!patient.closed){
     if(days>=15) bc="#8e44ad"; else if(days>=7) bc="#e74c3c"; else if(days>=4) bc="#f39c12";
   } else bc="#2ecc71";
-
   return (
     <div style={{...s.card, borderLeft:`4px solid ${bc}`}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
         <div>
           <div style={{fontWeight:700,color:"#e8e6e0",fontSize:15}}>{patient.name||"Sin nombre"}</div>
-          <div style={{fontSize:12,color:"#555",marginTop:2}}>
-            HC: {patient.hc||"—"} · #{patient.budget_no||"—"} · {fmtDate(patient.date)}
-          </div>
+          <div style={{fontSize:12,color:"#555",marginTop:2}}>HC: {patient.hc||"—"} · #{patient.budget_no||"—"} · {fmtDate(patient.date)}</div>
           <div style={{fontSize:12,color:"#777",marginTop:4}}>
             {(patient.treatments||[]).length} tratamiento(s) · {(patient.appointments||[]).length} cita(s) · <span style={{color:"#c9a84c",fontWeight:600}}>{fmtEur(sub-disc)}</span>
           </div>
@@ -543,8 +495,7 @@ function PatientCard({ patient, onEdit, onToggleClosed, onDelete }) {
         <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
           <div style={{display:"flex",gap:5}}>
             {["es","en","fr"].map(lang=>(
-              <button key={lang} onClick={()=>exportToPDF(patient,lang,setExp)}
-                disabled={!!exporting} title={`PDF ${lang.toUpperCase()}`}
+              <button key={lang} onClick={()=>exportToPDF(patient,lang,setExp)} disabled={!!exporting} title={`PDF ${lang.toUpperCase()}`}
                 style={{...s.btnSm, opacity:exporting?0.6:1, cursor:exporting?"not-allowed":"pointer"}}>
                 {exporting===lang?"⏳":lang.toUpperCase()}
               </button>
@@ -567,22 +518,504 @@ function PatientCard({ patient, onEdit, onToggleClosed, onDelete }) {
   );
 }
 
-// ─── MAIN APP ─────────────────────────────────────────────────────────────────
-export default function App() {
-  const [patients, setPatients] = useState([]);
-  const [view, setView]         = useState("dashboard");
-  const [editing, setEditing]   = useState(null);
-  const [filter, setFilter]     = useState("");
-  const [dbLoading, setDbLoad]  = useState(true);
+// ─── MonthNav ─────────────────────────────────────────────────────────────────
+function MonthNav({ year, month, onChange }) {
+  const prev = () => { if (month === 0) onChange(year-1, 11); else onChange(year, month-1); };
+  const next = () => {
+    const now = new Date();
+    if (year === now.getFullYear() && month === now.getMonth()) return;
+    if (month === 11) onChange(year+1, 0); else onChange(year, month+1);
+  };
+  const now = new Date();
+  const isNow = year === now.getFullYear() && month === now.getMonth();
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:12,background:"#12151e",borderRadius:10,padding:"8px 14px",border:"1px solid #1e2230"}}>
+      <button onClick={prev} style={{background:"none",border:"none",color:"#c9a84c",cursor:"pointer",fontSize:18,lineHeight:1,padding:"0 4px"}}>‹</button>
+      <span style={{color:"#e8e6e0",fontWeight:700,fontSize:14,minWidth:160,textAlign:"center"}}>{fmtMonthLabel(year, month)}</span>
+      <button onClick={next} style={{background:"none",border:"none",color:isNow?"#333":"#c9a84c",cursor:isNow?"default":"pointer",fontSize:18,lineHeight:1,padding:"0 4px"}} disabled={isNow}>›</button>
+    </div>
+  );
+}
 
-  const fetchPatients = async () => {
-    setDbLoad(true);
-    const { data, error } = await supabase.from("patients").select("*").order("created_at",{ascending:false});
-    if (!error) setPatients(data||[]);
-    setDbLoad(false);
+// ─── DoctorsPanel ─────────────────────────────────────────────────────────────
+function DoctorsPanel({ doctors, onRefresh }) {
+  const [name, setName]     = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const add = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    await supabase.from("doctors").insert([{ name: name.trim() }]);
+    setName(""); await onRefresh(); setSaving(false);
+  };
+  const remove = async (id) => {
+    if (!confirm("¿Eliminar este doctor? Los tratamientos asignados quedarán sin doctor.")) return;
+    await supabase.from("doctors").delete().eq("id", id);
+    await onRefresh();
   };
 
-  useEffect(()=>{ fetchPatients(); },[]);
+  return (
+    <div>
+      <div style={{fontSize:11,color:"#c9a84c",letterSpacing:2,marginBottom:16,fontWeight:700}}>👨‍⚕️ GESTIÓN DE DOCTORES</div>
+      <div style={{display:"flex",gap:10,marginBottom:20}}>
+        <input value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()}
+          placeholder="Nombre del doctor..." style={{...s.input, maxWidth:300}}/>
+        <button onClick={add} disabled={saving||!name.trim()} style={{...s.btnGold,opacity:(!name.trim()||saving)?0.5:1}}>+ Agregar</button>
+      </div>
+      {doctors.length === 0
+        ? <div style={{textAlign:"center",color:"#333",padding:40,fontSize:13}}>No hay doctores — agregá el primero</div>
+        : doctors.map(d => (
+          <div key={d.id} style={{...s.card, display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 16px"}}>
+            <span style={{color:"#e8e6e0",fontWeight:600}}>{d.name}</span>
+            <button onClick={()=>remove(d.id)}
+              style={{background:"#2a0a0a",border:"1px solid #e74c3c88",borderRadius:6,color:"#e74c3c",padding:"4px 12px",cursor:"pointer",fontSize:12}}>
+              Eliminar
+            </button>
+          </div>
+        ))
+      }
+    </div>
+  );
+}
+
+// ─── PendingPanel ─────────────────────────────────────────────────────────────
+function PendingPanel({ items, doctors, onRefresh }) {
+  const [saving, setSaving] = useState({});
+  const pending = items.filter(i => !i.realized_date);
+
+  const updateItem = async (id, fields) => {
+    setSaving(prev=>({...prev,[id]:true}));
+    await supabase.from("treatment_items").update(fields).eq("id", id);
+    await onRefresh();
+    setSaving(prev=>({...prev,[id]:false}));
+  };
+
+  const markRealized = async (item) => {
+    const date = prompt("Fecha de realización (YYYY-MM):", today().slice(0,7));
+    if (!date) return;
+    await updateItem(item.id, { realized_date: date + "-01" });
+  };
+
+  if (pending.length === 0) return (
+    <div>
+      <div style={{fontSize:11,color:"#c9a84c",letterSpacing:2,marginBottom:16,fontWeight:700}}>⏳ TRATAMIENTOS PENDIENTES DE REALIZAR</div>
+      <div style={{textAlign:"center",color:"#333",padding:56,fontSize:14}}>No hay tratamientos pendientes</div>
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{fontSize:11,color:"#c9a84c",letterSpacing:2,marginBottom:16,fontWeight:700}}>
+        ⏳ TRATAMIENTOS PENDIENTES DE REALIZAR
+        <span style={{background:"#e74c3c",color:"#fff",borderRadius:"50%",width:20,height:20,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,marginLeft:8}}>{pending.length}</span>
+      </div>
+      <div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead>
+            <tr style={{borderBottom:"1px solid #1e2230"}}>
+              {["Paciente","HC","Tratamiento","Importe","Doctor",""].map(h=>(
+                <th key={h} style={{textAlign:"left",padding:"8px 12px",fontSize:11,color:"#c9a84c",letterSpacing:1,fontWeight:700,whiteSpace:"nowrap"}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {pending.map(item => (
+              <tr key={item.id} style={{borderBottom:"1px solid #1a1e2a"}}>
+                <td style={{padding:"10px 12px",color:"#e8e6e0",fontSize:13}}>{item.patient_name}</td>
+                <td style={{padding:"10px 12px",color:"#666",fontSize:12}}>{item.hc||"—"}</td>
+                <td style={{padding:"10px 12px",color:"#aaa",fontSize:13}}>{item.treatment_name}</td>
+                <td style={{padding:"10px 12px",color:"#c9a84c",fontWeight:600,fontSize:13,whiteSpace:"nowrap"}}>{fmtEur(item.amount)}</td>
+                <td style={{padding:"6px 12px",minWidth:160}}>
+                  <select value={item.doctor_id||""} onChange={e=>updateItem(item.id,{doctor_id:e.target.value||null})}
+                    style={{...s.smInput,fontSize:12}} disabled={saving[item.id]}>
+                    <option value="">Sin asignar</option>
+                    {doctors.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                </td>
+                <td style={{padding:"6px 12px"}}>
+                  <button onClick={()=>markRealized(item)}
+                    style={{...s.btnSm,background:"#0d2014",border:"1px solid #2ecc7144",color:"#2ecc71",whiteSpace:"nowrap"}}
+                    disabled={saving[item.id]}>
+                    ✓ Marcar realizado
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── ResumenPanel ─────────────────────────────────────────────────────────────
+function ResumenPanel({ items, doctors }) {
+  const now = new Date();
+  const [year, setYear]   = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth());
+  const [selectedRealized, setSelectedRealized] = useState(new Set());
+
+  const monthStr   = `${year}-${String(month+1).padStart(2,"0")}`;
+  const vendidos   = items.filter(i => i.closed_date   && i.closed_date.startsWith(monthStr));
+  const realizados = items.filter(i => i.realized_date && i.realized_date.startsWith(monthStr));
+
+  const getDoctorName = (id) => doctors.find(d=>d.id===id)?.name || "Sin doctor";
+
+  const groupByDoctorTreatment = (list) => {
+    const map = {};
+    list.forEach(item => {
+      const docKey  = item.doctor_id || "__none__";
+      const docName = getDoctorName(item.doctor_id);
+      if (!map[docKey]) map[docKey] = { name: docName, treatments: {} };
+      const txKey = item.treatment_name;
+      if (!map[docKey].treatments[txKey]) map[docKey].treatments[txKey] = { name: txKey, items: [] };
+      map[docKey].treatments[txKey].items.push(item);
+    });
+    return map;
+  };
+
+  const toggleRealized = (id) => {
+    setSelectedRealized(prev => { const next = new Set(prev); if(next.has(id)) next.delete(id); else next.add(id); return next; });
+  };
+
+  const printResumen = (lista, titulo, agruparPorHC=false) => {
+    const getDrName = (id) => doctors.find(d=>d.id===id)?.name || "Sin doctor";
+    let grandTotal = 0;
+    let rows = "";
+
+    if (agruparPorHC) {
+      // Doctor → Paciente (HC) → tratamientos
+      const byDoc = {};
+      lista.forEach(item => {
+        const dk = item.doctor_id||"__none__";
+        if (!byDoc[dk]) byDoc[dk] = { name:getDrName(item.doctor_id), patients:{} };
+        const pk = item.hc||item.patient_name;
+        if (!byDoc[dk].patients[pk]) byDoc[dk].patients[pk] = { hc:item.hc, name:item.patient_name, items:[] };
+        byDoc[dk].patients[pk].items.push(item);
+      });
+      rows = Object.values(byDoc).map(doc => {
+        let docTotal = 0;
+        const patRows = Object.values(doc.patients).map(pat => {
+          const patTotal = pat.items.reduce((a,i)=>a+(parseFloat(i.amount)||0),0);
+          docTotal += patTotal; grandTotal += patTotal;
+          const txRows = pat.items.map(item => {
+            const pieza = (item.treatment_name.match(/\s{2,}(\d{1,2})$/) || [])[1] || "—";
+            return `<tr>
+              <td style="padding:7px 12px;border-bottom:1px solid #f0ede6;color:#888;font-size:11px">${pat.hc||"—"}</td>
+              <td style="padding:7px 12px;border-bottom:1px solid #f0ede6;color:#555;font-size:11px">${pat.name}</td>
+              <td style="padding:7px 12px;border-bottom:1px solid #f0ede6;color:#333;padding-left:20px">${item.treatment_name}</td>
+              <td style="padding:7px 12px;border-bottom:1px solid #f0ede6;color:#888;font-size:12px;text-align:center">${pieza}</td>
+              <td style="padding:7px 12px;border-bottom:1px solid #f0ede6;text-align:right;font-weight:600">${fmtEur(item.amount)}</td>
+            </tr>`;
+          }).join("");
+          return `<tr style="background:#f9f8f5">
+            <td colspan="4" style="padding:8px 12px;font-weight:700;color:#1a1a2e;font-size:12px;border-left:3px solid #c9a84c">HC ${pat.hc||"—"} — ${pat.name}</td>
+            <td style="padding:8px 12px;text-align:right;color:#c9a84c;font-weight:700">${fmtEur(patTotal)}</td>
+          </tr>${txRows}`;
+        }).join("");
+        return `<tr style="background:#e8e4dc">
+          <td colspan="4" style="padding:10px 12px;font-weight:800;color:#1a1a2e;font-size:14px">👨‍⚕️ ${doc.name}</td>
+          <td style="padding:10px 12px;text-align:right;font-weight:800;color:#c9a84c">${fmtEur(docTotal)}</td>
+        </tr>${patRows}`;
+      }).join("");
+    } else {
+      // Doctor → filas individuales (HC, nombre, tratamiento, pieza, importe)
+      const byDoc = {};
+      lista.forEach(item => {
+        const dk = item.doctor_id||"__none__";
+        if (!byDoc[dk]) byDoc[dk] = { name:getDrName(item.doctor_id), items:[] };
+        byDoc[dk].items.push(item);
+      });
+      rows = Object.values(byDoc).map(doc => {
+        let docTotal = 0;
+        const itemRows = doc.items.map(item => {
+          const pieza = (item.treatment_name.match(/\s{2,}(\d{1,2})$/) || [])[1] || "—";
+          const amt = parseFloat(item.amount)||0;
+          docTotal += amt; grandTotal += amt;
+          return `<tr>
+            <td style="padding:7px 12px;border-bottom:1px solid #f0ede6;color:#888;font-size:11px">${item.hc||"—"}</td>
+            <td style="padding:7px 12px;border-bottom:1px solid #f0ede6;color:#555;font-size:11px">${item.patient_name}</td>
+            <td style="padding:7px 12px;border-bottom:1px solid #f0ede6;color:#333">${item.treatment_name}</td>
+            <td style="padding:7px 12px;border-bottom:1px solid #f0ede6;color:#888;font-size:12px;text-align:center">${pieza}</td>
+            <td style="padding:7px 12px;border-bottom:1px solid #f0ede6;text-align:right;font-weight:600">${fmtEur(item.amount)}</td>
+          </tr>`;
+        }).join("");
+        return `<tr style="background:#e8e4dc">
+          <td colspan="4" style="padding:10px 12px;font-weight:800;color:#1a1a2e;font-size:14px">👨‍⚕️ ${doc.name}</td>
+          <td style="padding:10px 12px;text-align:right;font-weight:800;color:#c9a84c">${fmtEur(docTotal)}</td>
+        </tr>${itemRows}`;
+      }).join("");
+    }
+
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+      body{font-family:Georgia,serif;margin:36px 40px;color:#1a1a2e;font-size:13px}
+      h1{font-size:20px;letter-spacing:4px;border-bottom:3px solid #c9a84c;padding-bottom:12px;margin-bottom:6px}
+      h2{font-size:13px;color:#888;font-weight:400;margin:0 0 24px}
+      table{width:100%;border-collapse:collapse}
+      th{background:#1a1a2e;color:#c9a84c;padding:10px 12px;text-align:left;font-size:11px;letter-spacing:1px}
+      th:last-child,td:last-child{text-align:right}
+      .grand{background:#1a1a2e;color:#c9a84c;font-size:16px;font-weight:800}
+      .grand td{padding:14px 12px}
+    </style></head><body>
+      <h1>${titulo}</h1><h2>${fmtMonthLabel(year, month)}</h2>
+      <table><thead><tr>
+        <th>HC</th><th>Paciente</th><th>Tratamiento</th><th style="text-align:center">Pieza</th><th>Importe</th>
+      </tr></thead><tbody>
+        ${rows}
+        <tr class="grand"><td colspan="4">TOTAL GENERAL</td><td>${fmtEur(grandTotal)}</td></tr>
+      </tbody></table>
+    </body></html>`;
+    const win = window.open("","_blank");
+    win.document.write(html); win.document.close();
+    setTimeout(()=>win.print(), 600);
+  };
+
+  const ListaResumen = ({ lista, titulo, color, selectable=false }) => {
+    if (lista.length === 0) return (
+      <div style={{textAlign:"center",color:"#333",padding:32,background:"#0d1117",borderRadius:10,fontSize:13}}>
+        Sin datos para {fmtMonthLabel(year, month)}
+      </div>
+    );
+    const grouped = groupByDoctorTreatment(lista);
+    return (
+      <div>
+        {Object.values(grouped).map(doc => {
+          let docTotal = 0;
+          return (
+            <div key={doc.name} style={{marginBottom:16}}>
+              <div style={{background:"#12151e",borderLeft:`4px solid ${color}`,borderRadius:"8px 8px 0 0",padding:"10px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{color:"#e8e6e0",fontWeight:700,fontSize:14}}>👨‍⚕️ {doc.name}</span>
+              </div>
+              <div style={{background:"#0d1117",borderRadius:"0 0 8px 8px",overflow:"hidden"}}>
+                {Object.values(doc.treatments).map(tx => {
+                  const total = tx.items.reduce((a,i)=>a+(parseFloat(i.amount)||0),0);
+                  docTotal += total;
+                  return tx.items.map(item => {
+                    const isSel = selectedRealized.has(item.id);
+                    return (
+                      <div key={item.id}
+                        onClick={selectable?()=>toggleRealized(item.id):undefined}
+                        style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 16px",borderBottom:"1px solid #1a1e2a",cursor:selectable?"pointer":"default",background:selectable&&isSel?"#0d2014":"transparent",transition:"background 0.1s"}}
+                        onMouseEnter={selectable&&!isSel?e=>{e.currentTarget.style.background="#12151e";}:undefined}
+                        onMouseLeave={selectable?e=>{e.currentTarget.style.background=isSel?"#0d2014":"transparent";}:undefined}>
+                        <div style={{display:"flex",alignItems:"center",gap:10}}>
+                          {selectable && (
+                            <span style={{width:16,height:16,borderRadius:4,border:`2px solid ${isSel?"#2ecc71":"#333"}`,background:isSel?"#2ecc71":"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#0a0d14",flexShrink:0}}>
+                              {isSel?"✓":""}
+                            </span>
+                          )}
+                          <div>
+                            <div style={{color:"#aaa",fontSize:13}}>{item.treatment_name}</div>
+                            <div style={{color:"#444",fontSize:11}}>{item.patient_name}{item.hc?` · HC ${item.hc}`:""}</div>
+                          </div>
+                        </div>
+                        <span style={{color:color,fontWeight:600,fontSize:13,whiteSpace:"nowrap"}}>{fmtEur(item.amount)}</span>
+                      </div>
+                    );
+                  });
+                })}
+                <div style={{display:"flex",justifyContent:"space-between",padding:"10px 16px",background:"#12151e"}}>
+                  <span style={{color:"#555",fontSize:12}}>Total {doc.name}</span>
+                  <span style={{color:color,fontWeight:700}}>{fmtEur(docTotal)}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const realizadosSelected = realizados.filter(i => selectedRealized.has(i.id));
+  const grandVendidos   = vendidos.reduce((a,i)=>a+(parseFloat(i.amount)||0),0);
+  const grandRealizados = realizados.reduce((a,i)=>a+(parseFloat(i.amount)||0),0);
+
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20,flexWrap:"wrap",gap:12}}>
+        <div style={{fontSize:11,color:"#c9a84c",letterSpacing:2,fontWeight:700}}>📊 RESUMEN CLÍNICO</div>
+        <MonthNav year={year} month={month} onChange={(y,m)=>{setYear(y);setMonth(m);setSelectedRealized(new Set());}}/>
+      </div>
+
+      {/* Lista 1 */}
+      <div style={{marginBottom:28}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <div>
+            <div style={{fontSize:11,color:"#c9a84c",letterSpacing:2,fontWeight:700}}>💰 VENDIDOS / CERRADOS</div>
+            <div style={{fontSize:12,color:"#555",marginTop:2}}>{vendidos.length} tratamiento(s) · <span style={{color:"#c9a84c",fontWeight:600}}>{fmtEur(grandVendidos)}</span></div>
+          </div>
+          <button onClick={()=>printResumen(vendidos,"PRESUPUESTOS CERRADOS",true)} style={s.btnDark}>🖨 Imprimir</button>
+        </div>
+        <ListaResumen lista={vendidos} color="#c9a84c" selectable={false}/>
+      </div>
+
+      {/* Lista 2 */}
+      <div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+          <div>
+            <div style={{fontSize:11,color:"#2ecc71",letterSpacing:2,fontWeight:700}}>✅ REALIZADOS</div>
+            <div style={{fontSize:11,color:"#444",marginTop:3}}>
+              {realizados.length} tratamiento(s) · <span style={{color:"#2ecc71",fontWeight:600}}>{fmtEur(grandRealizados)}</span>
+              {" · Tocá los ítems para seleccionarlos"}
+            </div>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            {selectedRealized.size > 0 && (
+              <button onClick={()=>printResumen(realizadosSelected,"TRATAMIENTOS REALIZADOS")}
+                style={{...s.btnDark,border:"1px solid #2ecc7144",color:"#2ecc71"}}>
+                🖨 Selección ({selectedRealized.size})
+              </button>
+            )}
+            <button onClick={()=>printResumen(realizados,"TRATAMIENTOS REALIZADOS")}
+              style={{...s.btnDark,border:"1px solid #2ecc7144",color:"#2ecc71"}}>🖨 Todos</button>
+          </div>
+        </div>
+        <ListaResumen lista={realizados} color="#2ecc71" selectable={true}/>
+      </div>
+    </div>
+  );
+}
+
+
+// ─── PlantillasPanel ──────────────────────────────────────────────────────────
+function PlantillasPanel({ templates, onRefresh }) {
+  const [keyword,   setKeyword]   = useState("");
+  const [textBlock, setTextBlock] = useState("");
+  const [editing,   setEditing]   = useState(null); // id being edited
+  const [saving,    setSaving]    = useState(false);
+
+  const reset = () => { setKeyword(""); setTextBlock(""); setEditing(null); };
+
+  const save = async () => {
+    if (!keyword.trim() || !textBlock.trim()) return;
+    setSaving(true);
+    if (editing) {
+      await supabase.from("treatment_templates").update({ keyword: keyword.trim(), text_block: textBlock.trim() }).eq("id", editing);
+    } else {
+      await supabase.from("treatment_templates").insert([{ keyword: keyword.trim(), text_block: textBlock.trim() }]);
+    }
+    reset(); await onRefresh(); setSaving(false);
+  };
+
+  const startEdit = (t) => { setKeyword(t.keyword); setTextBlock(t.text_block); setEditing(t.id); };
+
+  const remove = async (id) => {
+    if (!confirm("¿Eliminar esta plantilla?")) return;
+    await supabase.from("treatment_templates").delete().eq("id", id);
+    await onRefresh();
+  };
+
+  return (
+    <div>
+      <div style={{fontSize:11,color:"#c9a84c",letterSpacing:2,marginBottom:6,fontWeight:700}}>📝 PLANTILLAS DE OBSERVACIONES</div>
+      <div style={{fontSize:12,color:"#555",marginBottom:20}}>
+        Cuando el sistema detecte la <span style={{color:"#c9a84c"}}>palabra clave</span> en el nombre de un tratamiento, insertará automáticamente el texto correspondiente en las observaciones del paciente.
+      </div>
+
+      {/* Form */}
+      <div style={{...s.card, border:"1px solid #c9a84c33", marginBottom:20}}>
+        <div style={{fontSize:11,color:"#c9a84c",letterSpacing:1,fontWeight:700,marginBottom:12}}>
+          {editing ? "✏️ EDITANDO PLANTILLA" : "➕ NUEVA PLANTILLA"}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:12,marginBottom:12,alignItems:"start"}}>
+          <div>
+            <label style={s.label}>Palabra clave</label>
+            <input value={keyword} onChange={e=>setKeyword(e.target.value)}
+              placeholder="ej: implante, corona, curetaje..."
+              style={s.input}/>
+            <div style={{fontSize:11,color:"#444",marginTop:4}}>Se busca dentro del nombre del tratamiento (no distingue mayúsculas)</div>
+          </div>
+          <div>
+            <label style={s.label}>Texto a insertar</label>
+            <textarea value={textBlock} onChange={e=>setTextBlock(e.target.value)}
+              rows={4} placeholder="Texto explicativo que se agregará a las observaciones..."
+              style={{...s.input, resize:"vertical"}}/>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+          {editing && <button onClick={reset} style={s.btnGhost}>Cancelar</button>}
+          <button onClick={save} disabled={saving||!keyword.trim()||!textBlock.trim()}
+            style={{...s.btnGold, opacity:(saving||!keyword.trim()||!textBlock.trim())?0.5:1}}>
+            {saving?"Guardando...":(editing?"Guardar cambios":"Agregar plantilla")}
+          </button>
+        </div>
+      </div>
+
+      {/* List */}
+      {templates.length === 0
+        ? <div style={{textAlign:"center",color:"#333",padding:40,fontSize:13}}>No hay plantillas — agregá la primera</div>
+        : templates.map(t => (
+          <div key={t.id} style={{...s.card, borderLeft:"3px solid #c9a84c44", marginBottom:8}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
+              <div style={{flex:1}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                  <span style={{background:"#c9a84c22",border:"1px solid #c9a84c44",borderRadius:6,padding:"2px 10px",color:"#c9a84c",fontSize:12,fontWeight:700}}>
+                    🔑 {t.keyword}
+                  </span>
+                </div>
+                <div style={{fontSize:12,color:"#666",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{t.text_block}</div>
+              </div>
+              <div style={{display:"flex",gap:6,flexShrink:0}}>
+                <button onClick={()=>startEdit(t)} style={{...s.btnSm}}>Editar</button>
+                <button onClick={()=>remove(t.id)}
+                  style={{...s.btnSm,background:"#2a0a0a",border:"1px solid #e74c3c88",color:"#e74c3c"}}>
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          </div>
+        ))
+      }
+    </div>
+  );
+}
+
+// ─── ClinicaPanel ─────────────────────────────────────────────────────────────
+function ClinicaPanel({ doctors, items, templates, onRefreshDoctors, onRefreshItems, onRefreshTemplates }) {
+  const [tab, setTab] = useState("resumen");
+  const pendingCount  = items.filter(i=>!i.realized_date).length;
+
+  return (
+    <div>
+      <div style={{display:"flex",gap:0,marginBottom:20,background:"#0d1117",borderRadius:10,padding:4,width:"fit-content"}}>
+        {[["resumen","Resumen"],["pending","Pendientes"],["doctors","Doctores"],["plantillas","Plantillas"]].map(([id,label])=>(
+          <button key={id} onClick={()=>setTab(id)}
+            style={{background:tab===id?"#1a2240":"none",border:"none",borderRadius:8,color:tab===id?"#c9a84c":"#555",padding:"8px 20px",cursor:"pointer",fontSize:13,fontWeight:tab===id?700:400,transition:"all 0.15s"}}>
+            {label}
+            {id==="pending" && pendingCount > 0 &&
+              <span style={{background:"#e74c3c",color:"#fff",borderRadius:"50%",width:16,height:16,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,marginLeft:6}}>{pendingCount}</span>}
+          </button>
+        ))}
+      </div>
+      {tab==="resumen"    && <ResumenPanel items={items} doctors={doctors}/>}
+      {tab==="pending"    && <PendingPanel items={items} doctors={doctors} onRefresh={onRefreshItems}/>}
+      {tab==="doctors"    && <DoctorsPanel doctors={doctors} onRefresh={onRefreshDoctors}/>}
+      {tab==="plantillas" && <PlantillasPanel templates={templates} onRefresh={onRefreshTemplates}/>}
+    </div>
+  );
+}
+
+// ─── MAIN APP ─────────────────────────────────────────────────────────────────
+export default function App() {
+  const [patients,  setPatients]  = useState([]);
+  const [doctors,   setDoctors]   = useState([]);
+  const [items,     setItems]     = useState([]);
+  const [templates, setTemplates] = useState([]);
+  const [view,      setView]      = useState("dashboard");
+  const [editing,   setEditing]   = useState(null);
+  const [filter,    setFilter]    = useState("");
+  const [dbLoading, setDbLoad]    = useState(true);
+
+  const now = new Date();
+  const [navYear,  setNavYear]  = useState(now.getFullYear());
+  const [navMonth, setNavMonth] = useState(now.getMonth());
+
+  const fetchPatients  = async () => { const {data}=await supabase.from("patients").select("*").order("created_at",{ascending:false}); setPatients(data||[]); };
+  const fetchDoctors   = async () => { const {data}=await supabase.from("doctors").select("*").order("name"); setDoctors(data||[]); };
+  const fetchItems     = async () => { const {data}=await supabase.from("treatment_items").select("*").order("created_at",{ascending:false}); setItems(data||[]); };
+  const fetchTemplates = async () => { const {data}=await supabase.from("treatment_templates").select("*").order("keyword"); setTemplates(data||[]); };
+
+  useEffect(()=>{ Promise.all([fetchPatients(),fetchDoctors(),fetchItems(),fetchTemplates()]).then(()=>setDbLoad(false)); },[]);
 
   useEffect(()=>{
     const toFreeze = patients.filter(p=>!p.closed && p.status!=="cold" && daysDiff(p.last_contact)>15);
@@ -590,50 +1023,60 @@ export default function App() {
     Promise.all(toFreeze.map(p=>supabase.from("patients").update({status:"cold"}).eq("id",p.id))).then(fetchPatients);
   },[patients]);
 
+  const insertTreatmentItems = async (patient) => {
+    const {data:existing} = await supabase.from("treatment_items").select("id").eq("patient_id", patient.id);
+    if ((existing||[]).length > 0) return;
+    const rows = (patient.treatments||[]).map(tr => ({
+      patient_id: patient.id, patient_name: patient.name, hc: patient.hc,
+      treatment_name: tr.name,
+      amount: (parseFloat(tr.value)||0)-(parseFloat(tr.discount)||0),
+      doctor_id: null, closed_date: patient.date||today(), realized_date: null,
+    }));
+    if (rows.length > 0) await supabase.from("treatment_items").insert(rows);
+  };
+
   const savePatient = async (p) => {
     const payload = {
-      name:         p.name,
-      hc:           p.hc,
-      budget_no:    p.budgetNo || p.budget_no,
-      date:         p.date,
-      time:         p.time,
-      treatments:   p.treatments,
-      appointments: p.appointments || [],
-      notes:        p.notes,
-      status:       p.status||"active",
-      last_contact: p.last_contact||today(),
-      closed:       p.closed||false,
+      name:p.name, hc:p.hc, budget_no:p.budgetNo||p.budget_no, date:p.date, time:p.time,
+      treatments:p.treatments, appointments:p.appointments||[], notes:p.notes,
+      status:p.status||"active", last_contact:p.last_contact||today(), closed:p.closed||false,
     };
     const isNew = !patients.some(x=>x.id===p.id);
     if (isNew) await supabase.from("patients").insert([payload]);
     else       await supabase.from("patients").update(payload).eq("id",p.id);
-    await fetchPatients();
-    setView("dashboard"); setEditing(null);
+    await fetchPatients(); setView("dashboard"); setEditing(null);
   };
 
   const toggleClosed = async (patient) => {
-    await supabase.from("patients").update({closed:!patient.closed,last_contact:today()}).eq("id",patient.id);
+    const nowClosed = !patient.closed;
+    await supabase.from("patients").update({closed:nowClosed, last_contact:today()}).eq("id",patient.id);
+    if (nowClosed) { await insertTreatmentItems({...patient,closed:true}); await fetchItems(); }
     await fetchPatients();
   };
 
   const deletePatient = async (patient) => {
     if (!confirm(`¿Seguro que querés eliminar a ${patient.name}? Esta acción no se puede deshacer`)) return;
-    await supabase.from("patients").delete().eq("id", patient.id);
-    await fetchPatients();
+    await supabase.from("patients").delete().eq("id",patient.id);
+    await fetchPatients(); await fetchItems();
   };
 
-  const openEdit  = (p) => { setEditing(p); setView("form"); };
-  const newPt     = ()  => { setEditing(emptyPatient()); setView("form"); };
+  const openEdit = (p) => { setEditing(p); setView("form"); };
+  const newPt    = ()  => { setEditing(emptyPatient()); setView("form"); };
 
-  const active   = patients.filter(p=>p.status!=="cold");
-  const cold     = patients.filter(p=>p.status==="cold");
-  const alerts   = active.filter(p=>!p.closed && daysDiff(p.last_contact)>=4);
-  const filtered = active.filter(p=>
-    filter===""||
-    (p.name||"").toLowerCase().includes(filter.toLowerCase())||
-    (p.budget_no||"").includes(filter)||
-    (p.hc||"").includes(filter)
-  );
+  const active = patients.filter(p=>p.status!=="cold");
+  const cold   = patients.filter(p=>p.status==="cold");
+  const alerts = active.filter(p=>!p.closed && daysDiff(p.last_contact)>=4);
+
+  const monthStr    = `${navYear}-${String(navMonth+1).padStart(2,"0")}`;
+  const isSearching = filter.trim() !== "";
+
+  const filtered = isSearching
+    ? active.filter(p =>
+        (p.name||"").toLowerCase().includes(filter.toLowerCase()) ||
+        (p.budget_no||"").includes(filter) ||
+        (p.hc||"").includes(filter)
+      )
+    : active.filter(p => (p.date||"").startsWith(monthStr));
 
   const NavBtn = ({id,label,badge}) => (
     <button onClick={()=>setView(id)}
@@ -649,14 +1092,14 @@ export default function App() {
         <span style={{fontWeight:900,fontSize:15,letterSpacing:3,color:"#c9a84c"}}>IMPLANTDENT</span>
         <span style={{fontSize:10,color:"#3a3a4a",letterSpacing:2}}>GESTIÓN DE PACIENTES</span>
         <div style={{flex:1}}/>
-        <NavBtn id="dashboard" label="Pacientes"       badge={alerts.length}/>
-        <NavBtn id="cold"      label="Pacientes Fríos" badge={cold.length}/>
+        <NavBtn id="dashboard" label="Pacientes"  badge={alerts.length}/>
+        <NavBtn id="cold"      label="Fríos"       badge={cold.length}/>
+        <NavBtn id="clinica"   label="Clínica"     badge={items.filter(i=>!i.realized_date).length}/>
         <button onClick={newPt} style={s.btnGold}>+ Nuevo paciente</button>
       </div>
 
       <div style={{padding:"26px 28px",maxWidth:980,margin:"0 auto"}}>
-
-        {dbLoading && <div style={{textAlign:"center",color:"#444",padding:60,fontSize:14}}>Cargando pacientes...</div>}
+        {dbLoading && <div style={{textAlign:"center",color:"#444",padding:60,fontSize:14}}>Cargando...</div>}
 
         {!dbLoading && view==="form" && editing && (
           <>
@@ -666,7 +1109,7 @@ export default function App() {
                 {editing.name?`Editando: ${editing.name}`:"Nuevo paciente"}
               </h2>
             </div>
-            <PatientForm patient={editing} onSave={savePatient} onCancel={()=>{setView("dashboard");setEditing(null);}}/>
+            <PatientForm patient={editing} onSave={savePatient} onCancel={()=>{setView("dashboard");setEditing(null);}} templates={templates}/>
           </>
         )}
 
@@ -680,10 +1123,10 @@ export default function App() {
             )}
             <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
               {[
-                {label:"Activos",   value:active.filter(p=>!p.closed).length, color:"#c9a84c"},
-                {label:"Cerrados",  value:active.filter(p=>p.closed).length,  color:"#2ecc71"},
-                {label:"Alertas",   value:alerts.length,                       color:"#e74c3c"},
-                {label:"Fríos",     value:cold.length,                         color:"#8e44ad"},
+                {label:"Activos",  value:active.filter(p=>!p.closed).length, color:"#c9a84c"},
+                {label:"Cerrados", value:active.filter(p=>p.closed).length,  color:"#2ecc71"},
+                {label:"Alertas",  value:alerts.length,                       color:"#e74c3c"},
+                {label:"Fríos",    value:cold.length,                         color:"#8e44ad"},
               ].map(st=>(
                 <div key={st.label} style={{background:"#12151e",borderRadius:10,padding:"14px 18px",borderTop:`3px solid ${st.color}`}}>
                   <div style={{fontSize:28,fontWeight:800,color:st.color,lineHeight:1}}>{st.value}</div>
@@ -691,11 +1134,21 @@ export default function App() {
                 </div>
               ))}
             </div>
-            <input type="text" placeholder="Buscar por nombre, HC o Nº presupuesto..." value={filter}
-              onChange={e=>setFilter(e.target.value)}
-              style={{...s.input, marginBottom:14, fontSize:13}}/>
+
+            <div style={{display:"flex",gap:12,marginBottom:14,alignItems:"center",flexWrap:"wrap"}}>
+              <input type="text" placeholder="Buscar por nombre, HC o Nº presupuesto (busca en todos los meses)..."
+                value={filter} onChange={e=>setFilter(e.target.value)}
+                style={{...s.input, flex:1, minWidth:200, fontSize:13}}/>
+              {!isSearching && <MonthNav year={navYear} month={navMonth} onChange={(y,m)=>{setNavYear(y);setNavMonth(m);}}/>}
+            </div>
+
+            {isSearching && (
+              <div style={{fontSize:12,color:"#555",marginBottom:10}}>Mostrando resultados de todos los meses para "{filter}"</div>
+            )}
             {filtered.length===0 && (
-              <div style={{textAlign:"center",color:"#333",padding:56,fontSize:14}}>Sin pacientes. Creá el primero con "+ Nuevo paciente"</div>
+              <div style={{textAlign:"center",color:"#333",padding:56,fontSize:14}}>
+                {isSearching ? "Sin resultados para esa búsqueda" : `Sin pacientes en ${fmtMonthLabel(navYear, navMonth)}`}
+              </div>
             )}
             {filtered.map(p=><PatientCard key={p.id} patient={p} onEdit={openEdit} onToggleClosed={toggleClosed} onDelete={deletePatient}/>)}
           </>
@@ -709,6 +1162,11 @@ export default function App() {
               : cold.map(p=><PatientCard key={p.id} patient={p} onEdit={openEdit} onToggleClosed={toggleClosed} onDelete={deletePatient}/>)
             }
           </>
+        )}
+
+        {!dbLoading && view==="clinica" && (
+          <ClinicaPanel doctors={doctors} items={items} templates={templates}
+            onRefreshDoctors={fetchDoctors} onRefreshItems={fetchItems} onRefreshTemplates={fetchTemplates}/>
         )}
       </div>
     </div>
