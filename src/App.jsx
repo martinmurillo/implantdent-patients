@@ -303,7 +303,7 @@ ${citasSummary}
 Redactá un texto fluido, con conectores naturales entre los pasos, explicando brevemente el motivo de cada tratamiento y su relación con los demás. Si algún paso no tiene tratamientos asignados, ignóralo. El texto debe ser en español, tener entre 100 y 250 palabras, y sonar como una explicación personalizada, no como una lista.`;
 
       const res = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyCChoV097BgqaM0uJEkAvunoKLhq3q6wzA",
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=AIzaSyCChoV097BgqaM0uJEkAvunoKLhq3q6wzA",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
