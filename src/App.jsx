@@ -109,7 +109,7 @@ const s = {
 };
 
 // ─── PDF EXPORT ───────────────────────────────────────────────────────────────
-const GEMINI_KEY = "AIzaSyCChoV097BgqaM0uJEkAvunoKLhq3q6wzA";
+const GEMINI_KEY = import.meta.env.VITE_GEMINI_KEY;
 const translateText = async (text, targetLang) => {
   if (!text) return text;
   const langName = targetLang === "en" ? "English" : "French";
