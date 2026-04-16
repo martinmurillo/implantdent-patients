@@ -109,6 +109,22 @@ const s = {
 };
 
 // ─── PDF EXPORT ───────────────────────────────────────────────────────────────
+const GEMINI_KEY = "AIzaSyCChoV097BgqaM0uJEkAvunoKLhq3q6wzA";
+const translateText = async (text, targetLang) => {
+  if (!text) return text;
+  const langName = targetLang === "en" ? "English" : "French";
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contents: [{ parts: [{ text: `Translate the following text to ${langName}. Return only the translated text, no explanations:\n\n${text}` }] }] })
+    }
+  );
+  const data = await res.json();
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text || text;
+};
+
 const exportToPDF = async (patient, lang, setExporting) => {
   if (setExporting) setExporting(lang);
   let treatments = [...(patient.treatments||[])];
@@ -116,6 +132,10 @@ const exportToPDF = async (patient, lang, setExporting) => {
   treatments.sort((a,b) => a.name.localeCompare(b.name));
   if (lang !== "es" && treatments.length > 0) {
     treatments = treatments.map(tr => ({ ...tr, name: translateTreatment(tr.name, lang) }));
+  }
+  let notes = patient.notes || "";
+  if (lang !== "es" && notes) {
+    try { notes = await translateText(notes, lang); } catch(e) { /* keep original */ }
   }
   const t    = T[lang];
   const sub  = treatments.reduce((a,tr)=>a+(parseFloat(tr.value)||0),0);
@@ -179,7 +199,7 @@ const exportToPDF = async (patient, lang, setExporting) => {
   ${appointments.length > 0 ? `<div class="sec">${t.appointmentDetail}</div>
   <table><thead><tr><th>Cita</th><th>${t.appointment}</th><th>${t.doctors}</th><th>${t.treatment}</th><th>${t.payment}</th></tr></thead>
   <tbody>${apptRows}</tbody></table>` : ""}
-  ${patient.notes ? `<div class="sec">${t.notes}</div><div class="notes-box">${patient.notes}</div>` : ""}
+  ${notes ? `<div class="sec">${t.notes}</div><div class="notes-box">${notes}</div>` : ""}
   <div class="footer"><p class="consent">${CONSENT[lang]}</p>
   <div class="sig-block"><div class="sig-line"></div><span class="sig-lbl">${SIG_LABEL[lang]}</span></div>
   <div class="legal">${LEGAL[lang]}</div></div></body></html>`;
