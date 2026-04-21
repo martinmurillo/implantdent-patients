@@ -4,7 +4,10 @@
       "Bash(node:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(find /c -maxdepth 4 -type d -name \"*caja*\")",
+      "Bash(find /c -maxdepth 4 -name \"*.jsx\")",
+      "Bash(xargs grep *)"
     ]
   }
 }
