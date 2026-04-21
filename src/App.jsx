@@ -41,6 +41,59 @@ const parsePDF = async (file) => {
   return { hc, name, budgetNo, date, time:"", treatments };
 };
 
+// ─── PIN AUTH ────────────────────────────────────────────────────────────────
+const PIN_HASH = "5409cbc4848a7d07b30a475b98165ea5b25a13fc0982eccab3fa679365ffa0ca";
+const hashPin  = async (pin) => {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pin));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+};
+
+function PinLock({ onUnlock }) {
+  const [pin,   setPin]   = useState("");
+  const [error, setError] = useState(false);
+  const [shake, setShake] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    const h = await hashPin(pin);
+    if (h === PIN_HASH) {
+      sessionStorage.setItem("unlocked","1");
+      onUnlock();
+    } else {
+      setError(true); setShake(true); setPin("");
+      setTimeout(()=>setShake(false), 500);
+    }
+  };
+
+  return (
+    <div style={{minHeight:"100vh",background:"#0a0d14",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
+      <div style={{background:"#12151e",border:"1px solid #1e2230",borderRadius:16,padding:"48px 40px",textAlign:"center",width:320}}>
+        <div style={{fontWeight:900,fontSize:18,letterSpacing:4,color:"#c9a84c",marginBottom:6}}>IMPLANTDENT</div>
+        <div style={{fontSize:11,color:"#444",letterSpacing:2,marginBottom:36}}>GESTIÓN DE PACIENTES</div>
+        <form onSubmit={submit}>
+          <input
+            type="password" inputMode="numeric" maxLength={8} autoFocus
+            value={pin} onChange={e=>{setPin(e.target.value);setError(false);}}
+            placeholder="PIN"
+            style={{
+              background:"#0d1117", border:`1px solid ${error?"#e74c3c":"#2a2e3b"}`,
+              borderRadius:10, color:"#e8e6e0", padding:"14px 16px", fontSize:22,
+              textAlign:"center", letterSpacing:10, width:"100%", outline:"none",
+              boxSizing:"border-box", marginBottom:16,
+              animation: shake ? "shake 0.4s" : "none",
+            }}
+          />
+          {error && <div style={{color:"#e74c3c",fontSize:12,marginBottom:12}}>PIN incorrecto</div>}
+          <button type="submit" style={{...{background:"linear-gradient(135deg,#c9a84c,#a07830)",border:"none",borderRadius:8,color:"#fff",padding:"12px 0",cursor:"pointer",fontSize:14,fontWeight:700,width:"100%"}}}>
+            Entrar
+          </button>
+        </form>
+      </div>
+      <style>{`@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}`}</style>
+    </div>
+  );
+}
+
 // ─── UTILS ───────────────────────────────────────────────────────────────────
 const genId    = () => Math.random().toString(36).slice(2,10);
 const today    = () => new Date().toISOString().split("T")[0];
@@ -152,7 +205,7 @@ const exportToPDF = async (patient, lang, setExporting, patPayments=[]) => {
   .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;margin-bottom:26px}
   .info-item{display:flex;gap:6px}.lbl{font-weight:bold;color:#c9a84c;white-space:nowrap}
   table{width:100%;border-collapse:collapse;margin-bottom:26px}
-  th{background:#1a1a2e;color:#c9a84c;padding:10px 12px;text-align:left;font-size:11px;letter-spacing:1px;white-space:nowrap}
+  th{background:#1a1a2e;color:#ffffff;padding:10px 12px;text-align:left;font-size:14px;letter-spacing:1px;white-space:nowrap}
   td{padding:9px 12px;border-bottom:1px solid #eee;vertical-align:middle}tr:nth-child(even) td{background:#f9f8f5}
   .totals{margin-left:auto;width:290px;margin-bottom:26px}.tr{display:flex;justify-content:space-between;padding:6px 12px}
   .tr-grand{background:#1a1a2e;color:#c9a84c;font-weight:700;font-size:15px;border-radius:4px}
@@ -803,7 +856,7 @@ function ResumenPanel({ items, doctors }) {
       h1{font-size:20px;letter-spacing:4px;border-bottom:3px solid #c9a84c;padding-bottom:12px;margin-bottom:6px}
       h2{font-size:13px;color:#888;font-weight:400;margin:0 0 24px}
       table{width:100%;border-collapse:collapse}
-      th{background:#1a1a2e;color:#c9a84c;padding:10px 12px;text-align:left;font-size:11px;letter-spacing:1px}
+      th{background:#1a1a2e;color:#ffffff;padding:10px 12px;text-align:left;font-size:14px;letter-spacing:1px}
       th:last-child,td:last-child{text-align:right}
       .grand{background:#1a1a2e;color:#c9a84c;font-size:16px;font-weight:800}
       .grand td{padding:14px 12px}
@@ -1048,6 +1101,7 @@ function ClinicaPanel({ doctors, items, templates, onRefreshDoctors, onRefreshIt
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
+  const [unlocked, setUnlocked] = useState(()=>sessionStorage.getItem("unlocked")==="1");
   const [patients,  setPatients]  = useState([]);
   const [doctors,   setDoctors]   = useState([]);
   const [items,     setItems]     = useState([]);
@@ -1057,6 +1111,8 @@ export default function App() {
   const [editing,   setEditing]   = useState(null);
   const [filter,    setFilter]    = useState("");
   const [dbLoading, setDbLoad]    = useState(true);
+
+  if (!unlocked) return <PinLock onUnlock={()=>setUnlocked(true)} />;
 
   const fetchPatients  = async () => { const {data}=await supabase.from("patients").select("*").order("created_at",{ascending:false}); setPatients(data||[]); };
   const fetchDoctors   = async () => { const {data}=await supabase.from("doctors").select("*").order("name"); setDoctors(data||[]); };
