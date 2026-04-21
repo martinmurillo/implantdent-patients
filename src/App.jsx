@@ -1112,8 +1112,6 @@ export default function App() {
   const [filter,    setFilter]    = useState("");
   const [dbLoading, setDbLoad]    = useState(true);
 
-  if (!unlocked) return <PinLock onUnlock={()=>setUnlocked(true)} />;
-
   const fetchPatients  = async () => { const {data}=await supabase.from("patients").select("*").order("created_at",{ascending:false}); setPatients(data||[]); };
   const fetchDoctors   = async () => { const {data}=await supabase.from("doctors").select("*").order("name"); setDoctors(data||[]); };
   const fetchItems     = async () => { const {data}=await supabase.from("treatment_items").select("*").order("created_at",{ascending:false}); setItems(data||[]); };
@@ -1201,6 +1199,8 @@ export default function App() {
       {badge>0 && <span style={{background:"#e74c3c",color:"#fff",borderRadius:"50%",width:18,height:18,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,marginLeft:5}}>{badge}</span>}
     </button>
   );
+
+  if (!unlocked) return <PinLock onUnlock={()=>setUnlocked(true)} />;
 
   return (
     <div style={{minHeight:"100vh",background:"#0a0d14",color:"#e8e6e0",fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
