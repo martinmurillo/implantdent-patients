@@ -333,6 +333,21 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
   const [payLoading, setPayL]     = useState(false);
   const fileRef             = useRef();
 
+  const treatmentsKey = p.treatments.map(t => t.name).join("|");
+  useEffect(() => {
+    if (!templates || templates.length === 0 || p.treatments.length === 0) return;
+    const matchingBlocks = templates
+      .filter(tmpl => p.treatments.some(tx => tx.name.toLowerCase().includes(tmpl.keyword.toLowerCase())))
+      .map(tmpl => tmpl.text_block);
+    if (matchingBlocks.length === 0) return;
+    setP(prev => {
+      const current = prev.notes || "";
+      const toAdd = matchingBlocks.filter(b => !current.includes(b));
+      if (toAdd.length === 0) return prev;
+      return { ...prev, notes: (current.trim() ? current.trim() + "\n\n" : "") + toAdd.join("\n\n") };
+    });
+  }, [treatmentsKey]);
+
   const setF    = (f,v) => setP(prev=>({...prev,[f]:v}));
   const addTx   = () => setP(prev=>({...prev, treatments:[...prev.treatments, emptyTx()]}));
   const updTx   = (id,f,v) => setP(prev=>({...prev, treatments:prev.treatments.map(t=>t.id===id?{...t,[f]:v}:t)}));

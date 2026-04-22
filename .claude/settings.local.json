@@ -7,7 +7,9 @@
       "Bash(npm run *)",
       "Bash(find /c -maxdepth 4 -type d -name \"*caja*\")",
       "Bash(find /c -maxdepth 4 -name \"*.jsx\")",
-      "Bash(xargs grep *)"
+      "Bash(xargs grep *)",
+      "Bash(awk '/^function PatientForm/,/^function [A-Z]/ {print NR\": \"$0}' /c/implantdent-patients/src/App.jsx)",
+      "Bash(grep -E \"\\\\.\\(json|js|ts\\)$\")"
     ]
   }
 }
