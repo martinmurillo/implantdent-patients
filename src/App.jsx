@@ -1229,11 +1229,6 @@ export default function App() {
 
   useEffect(()=>{ Promise.all([fetchPatients(),fetchDoctors(),fetchItems(),fetchTemplates(),fetchTranslations(),fetchPayments()]).then(()=>setDbLoad(false)); },[]);
 
-  useEffect(()=>{
-    const toFreeze = patients.filter(p=>!p.closed && p.status!=="cold" && daysDiff(p.last_contact)>15);
-    if(!toFreeze.length) return;
-    Promise.all(toFreeze.map(p=>supabase.from("patients").update({status:"cold"}).eq("id",p.id))).then(fetchPatients);
-  },[patients]);
 
   const insertTreatmentItems = async (patient) => {
     const {data:existing} = await supabase.from("treatment_items").select("id").eq("patient_id", patient.id);
@@ -1275,11 +1270,9 @@ export default function App() {
   const openEdit = (p) => { setEditing(p); setView("form"); };
   const newPt    = ()  => { setEditing(emptyPatient()); setView("form"); };
 
-  const active = patients.filter(p=>p.status!=="cold");
-  const cold   = patients.filter(p=>p.status==="cold");
-  const alerts = active.filter(p=>!p.closed && daysDiff(p.last_contact)>=4);
-  const recent = active.filter(p=>daysDiff(p.date)<15);
-  const old    = active.filter(p=>daysDiff(p.date)>=15);
+  const old    = patients.filter(p=>!p.closed && daysDiff(p.last_contact)>=15);
+  const oldIds = new Set(old.map(p=>p.id));
+  const recent = patients.filter(p=>!oldIds.has(p.id));
 
   const pendingDebtPatients = patients.filter(p=>{
     const hasPayments = payments.some(pay=>pay.patient_id===p.id);
@@ -1317,9 +1310,8 @@ export default function App() {
         <span style={{fontWeight:900,fontSize:15,letterSpacing:3,color:"#c9a84c"}}>IMPLANTDENT</span>
         <span style={{fontSize:10,color:"#3a3a4a",letterSpacing:2}}>GESTIÓN DE PACIENTES</span>
         <div style={{flex:1}}/>
-        <NavBtn id="dashboard" label="Pacientes"  badge={alerts.length}/>
+        <NavBtn id="dashboard" label="Pacientes"  badge={0}/>
         <NavBtn id="old"       label="+15 días"    badge={old.length}/>
-        <NavBtn id="cold"      label="Fríos"       badge={cold.length}/>
         <NavBtn id="debts"     label="Deudas"      badge={pendingDebtPatients.length}/>
         <NavBtn id="clinica"   label="Clínica"     badge={items.filter(i=>!i.realized_date).length}/>
         <button onClick={newPt} style={s.btnGold}>+ Nuevo paciente</button>
@@ -1343,18 +1335,11 @@ export default function App() {
 
         {!dbLoading && view==="dashboard" && (
           <>
-            {alerts.length>0 && (
-              <div style={{marginBottom:24}}>
-                <div style={{fontSize:11,color:"#e74c3c",letterSpacing:2,marginBottom:10,fontWeight:700}}>🔔 ALERTAS DE SEGUIMIENTO</div>
-                {alerts.map(p=><AlertCard key={p.id} patient={p} onOpen={openEdit}/>)}
-              </div>
-            )}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
               {[
-                {label:"Activos",  value:active.filter(p=>!p.closed).length, color:"#c9a84c"},
-                {label:"Cerrados", value:active.filter(p=>p.closed).length,  color:"#2ecc71"},
-                {label:"Alertas",  value:alerts.length,                       color:"#e74c3c"},
-                {label:"Fríos",    value:cold.length,                         color:"#8e44ad"},
+                {label:"Activos",   value:recent.filter(p=>!p.closed).length, color:"#c9a84c"},
+                {label:"Cerrados",  value:recent.filter(p=>p.closed).length,  color:"#2ecc71"},
+                {label:"+15 días",  value:old.length,                          color:"#e74c3c"},
               ].map(st=>(
                 <div key={st.label} style={{background:"#12151e",borderRadius:10,padding:"14px 18px",borderTop:`3px solid ${st.color}`}}>
                   <div style={{fontSize:28,fontWeight:800,color:st.color,lineHeight:1}}>{st.value}</div>
@@ -1399,16 +1384,6 @@ export default function App() {
           </>
         )}
 
-        {!dbLoading && view==="cold" && (
-          <>
-            <div style={{fontSize:12,color:"#8e44ad",letterSpacing:2,marginBottom:16,fontWeight:700}}>❄️ PACIENTES FRÍOS</div>
-            {cold.length===0
-              ? <div style={{textAlign:"center",color:"#333",padding:56,fontSize:14}}>No hay pacientes fríos</div>
-              : cold.map(p=><PatientCard key={p.id} patient={p} onEdit={openEdit} onToggleClosed={toggleClosed} onDelete={deletePatient}
-                  patientPayments={payments.filter(pay=>pay.patient_id===p.id)} templates={templates}/>)
-            }
-          </>
-        )}
 
         {!dbLoading && view==="debts" && (
           <>
