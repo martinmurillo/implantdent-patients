@@ -64,11 +64,9 @@ function PinLock({ onUnlock }) {
     }
     setLoading(true);
     const email    = import.meta.env.VITE_AUTH_EMAIL    || "admin@implantdent.local";
-    const password = import.meta.env.VITE_AUTH_PASSWORD || "";
-    if (password) {
-      const { error: authErr } = await supabase.auth.signInWithPassword({ email, password });
-      if (authErr) console.warn("Supabase Auth:", authErr.message);
-    }
+    const password = import.meta.env.VITE_AUTH_PASSWORD || "AhYTXX-2u!@k2C%";
+    const { error: authErr } = await supabase.auth.signInWithPassword({ email, password });
+    if (authErr) console.warn("Supabase Auth:", authErr.message);
     setLoading(false);
     onUnlock();
   };
