@@ -26,6 +26,7 @@ const parsePDF = async (file) => {
   const get = (re) => { const m = txt.match(re); return m ? m[1].trim() : ""; };
   const hc       = get(/Expediente\s*:\s*(\d+)/i);
   const name     = get(/Nombre\s*:\s*([A-ZÁÉÍÓÚÑÜ][A-ZÁÉÍÓÚÑÜ\s]+?)(?=\s*DNI|\s*Pob\.)/i);
+  const dni      = get(/DNI\s*:\s*([\w\-]+)/i);
   const budgetNo = get(/Presupuesto\s*:\s*([\d\s\/]+)/i).replace(/\s+/g,"");
   const dateRaw  = get(/Fecha\s*:\s*(\d{2}\/\d{2}\/\d{4})/i);
   const date     = dateRaw ? dateRaw.split("/").reverse().join("-") : today();
@@ -33,12 +34,11 @@ const parsePDF = async (file) => {
   const rx = /(\d{4})\s+\d\s+([\w\s\.\-\/áéíóúñüÁÉÍÓÚÑÜ]+?)\s+([\d]+[.,]\d{2})\s*€\s+([\d]+[.,]\d{2})\s*€\s+(\d+)%\s+([\d]+[.,]\d{2})\s*€/g;
   let m;
   while ((m = rx.exec(txt)) !== null) {
-    const value    = parseFloat(m[4].replace(",","."));
-    const total    = parseFloat(m[6].replace(",","."));
-    const discount = parseFloat((value - total).toFixed(2));
-    treatments.push({ id:genId(), name:m[2].trim(), value:String(value), discount:discount>0?String(discount):"0" });
+    const base  = parseFloat(m[6].replace(",","."));
+    const value = parseFloat((base * 1.1).toFixed(2));
+    treatments.push({ id:genId(), name:m[2].trim(), value:String(value), discount:"0" });
   }
-  return { hc, name, budgetNo, date, time:"", treatments };
+  return { hc, name, dni, budgetNo, date, time:"", treatments };
 };
 
 // ─── PIN AUTH ────────────────────────────────────────────────────────────────
@@ -142,7 +142,7 @@ const SIG_LABEL = { es:"Firma Paciente", en:"Patient Signature", fr:"Signature d
 
 // ─── DATA SHAPES ──────────────────────────────────────────────────────────────
 const emptyPatient = () => ({
-  id:genId(), name:"", hc:"", budgetNo:"", date:today(), time:"",
+  id:genId(), name:"", hc:"", dni:"", budgetNo:"", date:today(), time:"",
   treatments:[], appointments:[], notes:"",
   status:"active", last_contact:today(), closed:false,
 });
@@ -170,17 +170,13 @@ const exportToPDF = async (patient, lang, setExporting, patPayments=[], template
   if (lang !== "es" && treatments.length > 0) {
     treatments = treatments.map(tr => ({ ...tr, name: translateTreatment(tr.name, lang) }));
   }
-  const t    = T[lang];
-  const sub  = treatments.reduce((a,tr)=>a+(parseFloat(tr.value)||0),0);
-  const disc = treatments.reduce((a,tr)=>a+(parseFloat(tr.discount)||0),0);
-  const grand = sub-disc;
+  const t     = T[lang];
+  const grand = treatments.reduce((a,tr)=>a+(parseFloat(tr.value)||0),0);
   const totalPaid = (patPayments||[]).reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
   const remaining = grand - totalPaid;
   const txRows = treatments.map(tr=>`
     <tr>
-      <td>${tr.name}</td><td>${fmtEur(tr.value)}</td>
-      <td>${fmtEur(tr.discount)}</td>
-      <td>${fmtEur((parseFloat(tr.value)||0)-(parseFloat(tr.discount)||0))}</td>
+      <td>${tr.name}</td><td style="text-align:right">${fmtEur(tr.value)}</td>
     </tr>`).join("");
   const txMap = Object.fromEntries(treatments.map(tr=>[tr.id, tr]));
   const apptRows = appointments.map((appt, idx) => {
@@ -223,12 +219,11 @@ const exportToPDF = async (patient, lang, setExporting, patPayments=[], template
     <div class="info-item"><span class="lbl">${t.budgetNo}:</span> ${patient.budget_no||patient.budgetNo||""}</div>
     <div class="info-item"><span class="lbl">${t.hc}:</span> ${patient.hc||""}</div>
     <div class="info-item"><span class="lbl">${t.date}:</span> ${fmtDate(patient.date)}</div>
+    ${(patient.dni||patient.dni) ? `<div class="info-item"><span class="lbl">DNI:</span> ${patient.dni||""}</div>` : ""}
   </div>
-  <table><thead><tr><th>${t.treatment}</th><th>${t.value}</th><th>${t.discount}</th><th>${t.total}</th></tr></thead>
+  <table><thead><tr><th>${t.treatment}</th><th style="text-align:right">${t.total}</th></tr></thead>
   <tbody>${txRows}</tbody></table>
   <div class="totals">
-    <div class="tr"><span>${t.subtotal}</span><span>${fmtEur(sub)}</span></div>
-    <div class="tr"><span>${t.totalDiscount}</span><span>-${fmtEur(disc)}</span></div>
     <div class="tr tr-grand"><span>${t.grandTotal}</span><span>${fmtEur(grand)}</span></div>
   </div>
   ${appointments.length > 0 ? `<div class="sec">${t.appointmentDetail}</div>
@@ -257,17 +252,13 @@ const exportToPDF = async (patient, lang, setExporting, patPayments=[], template
 
 // ─── TreatmentRow ─────────────────────────────────────────────────────────────
 function TreatmentRow({ tr, onChange, onRemove }) {
-  const total = (parseFloat(tr.value)||0)-(parseFloat(tr.discount)||0);
   const si = (f, ph, type="text") => (
     <input type={type} placeholder={ph} value={tr[f]} onChange={e=>onChange(f,e.target.value)} style={s.smInput}/>
   );
   return (
     <div style={{...s.card, padding:"12px 14px", position:"relative", marginBottom:8}}>
-      <div style={{display:"grid", gridTemplateColumns:"2.5fr 1fr 1fr auto", gap:8}}>
-        {si("name","Tratamiento")}{si("value","Valor €","number")}{si("discount","Descuento €","number")}
-        <div style={{background:"#1a2240",borderRadius:6,padding:"7px 12px",color:"#c9a84c",fontWeight:700,fontSize:13,display:"flex",alignItems:"center",whiteSpace:"nowrap"}}>
-          €{total.toLocaleString("es-ES",{minimumFractionDigits:2})}
-        </div>
+      <div style={{display:"grid", gridTemplateColumns:"2.5fr 1fr", gap:8}}>
+        {si("name","Tratamiento")}{si("value","Importe €","number")}
       </div>
       <button onClick={onRemove} style={{position:"absolute",top:8,right:8,background:"none",border:"none",color:"#555",cursor:"pointer",fontSize:15,lineHeight:1}}>✕</button>
     </div>
@@ -356,9 +347,7 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
   const updAppt = (id,f,v) => setP(prev=>({...prev, appointments:prev.appointments.map(a=>a.id===id?{...a,[f]:v}:a)}));
   const remAppt = (id) => setP(prev=>({...prev, appointments:prev.appointments.filter(a=>a.id!==id)}));
 
-  const sub   = p.treatments.reduce((a,t)=>a+(parseFloat(t.value)||0),0);
-  const disc  = p.treatments.reduce((a,t)=>a+(parseFloat(t.discount)||0),0);
-  const grand = sub-disc;
+  const grand = p.treatments.reduce((a,t)=>a+(parseFloat(t.value)||0),0);
 
   const patPayments = payments.filter(pay => pay.patient_id === p.id);
   const totalPaid   = patPayments.reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
@@ -388,7 +377,7 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
     try {
       const parsed = await parsePDF(file);
       setP(prev=>({...prev, name:parsed.name||prev.name, hc:parsed.hc||prev.hc,
-        budgetNo:parsed.budgetNo||prev.budgetNo, date:parsed.date||prev.date,
+        dni:parsed.dni||prev.dni, budgetNo:parsed.budgetNo||prev.budgetNo, date:parsed.date||prev.date,
         treatments:parsed.treatments.length?parsed.treatments:prev.treatments }));
       setMsg(`✓ ${parsed.treatments.length} tratamiento(s) importados`);
     } catch(e) { setMsg("Error al leer el PDF — completá manualmente"); }
@@ -418,9 +407,10 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
         </span>
       </div>
       <div style={{...s.card, marginBottom:16}}>
-        <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:14,marginBottom:14}}>
+        <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",gap:14,marginBottom:14}}>
           <Field label="Nombre del paciente" field="name"/>
           <Field label="Expediente / HC" field="hc"/>
+          <Field label="DNI" field="dni"/>
           <Field label="Nº Presupuesto" field="budgetNo"/>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
@@ -452,13 +442,8 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
           {sortedTx.map(tr=>(<TreatmentRow key={tr.id} tr={tr} onChange={(f,v)=>updTx(tr.id,f,v)} onRemove={()=>remTx(tr.id)}/>))}
           {p.treatments.length>0 && (
             <div style={{display:"flex",justifyContent:"flex-end",marginTop:10}}>
-              <div style={{width:280}}>
-                {[["Subtotal",fmtEur(sub)],["Descuentos",`-${fmtEur(disc)}`]].map(([l,v])=>(
-                  <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"5px 10px",color:"#666",fontSize:13}}><span>{l}</span><span>{v}</span></div>
-                ))}
-                <div style={{display:"flex",justifyContent:"space-between",padding:"10px 14px",background:"#1a2240",borderRadius:8,color:"#c9a84c",fontWeight:700,fontSize:15,marginTop:4}}>
-                  <span>TOTAL</span><span>{fmtEur(grand)}</span>
-                </div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"10px 14px",background:"#1a2240",borderRadius:8,color:"#c9a84c",fontWeight:700,fontSize:15,minWidth:200}}>
+                <span>TOTAL</span><span>{fmtEur(grand)}</span>
               </div>
             </div>
           )}
@@ -589,9 +574,7 @@ function AlertCard({ patient, onOpen }) {
 // ─── PatientCard ──────────────────────────────────────────────────────────────
 function PatientCard({ patient, onEdit, onToggleClosed, onDelete, patientPayments=[], onOpen=null, templates=[] }) {
   const [exporting, setExp] = useState(null);
-  const sub  = (patient.treatments||[]).reduce((a,t)=>a+(parseFloat(t.value)||0),0);
-  const disc = (patient.treatments||[]).reduce((a,t)=>a+(parseFloat(t.discount)||0),0);
-  const grand = sub - disc;
+  const grand = (patient.treatments||[]).reduce((a,t)=>a+(parseFloat(t.value)||0),0);
   const totalPaid = patientPayments.reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
   const hasPending = patientPayments.length > 0 && totalPaid < grand;
   const days = daysDiff(patient.last_contact);
@@ -1252,7 +1235,7 @@ export default function App() {
 
   const savePatient = async (p) => {
     const payload = {
-      name:p.name, hc:p.hc, budget_no:p.budgetNo||p.budget_no, date:p.date, time:p.time,
+      name:p.name, hc:p.hc, dni:p.dni||"", budget_no:p.budgetNo||p.budget_no, date:p.date, time:p.time,
       treatments:p.treatments, appointments:p.appointments||[], notes:p.notes,
       status:p.status||"active", last_contact:p.last_contact||today(), closed:p.closed||false,
     };
