@@ -52,17 +52,27 @@ function PinLock({ onUnlock }) {
   const [pin,   setPin]   = useState("");
   const [error, setError] = useState(false);
   const [shake, setShake] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
     const h = await hashPin(pin);
-    if (h === PIN_HASH) {
-      sessionStorage.setItem("unlocked","1");
-      onUnlock();
-    } else {
+    if (h !== PIN_HASH) {
       setError(true); setShake(true); setPin("");
       setTimeout(()=>setShake(false), 500);
+      return;
     }
+    setLoading(true);
+    const { error: authErr } = await supabase.auth.signInWithPassword({
+      email:    import.meta.env.VITE_AUTH_EMAIL,
+      password: import.meta.env.VITE_AUTH_PASSWORD,
+    });
+    setLoading(false);
+    if (authErr) {
+      // PIN correcto pero Supabase Auth no configurado aún — permitir acceso local
+      console.warn("Supabase Auth no configurado:", authErr.message);
+    }
+    onUnlock();
   };
 
   return (
@@ -84,8 +94,8 @@ function PinLock({ onUnlock }) {
             }}
           />
           {error && <div style={{color:"#e74c3c",fontSize:12,marginBottom:12}}>PIN incorrecto</div>}
-          <button type="submit" style={{...{background:"linear-gradient(135deg,#c9a84c,#a07830)",border:"none",borderRadius:8,color:"#fff",padding:"12px 0",cursor:"pointer",fontSize:14,fontWeight:700,width:"100%"}}}>
-            Entrar
+          <button type="submit" disabled={loading} style={{background:"linear-gradient(135deg,#c9a84c,#a07830)",border:"none",borderRadius:8,color:"#fff",padding:"12px 0",cursor:"pointer",fontSize:14,fontWeight:700,width:"100%",opacity:loading?0.7:1}}>
+            {loading ? "Verificando..." : "Entrar"}
           </button>
         </form>
       </div>
@@ -1194,7 +1204,7 @@ function ClinicaPanel({ doctors, items, templates, translations, onRefreshDoctor
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
-  const [unlocked, setUnlocked] = useState(()=>sessionStorage.getItem("unlocked")==="1");
+  const [unlocked, setUnlocked] = useState(false);
   const [patients,  setPatients]  = useState([]);
   const [doctors,   setDoctors]   = useState([]);
   const [items,     setItems]     = useState([]);
@@ -1212,6 +1222,17 @@ export default function App() {
   const fetchTemplates    = async () => { const {data}=await supabase.from("treatment_templates").select("*").order("keyword"); setTemplates(data||[]); };
   const fetchTranslations = async () => { const {data}=await supabase.from("treatment_translations").select("*").order("name_es"); setTranslations(data||[]); setTranslationDict(data||[]); };
   const fetchPayments     = async () => { const {data}=await supabase.from("payments").select("*").order("date",{ascending:false}); setPayments(data||[]); };
+
+  // Restaurar sesión de Supabase al recargar la página
+  useEffect(()=>{
+    supabase.auth.getSession().then(({ data:{ session } }) => {
+      if (session) setUnlocked(true);
+    });
+    const { data:{ subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+      if (!session) setUnlocked(false);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(()=>{ Promise.all([fetchPatients(),fetchDoctors(),fetchItems(),fetchTemplates(),fetchTranslations(),fetchPayments()]).then(()=>setDbLoad(false)); },[]);
 
