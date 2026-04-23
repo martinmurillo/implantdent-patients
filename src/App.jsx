@@ -1219,11 +1219,8 @@ export default function App() {
   const fetchTranslations = async () => { const {data,error}=await supabase.from("treatment_translations").select("*").order("name_es"); if(!error){setTranslations(data||[]);setTranslationDict(data||[]);} };
   const fetchPayments     = async () => { const {data}=await supabase.from("payments").select("*").order("date",{ascending:false}); setPayments(data||[]); };
 
-  // Restaurar sesión de Supabase al recargar la página
+  // Cerrar sesión de Supabase si el token expira
   useEffect(()=>{
-    supabase.auth.getSession().then(({ data:{ session } }) => {
-      if (session) setUnlocked(true);
-    });
     const { data:{ subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
       if (!session) setUnlocked(false);
     });
