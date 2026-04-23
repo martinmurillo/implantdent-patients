@@ -63,15 +63,13 @@ function PinLock({ onUnlock }) {
       return;
     }
     setLoading(true);
-    const { error: authErr } = await supabase.auth.signInWithPassword({
-      email:    import.meta.env.VITE_AUTH_EMAIL,
-      password: import.meta.env.VITE_AUTH_PASSWORD,
-    });
-    setLoading(false);
-    if (authErr) {
-      // PIN correcto pero Supabase Auth no configurado aún — permitir acceso local
-      console.warn("Supabase Auth no configurado:", authErr.message);
+    const email    = import.meta.env.VITE_AUTH_EMAIL    || "admin@implantdent.local";
+    const password = import.meta.env.VITE_AUTH_PASSWORD || "";
+    if (password) {
+      const { error: authErr } = await supabase.auth.signInWithPassword({ email, password });
+      if (authErr) console.warn("Supabase Auth:", authErr.message);
     }
+    setLoading(false);
     onUnlock();
   };
 
@@ -1220,7 +1218,7 @@ export default function App() {
   const fetchDoctors   = async () => { const {data}=await supabase.from("doctors").select("*").order("name"); setDoctors(data||[]); };
   const fetchItems     = async () => { const {data}=await supabase.from("treatment_items").select("*").order("created_at",{ascending:false}); setItems(data||[]); };
   const fetchTemplates    = async () => { const {data}=await supabase.from("treatment_templates").select("*").order("keyword"); setTemplates(data||[]); };
-  const fetchTranslations = async () => { const {data}=await supabase.from("treatment_translations").select("*").order("name_es"); setTranslations(data||[]); setTranslationDict(data||[]); };
+  const fetchTranslations = async () => { const {data,error}=await supabase.from("treatment_translations").select("*").order("name_es"); if(!error){setTranslations(data||[]);setTranslationDict(data||[]);} };
   const fetchPayments     = async () => { const {data}=await supabase.from("payments").select("*").order("date",{ascending:false}); setPayments(data||[]); };
 
   // Restaurar sesión de Supabase al recargar la página
