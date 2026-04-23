@@ -277,27 +277,34 @@ export const TREATMENT_DICT = {
   "Visita tratamiento": { en: "Treatment visit", fr: "Visite de traitement" },
 };
 
-// Normaliza un nombre para comparación: recorta, colapsa espacios múltiples y NFC
 const normName = (s) => s.trim().replace(/\s+/g, " ").normalize("NFC");
 
-// Función que traduce un nombre usando el diccionario
-// Si no existe, devuelve el original en español
+let _dynamicDict = null;
+
+export const setTranslationDict = (dict) => { _dynamicDict = dict; };
+
 export const translateTreatment = (name, lang) => {
   if (lang === "es") return name;
 
-  // Strip trailing tooth number (e.g. "Corona metal ceramica   34" → base="Corona metal ceramica", suffix="   34")
   const toothSuffix = name.match(/(\s{2,}\d{1,2})$/);
   const baseName = toothSuffix ? name.slice(0, -toothSuffix[0].length) : name;
   const suffix = toothSuffix ? toothSuffix[0] : "";
-
   const n = normName(baseName);
-  // Buscar exacto primero (normalizado)
+  const nLower = n.toLowerCase();
+
+  // Diccionario dinámico de Supabase (tiene prioridad)
+  if (_dynamicDict && _dynamicDict.length > 0) {
+    const entry = _dynamicDict.find(d => normName(d.name_es).toLowerCase() === nLower);
+    if (entry) {
+      const translated = lang === "en" ? entry.name_en : entry.name_fr;
+      if (translated && translated.trim()) return translated + suffix;
+    }
+  }
+
+  // Fallback al diccionario hardcodeado
   const entry = TREATMENT_DICT[n];
   if (entry && entry[lang]) return entry[lang] + suffix;
-  // Buscar contra todas las claves normalizadas, case-insensitive
-  const nLower = n.toLowerCase();
-  const key = Object.keys(TREATMENT_DICT).find(k => normName(k).toLowerCase() === nLower);
-  if (key && TREATMENT_DICT[key][lang]) return TREATMENT_DICT[key][lang] + suffix;
-  // Fallback: devolver original
+  const nKey = Object.keys(TREATMENT_DICT).find(k => normName(k).toLowerCase() === nLower);
+  if (nKey && TREATMENT_DICT[nKey][lang]) return TREATMENT_DICT[nKey][lang] + suffix;
   return name;
 };

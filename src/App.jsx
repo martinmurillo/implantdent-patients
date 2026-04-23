@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase";
-import { translateTreatment } from "./treatments";
+import { translateTreatment, setTranslationDict } from "./treatments";
 
 // ─── PDF.js ───────────────────────────────────────────────────────────────────
 const loadPdfJs = () => new Promise((resolve) => {
@@ -162,7 +162,7 @@ const s = {
 };
 
 // ─── PDF EXPORT ───────────────────────────────────────────────────────────────
-const exportToPDF = async (patient, lang, setExporting, patPayments=[]) => {
+const exportToPDF = async (patient, lang, setExporting, patPayments=[], templates=[]) => {
   if (setExporting) setExporting(lang);
   let treatments = [...(patient.treatments||[])];
   const appointments = patient.appointments || [];
@@ -547,7 +547,7 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
       </div>
       <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
         {["es","en","fr"].map(lang=>(
-          <button key={lang} onClick={()=>exportToPDF(p,lang,setExp,patPayments)} disabled={!!exporting}
+          <button key={lang} onClick={()=>exportToPDF(p,lang,setExp,patPayments,templates)} disabled={!!exporting}
             style={{...s.btnDark, opacity:exporting?0.6:1, cursor:exporting?"not-allowed":"pointer"}}>
             {exporting===lang?"⏳ Traduciendo...":`🖨 PDF ${lang.toUpperCase()}`}
           </button>
@@ -587,7 +587,7 @@ function AlertCard({ patient, onOpen }) {
 }
 
 // ─── PatientCard ──────────────────────────────────────────────────────────────
-function PatientCard({ patient, onEdit, onToggleClosed, onDelete, patientPayments=[], onOpen=null }) {
+function PatientCard({ patient, onEdit, onToggleClosed, onDelete, patientPayments=[], onOpen=null, templates=[] }) {
   const [exporting, setExp] = useState(null);
   const sub  = (patient.treatments||[]).reduce((a,t)=>a+(parseFloat(t.value)||0),0);
   const disc = (patient.treatments||[]).reduce((a,t)=>a+(parseFloat(t.discount)||0),0);
@@ -614,7 +614,7 @@ function PatientCard({ patient, onEdit, onToggleClosed, onDelete, patientPayment
         <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
           <div style={{display:"flex",gap:5}}>
             {["es","en","fr"].map(lang=>(
-              <button key={lang} onClick={()=>exportToPDF(patient,lang,setExp,patientPayments)} disabled={!!exporting} title={`PDF ${lang.toUpperCase()}`}
+              <button key={lang} onClick={()=>exportToPDF(patient,lang,setExp,patientPayments,templates)} disabled={!!exporting} title={`PDF ${lang.toUpperCase()}`}
                 style={{...s.btnSm, opacity:exporting?0.6:1, cursor:exporting?"not-allowed":"pointer"}}>
                 {exporting===lang?"⏳":lang.toUpperCase()}
               </button>
@@ -1000,7 +1000,7 @@ function ResumenPanel({ items, doctors }) {
 function PlantillasPanel({ templates, onRefresh }) {
   const [keyword,   setKeyword]   = useState("");
   const [textBlock, setTextBlock] = useState("");
-  const [editing,   setEditing]   = useState(null); // id being edited
+  const [editing,   setEditing]   = useState(null);
   const [saving,    setSaving]    = useState(false);
 
   const reset = () => { setKeyword(""); setTextBlock(""); setEditing(null); };
@@ -1016,7 +1016,7 @@ function PlantillasPanel({ templates, onRefresh }) {
     reset(); await onRefresh(); setSaving(false);
   };
 
-  const startEdit = (t) => { setKeyword(t.keyword); setTextBlock(t.text_block); setEditing(t.id); };
+  const startEdit = (t) => { setKeyword(t.keyword); setTextBlock(t.text_block||""); setEditing(t.id); };
 
   const remove = async (id) => {
     if (!confirm("¿Eliminar esta plantilla?")) return;
@@ -1089,15 +1089,109 @@ function PlantillasPanel({ templates, onRefresh }) {
   );
 }
 
+// ─── TraduccionesPanel ────────────────────────────────────────────────────────
+function TraduccionesPanel({ translations, onRefresh }) {
+  const [search,    setSearch]    = useState("");
+  const [form,      setForm]      = useState({ name_es:"", name_en:"", name_fr:"" });
+  const [editingId, setEditingId] = useState(null);
+  const [saving,    setSaving]    = useState(false);
+
+  const filtered = translations.filter(t =>
+    !search.trim() ||
+    t.name_es.toLowerCase().includes(search.toLowerCase()) ||
+    (t.name_en||"").toLowerCase().includes(search.toLowerCase()) ||
+    (t.name_fr||"").toLowerCase().includes(search.toLowerCase())
+  );
+
+  const reset = () => { setForm({ name_es:"", name_en:"", name_fr:"" }); setEditingId(null); };
+
+  const save = async () => {
+    if (!form.name_es.trim()) return;
+    setSaving(true);
+    const payload = { name_es: form.name_es.trim(), name_en: form.name_en.trim(), name_fr: form.name_fr.trim() };
+    if (editingId) {
+      await supabase.from("treatment_translations").update(payload).eq("id", editingId);
+    } else {
+      await supabase.from("treatment_translations").insert([payload]);
+    }
+    reset(); await onRefresh(); setSaving(false);
+  };
+
+  const startEdit = (t) => { setForm({ name_es: t.name_es, name_en: t.name_en||"", name_fr: t.name_fr||"" }); setEditingId(t.id); };
+
+  const remove = async (id) => {
+    if (!confirm("¿Eliminar esta traducción?")) return;
+    await supabase.from("treatment_translations").delete().eq("id", id);
+    await onRefresh();
+  };
+
+  return (
+    <div>
+      <div style={{fontSize:11,color:"#c9a84c",letterSpacing:2,marginBottom:6,fontWeight:700}}>🌐 TRADUCCIONES DE TRATAMIENTOS</div>
+      <div style={{fontSize:12,color:"#555",marginBottom:20}}>
+        Diccionario ES → EN / FR usado al generar PDFs. Los tratamientos no listados aquí se exportan en español.
+      </div>
+
+      <div style={{...s.card, border:"1px solid #c9a84c33", marginBottom:20}}>
+        <div style={{fontSize:11,color:"#c9a84c",letterSpacing:1,fontWeight:700,marginBottom:12}}>
+          {editingId ? "✏️ EDITANDO" : "➕ NUEVA TRADUCCIÓN"}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:12}}>
+          <div>
+            <label style={s.label}>🇪🇸 Nombre en español</label>
+            <input value={form.name_es} onChange={e=>setForm(f=>({...f,name_es:e.target.value}))} placeholder="Nombre exacto del tratamiento" style={s.input}/>
+          </div>
+          <div>
+            <label style={s.label}>🇬🇧 English</label>
+            <input value={form.name_en} onChange={e=>setForm(f=>({...f,name_en:e.target.value}))} placeholder="English name" style={s.input}/>
+          </div>
+          <div>
+            <label style={s.label}>🇫🇷 Français</label>
+            <input value={form.name_fr} onChange={e=>setForm(f=>({...f,name_fr:e.target.value}))} placeholder="Nom en français" style={s.input}/>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+          {editingId && <button onClick={reset} style={s.btnGhost}>Cancelar</button>}
+          <button onClick={save} disabled={saving||!form.name_es.trim()} style={{...s.btnGold,opacity:(saving||!form.name_es.trim())?0.5:1}}>
+            {saving?"Guardando...":(editingId?"Guardar cambios":"Agregar")}
+          </button>
+        </div>
+      </div>
+
+      <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar tratamiento..." style={{...s.input,marginBottom:10}}/>
+      <div style={{fontSize:11,color:"#555",marginBottom:8}}>{filtered.length} de {translations.length} entradas</div>
+
+      <div style={{maxHeight:480,overflowY:"auto",display:"flex",flexDirection:"column",gap:4}}>
+        {filtered.length === 0
+          ? <div style={{textAlign:"center",color:"#333",padding:40,fontSize:13}}>
+              {translations.length === 0 ? "Sin entradas — ejecutá el SQL de migración o agregá manualmente" : "Sin resultados"}
+            </div>
+          : filtered.map(t => (
+            <div key={t.id} style={{...s.card,padding:"9px 14px",display:"grid",gridTemplateColumns:"1.2fr 1fr 1fr auto",gap:12,alignItems:"center"}}>
+              <div style={{fontSize:12,color:"#e8e6e0",fontWeight:500}}>{t.name_es}</div>
+              <div style={{fontSize:12,color:"#888"}}>{t.name_en||<span style={{color:"#333"}}>—</span>}</div>
+              <div style={{fontSize:12,color:"#888"}}>{t.name_fr||<span style={{color:"#333"}}>—</span>}</div>
+              <div style={{display:"flex",gap:5,flexShrink:0}}>
+                <button onClick={()=>startEdit(t)} style={s.btnSm}>Editar</button>
+                <button onClick={()=>remove(t.id)} style={{...s.btnSm,background:"#2a0a0a",border:"1px solid #e74c3c88",color:"#e74c3c"}}>✕</button>
+              </div>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  );
+}
+
 // ─── ClinicaPanel ─────────────────────────────────────────────────────────────
-function ClinicaPanel({ doctors, items, templates, onRefreshDoctors, onRefreshItems, onRefreshTemplates }) {
+function ClinicaPanel({ doctors, items, templates, translations, onRefreshDoctors, onRefreshItems, onRefreshTemplates, onRefreshTranslations }) {
   const [tab, setTab] = useState("resumen");
   const pendingCount  = items.filter(i=>!i.realized_date).length;
 
   return (
     <div>
       <div style={{display:"flex",gap:0,marginBottom:20,background:"#0d1117",borderRadius:10,padding:4,width:"fit-content"}}>
-        {[["resumen","Resumen"],["pending","Pendientes"],["doctors","Doctores"],["plantillas","Plantillas"]].map(([id,label])=>(
+        {[["resumen","Resumen"],["pending","Pendientes"],["doctors","Doctores"],["plantillas","Plantillas"],["traducciones","Traducciones"]].map(([id,label])=>(
           <button key={id} onClick={()=>setTab(id)}
             style={{background:tab===id?"#1a2240":"none",border:"none",borderRadius:8,color:tab===id?"#c9a84c":"#555",padding:"8px 20px",cursor:"pointer",fontSize:13,fontWeight:tab===id?700:400,transition:"all 0.15s"}}>
             {label}
@@ -1109,7 +1203,8 @@ function ClinicaPanel({ doctors, items, templates, onRefreshDoctors, onRefreshIt
       {tab==="resumen"    && <ResumenPanel items={items} doctors={doctors}/>}
       {tab==="pending"    && <PendingPanel items={items} doctors={doctors} onRefresh={onRefreshItems}/>}
       {tab==="doctors"    && <DoctorsPanel doctors={doctors} onRefresh={onRefreshDoctors}/>}
-      {tab==="plantillas" && <PlantillasPanel templates={templates} onRefresh={onRefreshTemplates}/>}
+      {tab==="plantillas"   && <PlantillasPanel templates={templates} onRefresh={onRefreshTemplates}/>}
+      {tab==="traducciones" && <TraduccionesPanel translations={translations} onRefresh={onRefreshTranslations}/>}
     </div>
   );
 }
@@ -1120,8 +1215,9 @@ export default function App() {
   const [patients,  setPatients]  = useState([]);
   const [doctors,   setDoctors]   = useState([]);
   const [items,     setItems]     = useState([]);
-  const [templates, setTemplates] = useState([]);
-  const [payments,  setPayments]  = useState([]);
+  const [templates,     setTemplates]     = useState([]);
+  const [translations,  setTranslations]  = useState([]);
+  const [payments,      setPayments]      = useState([]);
   const [view,      setView]      = useState("dashboard");
   const [editing,   setEditing]   = useState(null);
   const [filter,    setFilter]    = useState("");
@@ -1130,10 +1226,11 @@ export default function App() {
   const fetchPatients  = async () => { const {data}=await supabase.from("patients").select("*").order("created_at",{ascending:false}); setPatients(data||[]); };
   const fetchDoctors   = async () => { const {data}=await supabase.from("doctors").select("*").order("name"); setDoctors(data||[]); };
   const fetchItems     = async () => { const {data}=await supabase.from("treatment_items").select("*").order("created_at",{ascending:false}); setItems(data||[]); };
-  const fetchTemplates = async () => { const {data}=await supabase.from("treatment_templates").select("*").order("keyword"); setTemplates(data||[]); };
-  const fetchPayments  = async () => { const {data}=await supabase.from("payments").select("*").order("date",{ascending:false}); setPayments(data||[]); };
+  const fetchTemplates    = async () => { const {data}=await supabase.from("treatment_templates").select("*").order("keyword"); setTemplates(data||[]); };
+  const fetchTranslations = async () => { const {data}=await supabase.from("treatment_translations").select("*").order("name_es"); setTranslations(data||[]); setTranslationDict(data||[]); };
+  const fetchPayments     = async () => { const {data}=await supabase.from("payments").select("*").order("date",{ascending:false}); setPayments(data||[]); };
 
-  useEffect(()=>{ Promise.all([fetchPatients(),fetchDoctors(),fetchItems(),fetchTemplates(),fetchPayments()]).then(()=>setDbLoad(false)); },[]);
+  useEffect(()=>{ Promise.all([fetchPatients(),fetchDoctors(),fetchItems(),fetchTemplates(),fetchTranslations(),fetchPayments()]).then(()=>setDbLoad(false)); },[]);
 
   useEffect(()=>{
     const toFreeze = patients.filter(p=>!p.closed && p.status!=="cold" && daysDiff(p.last_contact)>15);
@@ -1289,6 +1386,7 @@ export default function App() {
             {filtered.map(p=><PatientCard key={p.id} patient={p} onEdit={openEdit} onToggleClosed={toggleClosed} onDelete={deletePatient}
               patientPayments={payments.filter(pay=>pay.patient_id===p.id)}
               onOpen={isSearching ? openEdit : null}
+              templates={templates}
             />)}
           </>
         )}
@@ -1299,7 +1397,7 @@ export default function App() {
             {old.length===0
               ? <div style={{textAlign:"center",color:"#333",padding:56,fontSize:14}}>No hay presupuestos de más de 15 días</div>
               : old.map(p=><PatientCard key={p.id} patient={p} onEdit={openEdit} onToggleClosed={toggleClosed} onDelete={deletePatient}
-                  patientPayments={payments.filter(pay=>pay.patient_id===p.id)}/>)
+                  patientPayments={payments.filter(pay=>pay.patient_id===p.id)} templates={templates}/>)
             }
           </>
         )}
@@ -1310,7 +1408,7 @@ export default function App() {
             {cold.length===0
               ? <div style={{textAlign:"center",color:"#333",padding:56,fontSize:14}}>No hay pacientes fríos</div>
               : cold.map(p=><PatientCard key={p.id} patient={p} onEdit={openEdit} onToggleClosed={toggleClosed} onDelete={deletePatient}
-                  patientPayments={payments.filter(pay=>pay.patient_id===p.id)}/>)
+                  patientPayments={payments.filter(pay=>pay.patient_id===p.id)} templates={templates}/>)
             }
           </>
         )}
@@ -1348,8 +1446,8 @@ export default function App() {
         )}
 
         {!dbLoading && view==="clinica" && (
-          <ClinicaPanel doctors={doctors} items={items} templates={templates}
-            onRefreshDoctors={fetchDoctors} onRefreshItems={fetchItems} onRefreshTemplates={fetchTemplates}/>
+          <ClinicaPanel doctors={doctors} items={items} templates={templates} translations={translations}
+            onRefreshDoctors={fetchDoctors} onRefreshItems={fetchItems} onRefreshTemplates={fetchTemplates} onRefreshTranslations={fetchTranslations}/>
         )}
       </div>
     </div>
