@@ -647,7 +647,7 @@ function PatientCard({ patient, onEdit, onToggleClosed, onDelete, patientPayment
           <div style={{fontWeight:700,color:"#e8e6e0",fontSize:15}}>{patient.name||"Sin nombre"}</div>
           <div style={{fontSize:12,color:"#555",marginTop:2}}>HC: {patient.hc||"—"} · #{patient.budget_no||"—"} · {fmtDate(patient.date)}</div>
           <div style={{fontSize:12,color:"#777",marginTop:4}}>
-            {(patient.treatments||[]).length} tratamiento(s) · {(patient.appointments||[]).length} cita(s) · <span style={{color:"#c9a84c",fontWeight:600}}>{fmtEur(grand)}</span>
+            {getTxItems(patient).length} tratamiento(s) · {(patient.appointments||[]).length} cita(s) · <span style={{color:"#c9a84c",fontWeight:600}}>{fmtEur(grand)}</span>
             {hasPending && <span style={{color:"#e74c3c",marginLeft:8,fontWeight:600}}>· Deuda: {fmtEur(grand-totalPaid)}</span>}
           </div>
         </div>
