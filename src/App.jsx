@@ -109,12 +109,26 @@ const genId    = () => Math.random().toString(36).slice(2,10);
 const today    = () => new Date().toISOString().split("T")[0];
 const daysDiff = (d) => !d ? 999 : Math.floor((new Date()-new Date(d))/86400000);
 const fmtEur   = (v) => v && parseFloat(v) ? `€${parseFloat(v).toLocaleString("es-ES",{minimumFractionDigits:2})}` : "-";
-const effectiveValue = (tr) => {
-  const base = parseFloat(tr.value) || 0;
-  const pct  = parseInt(tr.discount) || 0;
-  if (pct === 0 || base === 0) return base;
-  const original = base / 1.1;
-  return parseFloat((original * (1 - Math.max(0, pct - 10) / 100)).toFixed(2));
+const effectiveValue = (tr) => parseFloat(tr.value) || 0;
+
+const getTxItems = (patient) => {
+  const raw = patient.treatments;
+  return Array.isArray(raw) ? raw : (raw?.items || []);
+};
+const getTxDiscountPct = (patient) => {
+  const raw = patient.treatments;
+  return Array.isArray(raw) ? 0 : (parseInt(raw?.discountPct) || 0);
+};
+const applyDiscount = (subtotal, pct) => {
+  if (pct === 0 || subtotal === 0) return { discAmt: 0, grand: subtotal };
+  const discAmt = parseFloat((subtotal - (subtotal / 1.1) * (1 - Math.max(0, pct - 10) / 100)).toFixed(2));
+  return { discAmt, grand: parseFloat((subtotal - discAmt).toFixed(2)) };
+};
+const patientGrand = (patient) => {
+  const items = getTxItems(patient);
+  const pct   = getTxDiscountPct(patient);
+  const sub   = items.reduce((a, t) => a + (parseFloat(t.value) || 0), 0);
+  return applyDiscount(sub, pct).grand;
 };
 const fmtDate  = (s) => { if(!s) return ""; const [y,mo,d]=s.split("-"); return `${d}/${mo}/${y}`; };
 const ordinal  = (n, lang) => {
@@ -181,19 +195,21 @@ const s = {
 // ─── PDF EXPORT ───────────────────────────────────────────────────────────────
 const exportToPDF = async (patient, lang, setExporting, patPayments=[], templates=[]) => {
   if (setExporting) setExporting(lang);
-  let treatments = [...(patient.treatments||[])];
+  let treatments = [...getTxItems(patient)];
+  const discPct = patient.discountPct !== undefined ? (parseInt(patient.discountPct)||0) : getTxDiscountPct(patient);
   const appointments = patient.appointments || [];
   treatments.sort((a,b) => a.name.localeCompare(b.name));
   if (lang !== "es" && treatments.length > 0) {
     treatments = treatments.map(tr => ({ ...tr, name: translateTreatment(tr.name, lang) }));
   }
   const t     = T[lang];
-  const grand = treatments.reduce((a,tr)=>a+effectiveValue(tr),0);
+  const subtotal = treatments.reduce((a,tr)=>a+(parseFloat(tr.value)||0),0);
+  const { discAmt, grand } = applyDiscount(subtotal, discPct);
   const totalPaid = (patPayments||[]).reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
   const remaining = grand - totalPaid;
   const txRows = treatments.map(tr=>`
     <tr>
-      <td>${tr.name}</td><td style="text-align:right">${fmtEur(effectiveValue(tr))}</td>
+      <td>${tr.name}</td><td style="text-align:right">${fmtEur(tr.value)}</td>
     </tr>`).join("");
   const txMap = Object.fromEntries(treatments.map(tr=>[tr.id, tr]));
   const apptRows = appointments.map((appt, idx) => {
@@ -241,6 +257,7 @@ const exportToPDF = async (patient, lang, setExporting, patPayments=[], template
   <table><thead><tr><th>${t.treatment}</th><th style="text-align:right">${t.total}</th></tr></thead>
   <tbody>${txRows}</tbody></table>
   <div class="totals">
+    ${discPct>0?`<div class="tr"><span>Subtotal</span><span>${fmtEur(subtotal)}</span></div><div class="tr" style="color:#c0392b"><span>Descuento ${discPct}%</span><span>-${fmtEur(discAmt)}</span></div>`:""}
     <div class="tr tr-grand"><span>${t.grandTotal}</span><span>${fmtEur(grand)}</span></div>
   </div>
   ${appointments.length > 0 ? `<div class="sec">${t.appointmentDetail}</div>
@@ -269,36 +286,11 @@ const exportToPDF = async (patient, lang, setExporting, patPayments=[], template
 
 // ─── TreatmentRow ─────────────────────────────────────────────────────────────
 function TreatmentRow({ tr, onChange, onRemove }) {
-  const base = parseFloat(tr.value) || 0;
-  const getEff = (pct) => {
-    if (pct === 0 || base === 0) return base;
-    const original = base / 1.1;
-    return parseFloat((original * (1 - Math.max(0, pct - 10) / 100)).toFixed(2));
-  };
-  const si = (f, ph, type="text") => (
-    <input type={type} placeholder={ph} value={tr[f]} onChange={e=>onChange(f,e.target.value)} style={s.smInput}/>
-  );
   return (
     <div style={{...s.card, padding:"12px 14px", position:"relative", marginBottom:8}}>
       <div style={{display:"grid", gridTemplateColumns:"2.5fr 1fr", gap:8}}>
-        {si("name","Tratamiento")}{si("value","Importe €","number")}
-      </div>
-      <div style={{marginTop:8}}>
-        <select
-          value={tr.discount||"0"}
-          onChange={e=>onChange("discount",e.target.value)}
-          style={{...s.smInput, cursor:"pointer"}}
-        >
-          <option value="0">Sin descuento</option>
-          {[10,15,20,25].map(pct=>{
-            const discAmt = base - getEff(pct);
-            return (
-              <option key={pct} value={String(pct)}>
-                {base > 0 ? `Descuento ${pct}% — -${fmtEur(discAmt)}` : `Descuento ${pct}%`}
-              </option>
-            );
-          })}
-        </select>
+        <input placeholder="Tratamiento" value={tr.name} onChange={e=>onChange("name",e.target.value)} style={s.smInput}/>
+        <input type="number" placeholder="Importe €" value={tr.value} onChange={e=>onChange("value",e.target.value)} style={s.smInput}/>
       </div>
       <button onClick={onRemove} style={{position:"absolute",top:8,right:8,background:"none",border:"none",color:"#555",cursor:"pointer",fontSize:15,lineHeight:1}}>✕</button>
     </div>
@@ -352,7 +344,12 @@ function AppointmentRow({ appt, idx, treatments, allAppointments, onChange, onRe
 
 // ─── PatientForm ──────────────────────────────────────────────────────────────
 function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaymentsChange=null, isNew=false }) {
-  const [p, setP]           = useState(patient);
+  const [p, setP] = useState(() => {
+    const raw = patient.treatments;
+    const items = Array.isArray(raw) ? raw : (raw?.items || []);
+    const discountPct = Array.isArray(raw) ? "0" : (raw?.discountPct || "0");
+    return { ...patient, treatments: items, discountPct };
+  });
   const [msg, setMsg]       = useState("");
   const [loading, setL]     = useState(false);
   const [saving, setSaving] = useState(false);
@@ -387,7 +384,9 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
   const updAppt = (id,f,v) => setP(prev=>({...prev, appointments:prev.appointments.map(a=>a.id===id?{...a,[f]:v}:a)}));
   const remAppt = (id) => setP(prev=>({...prev, appointments:prev.appointments.filter(a=>a.id!==id)}));
 
-  const grand = p.treatments.reduce((a,t)=>a+effectiveValue(t),0);
+  const subtotal = p.treatments.reduce((a,t)=>a+(parseFloat(t.value)||0),0);
+  const discPct  = parseInt(p.discountPct)||0;
+  const { discAmt, grand } = applyDiscount(subtotal, discPct);
 
   const patPayments = payments.filter(pay => pay.patient_id === p.id);
   const totalPaid   = patPayments.reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
@@ -433,8 +432,6 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
     </div>
   );
 
-  const sortedTx = [...p.treatments].sort((a,b)=>a.name.localeCompare(b.name));
-
   return (
     <div style={{maxWidth:920,margin:"0 auto"}}>
       <div style={{...s.card, border:"2px dashed #c9a84c33", display:"flex", alignItems:"center", gap:16, marginBottom:20}}>
@@ -458,17 +455,27 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
           <Field label="Hora" field="time" type="time"/>
         </div>
       </div>
-      <div style={{display:"flex",gap:0,marginBottom:16,background:"#0d1117",borderRadius:10,padding:4,width:"fit-content"}}>
-        {[["treatments","Tratamientos"],["appointments","Citas"],["payments","Pagos"]].map(([id,label])=>(
-          <button key={id} onClick={()=>setTab(id)}
-            style={{background:tab===id?"#1a2240":"none",border:"none",borderRadius:8,color:tab===id?"#c9a84c":"#555",padding:"8px 20px",cursor:"pointer",fontSize:13,fontWeight:tab===id?700:400,transition:"all 0.15s"}}>
-            {label}
-            {id==="appointments" && p.appointments.length>0 &&
-              <span style={{background:"#c9a84c",color:"#0a0d14",borderRadius:"50%",width:16,height:16,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,marginLeft:6}}>{p.appointments.length}</span>}
-            {id==="payments" && patPayments.length>0 &&
-              <span style={{background:"#e74c3c",color:"#fff",borderRadius:"50%",width:16,height:16,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,marginLeft:6}}>{patPayments.length}</span>}
-          </button>
-        ))}
+      <div style={{display:"flex",gap:12,marginBottom:16,alignItems:"center",flexWrap:"wrap"}}>
+        <div style={{display:"flex",gap:0,background:"#0d1117",borderRadius:10,padding:4}}>
+          {[["treatments","Tratamientos"],["appointments","Citas"],["payments","Pagos"]].map(([id,label])=>(
+            <button key={id} onClick={()=>setTab(id)}
+              style={{background:tab===id?"#1a2240":"none",border:"none",borderRadius:8,color:tab===id?"#c9a84c":"#555",padding:"8px 20px",cursor:"pointer",fontSize:13,fontWeight:tab===id?700:400,transition:"all 0.15s"}}>
+              {label}
+              {id==="appointments" && p.appointments.length>0 &&
+                <span style={{background:"#c9a84c",color:"#0a0d14",borderRadius:"50%",width:16,height:16,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,marginLeft:6}}>{p.appointments.length}</span>}
+              {id==="payments" && patPayments.length>0 &&
+                <span style={{background:"#e74c3c",color:"#fff",borderRadius:"50%",width:16,height:16,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,marginLeft:6}}>{patPayments.length}</span>}
+            </button>
+          ))}
+        </div>
+        <select value={p.discountPct||"0"} onChange={e=>setF("discountPct",e.target.value)}
+          style={{...s.smInput, width:"auto", minWidth:180, cursor:"pointer"}}>
+          <option value="0">Sin descuento</option>
+          <option value="10">Descuento 10%</option>
+          <option value="15">Descuento 15%</option>
+          <option value="20">Descuento 20%</option>
+          <option value="25">Descuento 25%</option>
+        </select>
       </div>
       {tab==="treatments" && (
         <div style={{marginBottom:16}}>
@@ -479,11 +486,21 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
           {p.treatments.length===0 && (
             <div style={{textAlign:"center",color:"#333",padding:24,background:"#0d1117",borderRadius:10,fontSize:13}}>Sin tratamientos — importá un PDF o agregá manualmente</div>
           )}
-          {sortedTx.map(tr=>(<TreatmentRow key={tr.id} tr={tr} onChange={(f,v)=>updTx(tr.id,f,v)} onRemove={()=>remTx(tr.id)}/>))}
+          {p.treatments.map(tr=>(<TreatmentRow key={tr.id} tr={tr} onChange={(f,v)=>updTx(tr.id,f,v)} onRemove={()=>remTx(tr.id)}/>))}
           {p.treatments.length>0 && (
             <div style={{display:"flex",justifyContent:"flex-end",marginTop:10}}>
-              <div style={{display:"flex",justifyContent:"space-between",padding:"10px 14px",background:"#1a2240",borderRadius:8,color:"#c9a84c",fontWeight:700,fontSize:15,minWidth:200}}>
-                <span>TOTAL</span><span>{fmtEur(grand)}</span>
+              <div style={{background:"#1a2240",borderRadius:8,minWidth:220,overflow:"hidden"}}>
+                {discPct>0 && (<>
+                  <div style={{display:"flex",justifyContent:"space-between",padding:"8px 14px",color:"#888",fontSize:13}}>
+                    <span>Subtotal</span><span>{fmtEur(subtotal)}</span>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",padding:"8px 14px",color:"#e74c3c",fontSize:13}}>
+                    <span>Descuento {discPct}%</span><span>-{fmtEur(discAmt)}</span>
+                  </div>
+                </>)}
+                <div style={{display:"flex",justifyContent:"space-between",padding:"10px 14px",color:"#c9a84c",fontWeight:700,fontSize:15}}>
+                  <span>TOTAL</span><span>{fmtEur(grand)}</span>
+                </div>
               </div>
             </div>
           )}
@@ -614,7 +631,7 @@ function AlertCard({ patient, onOpen }) {
 // ─── PatientCard ──────────────────────────────────────────────────────────────
 function PatientCard({ patient, onEdit, onToggleClosed, onDelete, patientPayments=[], onOpen=null, templates=[] }) {
   const [exporting, setExp] = useState(null);
-  const grand = (patient.treatments||[]).reduce((a,t)=>a+effectiveValue(t),0);
+  const grand = patientGrand(patient);
   const totalPaid = patientPayments.reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
   const hasPending = patientPayments.length > 0 && totalPaid < grand;
   const days = daysDiff(patient.last_contact);
@@ -1267,10 +1284,10 @@ export default function App() {
   const insertTreatmentItems = async (patient) => {
     const {data:existing} = await supabase.from("treatment_items").select("id").eq("patient_id", patient.id);
     if ((existing||[]).length > 0) return;
-    const rows = (patient.treatments||[]).map(tr => ({
+    const rows = getTxItems(patient).map(tr => ({
       patient_id: patient.id, patient_name: patient.name, hc: patient.hc,
       treatment_name: tr.name,
-      amount: effectiveValue(tr),
+      amount: parseFloat(tr.value)||0,
       doctor_id: null, closed_date: patient.date||today(), realized_date: null,
     }));
     if (rows.length > 0) await supabase.from("treatment_items").insert(rows);
@@ -1279,7 +1296,8 @@ export default function App() {
   const savePatient = async (p) => {
     const payload = {
       name:p.name, hc:p.hc, dni:p.dni||"", budget_no:p.budgetNo||p.budget_no, date:p.date, time:p.time,
-      treatments:p.treatments, appointments:p.appointments||[], notes:p.notes,
+      treatments:{ items: p.treatments, discountPct: p.discountPct||"0" },
+      appointments:p.appointments||[], notes:p.notes,
       status:p.status||"active", last_contact:p.last_contact||today(), closed:p.closed||false,
     };
     const isNew = !patients.some(x=>x.id===p.id);
@@ -1311,7 +1329,7 @@ export default function App() {
   const pendingDebtPatients = patients.filter(p=>{
     const hasPayments = payments.some(pay=>pay.patient_id===p.id);
     if (!hasPayments) return false;
-    const grand = (p.treatments||[]).reduce((a,t)=>a+effectiveValue(t),0);
+    const grand = patientGrand(p);
     const paid = payments.filter(pay=>pay.patient_id===p.id).reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
     return paid < grand;
   });
@@ -1423,7 +1441,7 @@ export default function App() {
             {pendingDebtPatients.length===0
               ? <div style={{textAlign:"center",color:"#333",padding:56,fontSize:14}}>No hay pacientes con saldo pendiente</div>
               : pendingDebtPatients.map(p=>{
-                  const grand = (p.treatments||[]).reduce((a,t)=>a+effectiveValue(t),0);
+                  const grand = patientGrand(p);
                   const paid = payments.filter(pay=>pay.patient_id===p.id).reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
                   const pending = grand - paid;
                   return (
