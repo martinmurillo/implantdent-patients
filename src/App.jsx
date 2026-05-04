@@ -49,16 +49,18 @@ const hashPin  = async (pin) => {
 };
 
 function PinLock({ onUnlock }) {
-  const [pin,   setPin]   = useState("");
+  const pinRef  = useRef(null);
   const [error, setError] = useState(false);
   const [shake, setShake] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
+    const pin = pinRef.current?.value || "";
     const h = await hashPin(pin);
     if (h !== PIN_HASH) {
-      setError(true); setShake(true); setPin("");
+      setError(true); setShake(true);
+      if (pinRef.current) pinRef.current.value = "";
       setTimeout(()=>setShake(false), 500);
       return;
     }
@@ -78,8 +80,10 @@ function PinLock({ onUnlock }) {
         <div style={{fontSize:11,color:"#444",letterSpacing:2,marginBottom:36}}>GESTIÓN DE PACIENTES</div>
         <form onSubmit={submit}>
           <input
+            ref={pinRef}
             type="password" inputMode="numeric" maxLength={8} autoFocus
-            value={pin} onChange={e=>{setPin(e.target.value);setError(false);}}
+            defaultValue=""
+            onChange={()=>setError(false)}
             placeholder="PIN"
             style={{
               background:"#0d1117", border:`1px solid ${error?"#e74c3c":"#2a2e3b"}`,
@@ -105,6 +109,13 @@ const genId    = () => Math.random().toString(36).slice(2,10);
 const today    = () => new Date().toISOString().split("T")[0];
 const daysDiff = (d) => !d ? 999 : Math.floor((new Date()-new Date(d))/86400000);
 const fmtEur   = (v) => v && parseFloat(v) ? `€${parseFloat(v).toLocaleString("es-ES",{minimumFractionDigits:2})}` : "-";
+const effectiveValue = (tr) => {
+  const base = parseFloat(tr.value) || 0;
+  const pct  = parseInt(tr.discount) || 0;
+  if (pct === 0 || base === 0) return base;
+  const original = base / 1.1;
+  return parseFloat((original * (1 - Math.max(0, pct - 10) / 100)).toFixed(2));
+};
 const fmtDate  = (s) => { if(!s) return ""; const [y,mo,d]=s.split("-"); return `${d}/${mo}/${y}`; };
 const ordinal  = (n, lang) => {
   if (lang==="es") return `${n}ª Cita`;
@@ -177,12 +188,12 @@ const exportToPDF = async (patient, lang, setExporting, patPayments=[], template
     treatments = treatments.map(tr => ({ ...tr, name: translateTreatment(tr.name, lang) }));
   }
   const t     = T[lang];
-  const grand = treatments.reduce((a,tr)=>a+(parseFloat(tr.value)||0),0);
+  const grand = treatments.reduce((a,tr)=>a+effectiveValue(tr),0);
   const totalPaid = (patPayments||[]).reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
   const remaining = grand - totalPaid;
   const txRows = treatments.map(tr=>`
     <tr>
-      <td>${tr.name}</td><td style="text-align:right">${fmtEur(tr.value)}</td>
+      <td>${tr.name}</td><td style="text-align:right">${fmtEur(effectiveValue(tr))}</td>
     </tr>`).join("");
   const txMap = Object.fromEntries(treatments.map(tr=>[tr.id, tr]));
   const apptRows = appointments.map((appt, idx) => {
@@ -258,6 +269,12 @@ const exportToPDF = async (patient, lang, setExporting, patPayments=[], template
 
 // ─── TreatmentRow ─────────────────────────────────────────────────────────────
 function TreatmentRow({ tr, onChange, onRemove }) {
+  const base = parseFloat(tr.value) || 0;
+  const getEff = (pct) => {
+    if (pct === 0 || base === 0) return base;
+    const original = base / 1.1;
+    return parseFloat((original * (1 - Math.max(0, pct - 10) / 100)).toFixed(2));
+  };
   const si = (f, ph, type="text") => (
     <input type={type} placeholder={ph} value={tr[f]} onChange={e=>onChange(f,e.target.value)} style={s.smInput}/>
   );
@@ -265,6 +282,23 @@ function TreatmentRow({ tr, onChange, onRemove }) {
     <div style={{...s.card, padding:"12px 14px", position:"relative", marginBottom:8}}>
       <div style={{display:"grid", gridTemplateColumns:"2.5fr 1fr", gap:8}}>
         {si("name","Tratamiento")}{si("value","Importe €","number")}
+      </div>
+      <div style={{marginTop:8}}>
+        <select
+          value={tr.discount||"0"}
+          onChange={e=>onChange("discount",e.target.value)}
+          style={{...s.smInput, cursor:"pointer"}}
+        >
+          <option value="0">Sin descuento</option>
+          {[10,15,20,25].map(pct=>{
+            const discAmt = base - getEff(pct);
+            return (
+              <option key={pct} value={String(pct)}>
+                {base > 0 ? `Descuento ${pct}% — -${fmtEur(discAmt)}` : `Descuento ${pct}%`}
+              </option>
+            );
+          })}
+        </select>
       </div>
       <button onClick={onRemove} style={{position:"absolute",top:8,right:8,background:"none",border:"none",color:"#555",cursor:"pointer",fontSize:15,lineHeight:1}}>✕</button>
     </div>
@@ -353,7 +387,7 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
   const updAppt = (id,f,v) => setP(prev=>({...prev, appointments:prev.appointments.map(a=>a.id===id?{...a,[f]:v}:a)}));
   const remAppt = (id) => setP(prev=>({...prev, appointments:prev.appointments.filter(a=>a.id!==id)}));
 
-  const grand = p.treatments.reduce((a,t)=>a+(parseFloat(t.value)||0),0);
+  const grand = p.treatments.reduce((a,t)=>a+effectiveValue(t),0);
 
   const patPayments = payments.filter(pay => pay.patient_id === p.id);
   const totalPaid   = patPayments.reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
@@ -580,7 +614,7 @@ function AlertCard({ patient, onOpen }) {
 // ─── PatientCard ──────────────────────────────────────────────────────────────
 function PatientCard({ patient, onEdit, onToggleClosed, onDelete, patientPayments=[], onOpen=null, templates=[] }) {
   const [exporting, setExp] = useState(null);
-  const grand = (patient.treatments||[]).reduce((a,t)=>a+(parseFloat(t.value)||0),0);
+  const grand = (patient.treatments||[]).reduce((a,t)=>a+effectiveValue(t),0);
   const totalPaid = patientPayments.reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
   const hasPending = patientPayments.length > 0 && totalPaid < grand;
   const days = daysDiff(patient.last_contact);
@@ -1236,7 +1270,7 @@ export default function App() {
     const rows = (patient.treatments||[]).map(tr => ({
       patient_id: patient.id, patient_name: patient.name, hc: patient.hc,
       treatment_name: tr.name,
-      amount: (parseFloat(tr.value)||0)-(parseFloat(tr.discount)||0),
+      amount: effectiveValue(tr),
       doctor_id: null, closed_date: patient.date||today(), realized_date: null,
     }));
     if (rows.length > 0) await supabase.from("treatment_items").insert(rows);
@@ -1277,9 +1311,7 @@ export default function App() {
   const pendingDebtPatients = patients.filter(p=>{
     const hasPayments = payments.some(pay=>pay.patient_id===p.id);
     if (!hasPayments) return false;
-    const sub  = (p.treatments||[]).reduce((a,t)=>a+(parseFloat(t.value)||0),0);
-    const disc = (p.treatments||[]).reduce((a,t)=>a+(parseFloat(t.discount)||0),0);
-    const grand = sub - disc;
+    const grand = (p.treatments||[]).reduce((a,t)=>a+effectiveValue(t),0);
     const paid = payments.filter(pay=>pay.patient_id===p.id).reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
     return paid < grand;
   });
@@ -1391,9 +1423,7 @@ export default function App() {
             {pendingDebtPatients.length===0
               ? <div style={{textAlign:"center",color:"#333",padding:56,fontSize:14}}>No hay pacientes con saldo pendiente</div>
               : pendingDebtPatients.map(p=>{
-                  const sub  = (p.treatments||[]).reduce((a,t)=>a+(parseFloat(t.value)||0),0);
-                  const disc = (p.treatments||[]).reduce((a,t)=>a+(parseFloat(t.discount)||0),0);
-                  const grand = sub - disc;
+                  const grand = (p.treatments||[]).reduce((a,t)=>a+effectiveValue(t),0);
                   const paid = payments.filter(pay=>pay.patient_id===p.id).reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
                   const pending = grand - paid;
                   return (
