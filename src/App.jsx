@@ -1219,15 +1219,15 @@ export default function App() {
   const fetchTranslations = async () => { const {data,error}=await supabase.from("treatment_translations").select("*").order("name_es"); if(!error){setTranslations(data||[]);setTranslationDict(data||[]);} };
   const fetchPayments     = async () => { const {data}=await supabase.from("payments").select("*").order("date",{ascending:false}); setPayments(data||[]); };
 
-  // Cerrar sesión de Supabase si el token expira
+  // Cerrar sesión de Supabase solo al expirar el token o hacer sign out explícito
   useEffect(()=>{
-    const { data:{ subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
-      if (!session) setUnlocked(false);
+    const { data:{ subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') setUnlocked(false);
     });
     return () => subscription.unsubscribe();
   }, []);
 
-  useEffect(()=>{ Promise.all([fetchPatients(),fetchDoctors(),fetchItems(),fetchTemplates(),fetchTranslations(),fetchPayments()]).then(()=>setDbLoad(false)); },[]);
+  useEffect(()=>{ Promise.all([fetchPatients(),fetchDoctors(),fetchItems(),fetchTemplates(),fetchTranslations(),fetchPayments()]).finally(()=>setDbLoad(false)); },[]);
 
 
   const insertTreatmentItems = async (patient) => {
