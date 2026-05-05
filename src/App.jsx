@@ -1455,6 +1455,7 @@ export default function App() {
   const [translations,  setTranslations]  = useState([]);
   const [payments,      setPayments]      = useState([]);
   const [view,      setView]      = useState("dashboard");
+  const [statusTab, setStatusTab] = useState("pendiente");
   const [editing,   setEditing]   = useState(null);
   const [filter,    setFilter]    = useState("");
   const [dbLoading, setDbLoad]    = useState(true);
@@ -1598,41 +1599,63 @@ export default function App() {
 
         {!dbLoading && view==="dashboard" && (
           <>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
-              {[
-                {label:"Pendientes", value:recent.filter(p=>getStatus(p)==="pendiente").length, color:"#c9a84c"},
-                {label:"En curso",   value:recent.filter(p=>getStatus(p)==="en curso").length,  color:"#3498db"},
-                {label:"Cerrados",   value:recent.filter(p=>getStatus(p)==="cerrado").length,   color:"#2ecc71"},
-              ].map(st=>(
-                <div key={st.label} style={{background:"#12151e",borderRadius:10,padding:"14px 18px",borderTop:`3px solid ${st.color}`}}>
-                  <div style={{fontSize:28,fontWeight:800,color:st.color,lineHeight:1}}>{st.value}</div>
-                  <div style={{fontSize:12,color:"#555",marginTop:4}}>{st.label}</div>
-                </div>
-              ))}
-            </div>
+            {(() => {
+              const tabs = [
+                { id:"pendiente", label:"Pendientes", color:"#c9a84c", list: recent.filter(p=>getStatus(p)==="pendiente") },
+                { id:"en curso",  label:"En curso",   color:"#3498db", list: recent.filter(p=>getStatus(p)==="en curso")  },
+                { id:"cerrado",   label:"Cerrados",   color:"#2ecc71", list: recent.filter(p=>getStatus(p)==="cerrado")   },
+              ];
+              const activeTab = tabs.find(t=>t.id===statusTab) || tabs[0];
+              const tabList   = isSearching ? filtered : activeTab.list;
 
-            <div style={{display:"flex",gap:12,marginBottom:14,alignItems:"center"}}>
-              <input type="text" placeholder="Buscar en todos los pacientes (nombre, HC, Nº presupuesto)..."
-                value={filter} onChange={e=>setFilter(e.target.value)}
-                style={{...s.input, flex:1, fontSize:13}}/>
-            </div>
+              return (
+                <>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
+                    {tabs.map(tab => {
+                      const active = !isSearching && statusTab === tab.id;
+                      return (
+                        <div key={tab.id} onClick={()=>{setStatusTab(tab.id);setFilter("");}}
+                          style={{background: active ? tab.color+"1a":"#12151e", borderRadius:10, padding:"14px 18px",
+                            borderTop:`3px solid ${tab.color}`,
+                            border: active ? `1px solid ${tab.color}55`:"1px solid #1e2230",
+                            cursor:"pointer", transition:"all 0.15s"}}
+                          onMouseEnter={e=>{ if(!active) e.currentTarget.style.background="#1a1e2a"; }}
+                          onMouseLeave={e=>{ if(!active) e.currentTarget.style.background="#12151e"; }}>
+                          <div style={{fontSize:28,fontWeight:800,color:tab.color,lineHeight:1}}>{tab.list.length}</div>
+                          <div style={{fontSize:12,color: active?tab.color:"#555",marginTop:4,fontWeight:active?700:400}}>{tab.label}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
 
-            {isSearching && (
-              <div style={{fontSize:12,color:"#555",marginBottom:10}}>Resultados para "{filter}" — todos los estados</div>
-            )}
-            {!isSearching && (
-              <div style={{fontSize:11,color:"#555",letterSpacing:1,marginBottom:10,fontWeight:700}}>ÚLTIMOS 30 DÍAS</div>
-            )}
-            {filtered.length===0 && (
-              <div style={{textAlign:"center",color:"#333",padding:56,fontSize:14}}>
-                {isSearching ? "Sin resultados para esa búsqueda" : "Sin presupuestos de los últimos 30 días"}
-              </div>
-            )}
-            {filtered.map(p=><PatientCard key={p.id} patient={p} onEdit={openEdit} onSetStatus={setPatientStatus} onDelete={deletePatient}
-              patientPayments={payments.filter(pay=>pay.patient_id===p.id)}
-              onOpen={isSearching ? openEdit : null}
-              templates={templates}
-            />)}
+                  <div style={{display:"flex",gap:12,marginBottom:14,alignItems:"center"}}>
+                    <input type="text" placeholder="Buscar en todos los pacientes (nombre, HC, Nº presupuesto)..."
+                      value={filter} onChange={e=>setFilter(e.target.value)}
+                      style={{...s.input, flex:1, fontSize:13}}/>
+                    {isSearching && <button onClick={()=>setFilter("")} style={{...s.btnGhost,whiteSpace:"nowrap",padding:"9px 14px"}}>✕ Limpiar</button>}
+                  </div>
+
+                  {isSearching && (
+                    <div style={{fontSize:12,color:"#555",marginBottom:10}}>Resultados para "{filter}" — todos los estados</div>
+                  )}
+                  {!isSearching && (
+                    <div style={{fontSize:11,color: activeTab.color,letterSpacing:1,marginBottom:10,fontWeight:700}}>
+                      {activeTab.label.toUpperCase()} — {activeTab.list.length} presupuesto(s)
+                    </div>
+                  )}
+                  {tabList.length===0 && (
+                    <div style={{textAlign:"center",color:"#333",padding:56,fontSize:14}}>
+                      {isSearching ? "Sin resultados para esa búsqueda" : `Sin presupuestos ${activeTab.label.toLowerCase()}`}
+                    </div>
+                  )}
+                  {tabList.map(p=><PatientCard key={p.id} patient={p} onEdit={openEdit} onSetStatus={setPatientStatus} onDelete={deletePatient}
+                    patientPayments={payments.filter(pay=>pay.patient_id===p.id)}
+                    onOpen={isSearching ? openEdit : null}
+                    templates={templates}
+                  />)}
+                </>
+              );
+            })()}
           </>
         )}
 
