@@ -31,7 +31,7 @@ const parsePDF = async (file) => {
   const dateRaw  = get(/Fecha\s*:\s*(\d{2}\/\d{2}\/\d{4})/i);
   const date     = dateRaw ? dateRaw.split("/").reverse().join("-") : today();
   const treatments = [];
-  const rx = /(\d{4})\s+\d\s+([\w\s\.\-\/áéíóúñüÁÉÍÓÚÑÜ]+?)\s+([\d]+[.,]\d{2})\s*€\s+([\d]+[.,]\d{2})\s*€\s+(\d+)%\s+([\d]+[.,]\d{2})\s*€/g;
+  const rx = /(\d{4})\s+\d\s+([\w\s\.\-\/\(\)\+\,áéíóúñüÁÉÍÓÚÑÜ]+?)\s+([\d]+[.,]\d{2})\s*€\s+([\d]+[.,]\d{2})\s*€\s+(\d+)%\s+([\d]+[.,]\d{2})\s*€/g;
   let m;
   while ((m = rx.exec(txt)) !== null) {
     const base  = parseFloat(m[6].replace(",","."));
