@@ -108,6 +108,9 @@ function PinLock({ onUnlock }) {
 const genId    = () => Math.random().toString(36).slice(2,10);
 const today    = () => new Date().toISOString().split("T")[0];
 const daysDiff = (d) => !d ? 999 : Math.floor((new Date()-new Date(d))/86400000);
+const STATUSES = ["pendiente","en curso","cerrado"];
+const STATUS_COLOR = { "pendiente":"#c9a84c", "en curso":"#3498db", "cerrado":"#2ecc71" };
+const getStatus = (p) => STATUSES.includes(p.status) ? p.status : (p.closed ? "cerrado" : "pendiente");
 const fmtEur   = (v) => v && parseFloat(v) ? `€${parseFloat(v).toLocaleString("es-ES",{minimumFractionDigits:2})}` : "-";
 const effectiveValue = (tr) => parseFloat(tr.value) || 0;
 
@@ -175,7 +178,7 @@ const SIG_LABEL = { es:"Firma Paciente", en:"Patient Signature", fr:"Signature d
 const emptyPatient = () => ({
   id:genId(), name:"", hc:"", dni:"", budgetNo:"", date:today(), time:"",
   treatments:[], appointments:[], notes:"",
-  status:"active", last_contact:today(), closed:false,
+  status:"pendiente", last_contact:today(), closed:false,
 });
 const emptyTx   = () => ({ id:genId(), name:"", value:"", discount:"0" });
 const emptyAppt = () => ({ id:genId(), label:"", date:"", time:"", doctors:"", payment:"", treatmentIds:[] });
@@ -629,16 +632,17 @@ function AlertCard({ patient, onOpen }) {
 }
 
 // ─── PatientCard ──────────────────────────────────────────────────────────────
-function PatientCard({ patient, onEdit, onToggleClosed, onDelete, patientPayments=[], onOpen=null, templates=[] }) {
+function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[], onOpen=null, templates=[] }) {
   const [exporting, setExp] = useState(null);
   const grand = patientGrand(patient);
   const totalPaid = patientPayments.reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
   const hasPending = patientPayments.length > 0 && totalPaid < grand;
   const days = daysDiff(patient.last_contact);
-  let bc = "#c9a84c44";
-  if(!patient.closed){
-    if(days>=15) bc="#8e44ad"; else if(days>=7) bc="#e74c3c"; else if(days>=4) bc="#f39c12";
-  } else bc="#2ecc71";
+  const status = getStatus(patient);
+  let bc;
+  if (status === "cerrado") bc = "#2ecc71";
+  else if (status === "en curso") bc = "#3498db";
+  else { if(days>=30) bc="#8e44ad"; else if(days>=15) bc="#e74c3c"; else if(days>=7) bc="#f39c12"; else bc="#c9a84c44"; }
   return (
     <div style={{...s.card, borderLeft:`4px solid ${bc}`}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
@@ -660,12 +664,16 @@ function PatientCard({ patient, onEdit, onToggleClosed, onDelete, patientPayment
               </button>
             ))}
           </div>
+          <div style={{display:"flex",gap:4}}>
+            {STATUSES.map(st=>(
+              <button key={st} onClick={()=>onSetStatus(patient,st)}
+                style={{background:status===st?STATUS_COLOR[st]+"22":"#0d1117",border:`1px solid ${status===st?STATUS_COLOR[st]:"#333"}`,borderRadius:6,color:status===st?STATUS_COLOR[st]:"#555",padding:"4px 9px",cursor:"pointer",fontSize:11,fontWeight:status===st?700:400}}>
+                {st}
+              </button>
+            ))}
+          </div>
           <div style={{display:"flex",gap:6}}>
             <button onClick={()=>onEdit(patient)} style={{...s.btnDark,padding:"5px 12px",fontSize:12}}>Editar</button>
-            <button onClick={()=>onToggleClosed(patient)}
-              style={{background:patient.closed?"#0d2014":"#1a1e2a",border:`1px solid ${patient.closed?"#2ecc7144":"#44444444"}`,borderRadius:6,color:patient.closed?"#2ecc71":"#777",padding:"5px 12px",cursor:"pointer",fontSize:12}}>
-              {patient.closed?"✓ Cerrado":"Cerrar"}
-            </button>
             <button onClick={()=>onDelete(patient)}
               style={{...s.btnSm,background:"#2a0a0a",border:"1px solid #e74c3c88",color:"#e74c3c",padding:"5px 12px",fontSize:12}}>
               Eliminar
@@ -692,6 +700,62 @@ function MonthNav({ year, month, onChange }) {
       <button onClick={prev} style={{background:"none",border:"none",color:"#c9a84c",cursor:"pointer",fontSize:18,lineHeight:1,padding:"0 4px"}}>‹</button>
       <span style={{color:"#e8e6e0",fontWeight:700,fontSize:14,minWidth:160,textAlign:"center"}}>{fmtMonthLabel(year, month)}</span>
       <button onClick={next} style={{background:"none",border:"none",color:isNow?"#333":"#c9a84c",cursor:isNow?"default":"pointer",fontSize:18,lineHeight:1,padding:"0 4px"}} disabled={isNow}>›</button>
+    </div>
+  );
+}
+
+// ─── EstadisticasPanel ───────────────────────────────────────────────────────
+function EstadisticasPanel({ payments, items }) {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  const [from, setFrom] = useState(`${y}-${String(m+1).padStart(2,"0")}-01`);
+  const [to,   setTo]   = useState(now.toISOString().split("T")[0]);
+
+  const inRange = (d) => d && d >= from && d <= to;
+
+  const rangePayments = payments.filter(pay => inRange(pay.date));
+  const totalPaid     = rangePayments.reduce((a,p) => a + (parseFloat(p.amount)||0), 0);
+
+  const rangeItems = items.filter(i => inRange(i.closed_date));
+
+  let implantTotal = 0;
+  rangeItems.forEach(item => {
+    const name = item.treatment_name || "";
+    if (/implante/i.test(name)) {
+      const m = name.match(/(\d+)\s*implante/i);
+      implantTotal += m ? parseInt(m[1]) : 1;
+    }
+  });
+
+  const orthoRx = /ortodoncia|orthodontic|invisalign|invisaling|invisible\s|ortod/i;
+  const orthoCount = rangeItems.filter(i => orthoRx.test(i.treatment_name || "")).length;
+
+  const StatCard = ({ label, value, sub, color }) => (
+    <div style={{background:"#12151e",borderRadius:10,padding:"20px 22px",borderTop:`3px solid ${color}`}}>
+      <div style={{fontSize:34,fontWeight:800,color,lineHeight:1}}>{value}</div>
+      <div style={{fontSize:12,color:"#777",marginTop:5}}>{sub}</div>
+      <div style={{fontSize:11,color:"#444",marginTop:6,letterSpacing:1,textTransform:"uppercase"}}>{label}</div>
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{fontSize:11,color:"#c9a84c",letterSpacing:2,marginBottom:20,fontWeight:700}}>📊 ESTADÍSTICAS</div>
+      <div style={{display:"flex",gap:12,marginBottom:28,alignItems:"flex-end",flexWrap:"wrap"}}>
+        <div>
+          <label style={s.label}>Desde</label>
+          <input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={{...s.input,width:160}}/>
+        </div>
+        <div>
+          <label style={s.label}>Hasta</label>
+          <input type="date" value={to} onChange={e=>setTo(e.target.value)} style={{...s.input,width:160}}/>
+        </div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14}}>
+        <StatCard label="Pagos recibidos" value={fmtEur(totalPaid)} sub={`${rangePayments.length} pago(s)`} color="#2ecc71"/>
+        <StatCard label="Implantes"       value={implantTotal}       sub="unidades"                          color="#3498db"/>
+        <StatCard label="Ortodoncia"      value={orthoCount}         sub="tratamientos"                      color="#9b59b6"/>
+      </div>
     </div>
   );
 }
@@ -1298,7 +1362,7 @@ export default function App() {
       name:p.name, hc:p.hc, dni:p.dni||"", budget_no:p.budgetNo||p.budget_no, date:p.date, time:p.time,
       treatments:{ items: p.treatments, discountPct: p.discountPct||"0" },
       appointments:p.appointments||[], notes:p.notes,
-      status:p.status||"active", last_contact:p.last_contact||today(), closed:p.closed||false,
+      status:p.status||"pendiente", last_contact:p.last_contact||today(), closed:p.status==="cerrado",
     };
     const isNew = !patients.some(x=>x.id===p.id);
     if (isNew) await supabase.from("patients").insert([payload]);
@@ -1306,10 +1370,14 @@ export default function App() {
     await fetchPatients(); setView("dashboard"); setEditing(null);
   };
 
-  const toggleClosed = async (patient) => {
-    const nowClosed = !patient.closed;
-    await supabase.from("patients").update({closed:nowClosed, last_contact:today()}).eq("id",patient.id);
-    if (nowClosed) { await insertTreatmentItems({...patient,closed:true}); await fetchItems(); }
+  const setPatientStatus = async (patient, newStatus) => {
+    await supabase.from("patients").update({
+      status: newStatus, closed: newStatus === "cerrado", last_contact: today()
+    }).eq("id", patient.id);
+    if (newStatus === "cerrado") {
+      await insertTreatmentItems({...patient, status:"cerrado", closed:true});
+      await fetchItems();
+    }
     await fetchPatients();
   };
 
@@ -1322,7 +1390,7 @@ export default function App() {
   const openEdit = (p) => { setEditing(p); setView("form"); };
   const newPt    = ()  => { setEditing(emptyPatient()); setView("form"); };
 
-  const old    = patients.filter(p=>!p.closed && daysDiff(p.last_contact)>=15);
+  const old    = patients.filter(p=>getStatus(p)==="cerrado" && daysDiff(p.last_contact)>=30);
   const oldIds = new Set(old.map(p=>p.id));
   const recent = patients.filter(p=>!oldIds.has(p.id));
 
@@ -1360,10 +1428,11 @@ export default function App() {
         <span style={{fontWeight:900,fontSize:15,letterSpacing:3,color:"#c9a84c"}}>IMPLANTDENT</span>
         <span style={{fontSize:10,color:"#3a3a4a",letterSpacing:2}}>GESTIÓN DE PACIENTES</span>
         <div style={{flex:1}}/>
-        <NavBtn id="dashboard" label="Pacientes"  badge={0}/>
-        <NavBtn id="old"       label="+15 días"    badge={old.length}/>
-        <NavBtn id="debts"     label="Deudas"      badge={pendingDebtPatients.length}/>
-        <NavBtn id="clinica"   label="Clínica"     badge={items.filter(i=>!i.realized_date).length}/>
+        <NavBtn id="dashboard" label="Pacientes"     badge={0}/>
+        <NavBtn id="old"       label="+30 días"     badge={old.length}/>
+        <NavBtn id="debts"     label="Deudas"       badge={pendingDebtPatients.length}/>
+        <NavBtn id="clinica"   label="Clínica"      badge={items.filter(i=>!i.realized_date).length}/>
+        <NavBtn id="stats"     label="Estadísticas" badge={0}/>
         <button onClick={newPt} style={s.btnGold}>+ Nuevo paciente</button>
       </div>
 
@@ -1387,9 +1456,9 @@ export default function App() {
           <>
             <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
               {[
-                {label:"Activos",   value:recent.filter(p=>!p.closed).length, color:"#c9a84c"},
-                {label:"Cerrados",  value:recent.filter(p=>p.closed).length,  color:"#2ecc71"},
-                {label:"+15 días",  value:old.length,                          color:"#e74c3c"},
+                {label:"Pendientes", value:recent.filter(p=>getStatus(p)==="pendiente").length, color:"#c9a84c"},
+                {label:"En curso",   value:recent.filter(p=>getStatus(p)==="en curso").length,  color:"#3498db"},
+                {label:"Cerrados",   value:recent.filter(p=>getStatus(p)==="cerrado").length,   color:"#2ecc71"},
               ].map(st=>(
                 <div key={st.label} style={{background:"#12151e",borderRadius:10,padding:"14px 18px",borderTop:`3px solid ${st.color}`}}>
                   <div style={{fontSize:28,fontWeight:800,color:st.color,lineHeight:1}}>{st.value}</div>
@@ -1408,14 +1477,14 @@ export default function App() {
               <div style={{fontSize:12,color:"#555",marginBottom:10}}>Resultados para "{filter}" — todos los estados</div>
             )}
             {!isSearching && (
-              <div style={{fontSize:11,color:"#555",letterSpacing:1,marginBottom:10,fontWeight:700}}>ÚLTIMOS 15 DÍAS</div>
+              <div style={{fontSize:11,color:"#555",letterSpacing:1,marginBottom:10,fontWeight:700}}>ÚLTIMOS 30 DÍAS</div>
             )}
             {filtered.length===0 && (
               <div style={{textAlign:"center",color:"#333",padding:56,fontSize:14}}>
-                {isSearching ? "Sin resultados para esa búsqueda" : "Sin presupuestos de los últimos 15 días"}
+                {isSearching ? "Sin resultados para esa búsqueda" : "Sin presupuestos de los últimos 30 días"}
               </div>
             )}
-            {filtered.map(p=><PatientCard key={p.id} patient={p} onEdit={openEdit} onToggleClosed={toggleClosed} onDelete={deletePatient}
+            {filtered.map(p=><PatientCard key={p.id} patient={p} onEdit={openEdit} onSetStatus={setPatientStatus} onDelete={deletePatient}
               patientPayments={payments.filter(pay=>pay.patient_id===p.id)}
               onOpen={isSearching ? openEdit : null}
               templates={templates}
@@ -1425,10 +1494,10 @@ export default function App() {
 
         {!dbLoading && view==="old" && (
           <>
-            <div style={{fontSize:12,color:"#888",letterSpacing:2,marginBottom:16,fontWeight:700}}>📅 PRESUPUESTOS +15 DÍAS</div>
+            <div style={{fontSize:12,color:"#888",letterSpacing:2,marginBottom:16,fontWeight:700}}>📅 PRESUPUESTOS CERRADOS +30 DÍAS</div>
             {old.length===0
-              ? <div style={{textAlign:"center",color:"#333",padding:56,fontSize:14}}>No hay presupuestos de más de 15 días</div>
-              : old.map(p=><PatientCard key={p.id} patient={p} onEdit={openEdit} onToggleClosed={toggleClosed} onDelete={deletePatient}
+              ? <div style={{textAlign:"center",color:"#333",padding:56,fontSize:14}}>No hay presupuestos cerrados de más de 30 días</div>
+              : old.map(p=><PatientCard key={p.id} patient={p} onEdit={openEdit} onSetStatus={setPatientStatus} onDelete={deletePatient}
                   patientPayments={payments.filter(pay=>pay.patient_id===p.id)} templates={templates}/>)
             }
           </>
@@ -1468,6 +1537,10 @@ export default function App() {
         {!dbLoading && view==="clinica" && (
           <ClinicaPanel doctors={doctors} items={items} templates={templates} translations={translations}
             onRefreshDoctors={fetchDoctors} onRefreshItems={fetchItems} onRefreshTemplates={fetchTemplates} onRefreshTranslations={fetchTranslations}/>
+        )}
+
+        {!dbLoading && view==="stats" && (
+          <EstadisticasPanel payments={payments} items={items}/>
         )}
       </div>
     </div>
