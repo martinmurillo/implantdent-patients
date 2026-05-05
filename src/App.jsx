@@ -705,38 +705,67 @@ function MonthNav({ year, month, onChange }) {
 }
 
 // ─── EstadisticasPanel ───────────────────────────────────────────────────────
-function EstadisticasPanel({ payments, items }) {
+function EstadisticasPanel({ payments, items, patients, onOpenPatient }) {
   const now = new Date();
-  const y = now.getFullYear(), m = now.getMonth();
-  const [from, setFrom] = useState(`${y}-${String(m+1).padStart(2,"0")}-01`);
-  const [to,   setTo]   = useState(now.toISOString().split("T")[0]);
+  const y = now.getFullYear(), mo = now.getMonth();
+  const [from,         setFrom]   = useState(`${y}-${String(mo+1).padStart(2,"0")}-01`);
+  const [to,           setTo]     = useState(now.toISOString().split("T")[0]);
+  const [activeDetail, setDetail] = useState(null);
 
   const inRange = (d) => d && d >= from && d <= to;
 
   const rangePayments = payments.filter(pay => inRange(pay.date));
   const totalPaid     = rangePayments.reduce((a,p) => a + (parseFloat(p.amount)||0), 0);
-
-  const rangeItems = items.filter(i => inRange(i.closed_date));
+  const rangeItems    = items.filter(i => inRange(i.closed_date));
 
   let implantTotal = 0;
-  rangeItems.forEach(item => {
+  const implantItems = rangeItems.filter(item => {
     const name = item.treatment_name || "";
-    if (/implante/i.test(name)) {
-      const m = name.match(/(\d+)\s*implante/i);
-      implantTotal += m ? parseInt(m[1]) : 1;
-    }
+    if (!/implante/i.test(name)) return false;
+    const m = name.match(/(\d+)\s*implante/i);
+    implantTotal += m ? parseInt(m[1]) : 1;
+    return true;
   });
 
-  const orthoRx = /ortodoncia|orthodontic|invisalign|invisaling|invisible\s|ortod/i;
-  const orthoCount = rangeItems.filter(i => orthoRx.test(i.treatment_name || "")).length;
+  const orthoRx    = /ortodoncia|orthodontic|invisalign|invisaling|invisible\s|ortod/i;
+  const orthoItems = rangeItems.filter(i => orthoRx.test(i.treatment_name || ""));
 
-  const StatCard = ({ label, value, sub, color }) => (
-    <div style={{background:"#12151e",borderRadius:10,padding:"20px 22px",borderTop:`3px solid ${color}`}}>
-      <div style={{fontSize:34,fontWeight:800,color,lineHeight:1}}>{value}</div>
-      <div style={{fontSize:12,color:"#777",marginTop:5}}>{sub}</div>
-      <div style={{fontSize:11,color:"#444",marginTop:6,letterSpacing:1,textTransform:"uppercase"}}>{label}</div>
-    </div>
-  );
+  const findPatient = (id) => patients.find(p => p.id === id);
+
+  const toggle = (id) => setDetail(prev => prev === id ? null : id);
+
+  const StatCard = ({ id, label, value, sub, color }) => {
+    const active = activeDetail === id;
+    return (
+      <div onClick={() => toggle(id)}
+        style={{background: active ? color+"18" : "#12151e", borderRadius:10, padding:"20px 22px",
+          borderTop:`3px solid ${color}`, border: active ? `1px solid ${color}55` : "1px solid #1e2230",
+          cursor:"pointer", transition:"background 0.15s"}}
+        onMouseEnter={e => { if(!active) e.currentTarget.style.background="#1a1e2a"; }}
+        onMouseLeave={e => { if(!active) e.currentTarget.style.background="#12151e"; }}>
+        <div style={{fontSize:34,fontWeight:800,color,lineHeight:1}}>{value}</div>
+        <div style={{fontSize:12,color:"#777",marginTop:5}}>{sub}</div>
+        <div style={{fontSize:11,color:"#444",marginTop:6,letterSpacing:1,textTransform:"uppercase"}}>{label}</div>
+        <div style={{fontSize:11,color:active?color:"#555",marginTop:10}}>{active?"▲ Ocultar":"▼ Ver detalle"}</div>
+      </div>
+    );
+  };
+
+  const DetailRow = ({ id, name, subtitle, patientId }) => {
+    const pat = findPatient(patientId);
+    return (
+      <div key={id} onClick={() => pat && onOpenPatient(pat)}
+        style={{...s.card, cursor: pat ? "pointer" : "default", display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6}}
+        onMouseEnter={e => { if(pat) e.currentTarget.style.background="#1a1e2a"; }}
+        onMouseLeave={e => { if(pat) e.currentTarget.style.background="#12151e"; }}>
+        <div>
+          <div style={{fontWeight:700,color:"#e8e6e0",fontSize:14}}>{name}</div>
+          <div style={{fontSize:12,color:"#777",marginTop:2}}>{subtitle}</div>
+        </div>
+        {pat && <span style={{color:"#c9a84c",fontSize:20,lineHeight:1}}>›</span>}
+      </div>
+    );
+  };
 
   return (
     <div>
@@ -744,18 +773,63 @@ function EstadisticasPanel({ payments, items }) {
       <div style={{display:"flex",gap:12,marginBottom:28,alignItems:"flex-end",flexWrap:"wrap"}}>
         <div>
           <label style={s.label}>Desde</label>
-          <input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={{...s.input,width:160}}/>
+          <input type="date" value={from} onChange={e=>{setFrom(e.target.value);setDetail(null);}} style={{...s.input,width:160}}/>
         </div>
         <div>
           <label style={s.label}>Hasta</label>
-          <input type="date" value={to} onChange={e=>setTo(e.target.value)} style={{...s.input,width:160}}/>
+          <input type="date" value={to} onChange={e=>{setTo(e.target.value);setDetail(null);}} style={{...s.input,width:160}}/>
         </div>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14}}>
-        <StatCard label="Pagos recibidos" value={fmtEur(totalPaid)} sub={`${rangePayments.length} pago(s)`} color="#2ecc71"/>
-        <StatCard label="Implantes"       value={implantTotal}       sub="unidades"                          color="#3498db"/>
-        <StatCard label="Ortodoncia"      value={orthoCount}         sub="tratamientos"                      color="#9b59b6"/>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:20}}>
+        <StatCard id="pagos"      label="Pagos recibidos" value={fmtEur(totalPaid)} sub={`${rangePayments.length} pago(s)`} color="#2ecc71"/>
+        <StatCard id="implantes"  label="Implantes"        value={implantTotal}      sub="unidades"                          color="#3498db"/>
+        <StatCard id="ortodoncia" label="Ortodoncia"       value={orthoItems.length} sub="tratamientos"                     color="#9b59b6"/>
       </div>
+
+      {activeDetail === "pagos" && (
+        <div>
+          <div style={{fontSize:11,color:"#2ecc71",letterSpacing:2,marginBottom:12,fontWeight:700}}>PAGOS — {fmtDate(from)} al {fmtDate(to)}</div>
+          {rangePayments.length === 0
+            ? <div style={{color:"#555",padding:20,textAlign:"center"}}>Sin pagos en este período</div>
+            : rangePayments.map(pay => {
+                const pat = findPatient(pay.patient_id);
+                return <DetailRow key={pay.id} id={pay.id} patientId={pay.patient_id}
+                  name={pat?.name || "Paciente desconocido"}
+                  subtitle={`${fmtDate(pay.date)} · ${fmtEur(pay.amount)}${pay.note ? " · " + pay.note : ""}`}/>;
+              })
+          }
+        </div>
+      )}
+
+      {activeDetail === "implantes" && (
+        <div>
+          <div style={{fontSize:11,color:"#3498db",letterSpacing:2,marginBottom:12,fontWeight:700}}>IMPLANTES — {fmtDate(from)} al {fmtDate(to)}</div>
+          {implantItems.length === 0
+            ? <div style={{color:"#555",padding:20,textAlign:"center"}}>Sin implantes en este período</div>
+            : implantItems.map(item => {
+                const m = (item.treatment_name||"").match(/(\d+)\s*implante/i);
+                const qty = m ? parseInt(m[1]) : 1;
+                return <DetailRow key={item.id} id={item.id} patientId={item.patient_id}
+                  name={item.patient_name || findPatient(item.patient_id)?.name || "—"}
+                  subtitle={`${item.treatment_name} · ${qty} implante(s) · ${fmtEur(item.amount)}`}/>;
+              })
+          }
+        </div>
+      )}
+
+      {activeDetail === "ortodoncia" && (
+        <div>
+          <div style={{fontSize:11,color:"#9b59b6",letterSpacing:2,marginBottom:12,fontWeight:700}}>ORTODONCIA — {fmtDate(from)} al {fmtDate(to)}</div>
+          {orthoItems.length === 0
+            ? <div style={{color:"#555",padding:20,textAlign:"center"}}>Sin ortodoncia en este período</div>
+            : orthoItems.map(item => (
+                <DetailRow key={item.id} id={item.id} patientId={item.patient_id}
+                  name={item.patient_name || findPatient(item.patient_id)?.name || "—"}
+                  subtitle={`${item.treatment_name} · ${fmtEur(item.amount)}`}/>
+              ))
+          }
+        </div>
+      )}
     </div>
   );
 }
@@ -1540,7 +1614,7 @@ export default function App() {
         )}
 
         {!dbLoading && view==="stats" && (
-          <EstadisticasPanel payments={payments} items={items}/>
+          <EstadisticasPanel payments={payments} items={items} patients={patients} onOpenPatient={openEdit}/>
         )}
       </div>
     </div>
