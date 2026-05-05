@@ -764,6 +764,93 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
 
   const toggle = (id) => setDetail(prev => prev === id ? null : id);
 
+  const printStats = () => {
+    const periodo = `${fmtDate(from)} — ${fmtDate(to)}`;
+
+    const payRows = rangePayments.map(pay => {
+      const pat  = findPatient(pay.patient_id);
+      const hc   = pat?.hc || "—";
+      const name = pat?.name || "Eliminado";
+      const note = pay.note ? ` (${pay.note})` : "";
+      return `<tr><td>${hc}</td><td>${name}</td><td>${fmtDate(pay.date)}</td><td style="text-align:right">${fmtEur(pay.amount)}${note}</td></tr>`;
+    }).join("");
+
+    const implantRows = implantItems.map(item => {
+      const pat  = findPatient(item.patient_id);
+      const hc   = item.hc || pat?.hc || "—";
+      const name = item.patient_name || pat?.name || "—";
+      const estado = item.realized_date ? "Realizado" : "Pendiente";
+      return `<tr><td>${hc}</td><td>${name}</td><td>${item.treatment_name}</td><td>${estado}</td></tr>`;
+    }).join("");
+
+    const orthoRows = orthoItems.map(item => {
+      const pat  = findPatient(item.patient_id);
+      const hc   = item.hc || pat?.hc || "—";
+      const name = item.patient_name || pat?.name || "—";
+      const estado = item.realized_date ? "Realizado" : "Pendiente";
+      return `<tr><td>${hc}</td><td>${name}</td><td>${item.treatment_name}</td><td>${estado}</td></tr>`;
+    }).join("");
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
+<title>Estadísticas ${periodo}</title>
+<style>
+  body { font-family: 'Segoe UI', sans-serif; color: #111; padding: 32px; font-size: 13px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .periodo { color: #666; margin-bottom: 28px; font-size: 13px; }
+  .resumen { display: flex; gap: 24px; margin-bottom: 32px; }
+  .stat { border-top: 3px solid; padding: 12px 18px; min-width: 140px; }
+  .stat .val { font-size: 26px; font-weight: 800; }
+  .stat .lbl { font-size: 11px; color: #666; margin-top: 4px; text-transform: uppercase; letter-spacing: 1px; }
+  h2 { font-size: 13px; letter-spacing: 2px; text-transform: uppercase; border-bottom: 1px solid #ddd; padding-bottom: 6px; margin: 28px 0 10px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 1px; padding: 6px 8px; border-bottom: 2px solid #ddd; }
+  td { padding: 7px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .none { color: #aaa; font-style: italic; padding: 12px 0; }
+  @media print { body { padding: 16px; } }
+</style></head><body>
+<h1>IMPLANTDENT — Estadísticas</h1>
+<div class="periodo">Período: ${periodo}</div>
+
+<div class="resumen">
+  <div class="stat" style="border-color:#2ecc71">
+    <div class="val" style="color:#2ecc71">${fmtEur(totalPaid)}</div>
+    <div class="lbl">Pagos recibidos (${rangePayments.length})</div>
+  </div>
+  <div class="stat" style="border-color:#3498db">
+    <div class="val" style="color:#3498db">${implantTotal}</div>
+    <div class="lbl">Implantes realizados (${implantItems.length} en lista)</div>
+  </div>
+  <div class="stat" style="border-color:#9b59b6">
+    <div class="val" style="color:#9b59b6">${orthoTotal}</div>
+    <div class="lbl">Ortodoncia realizada (${orthoItems.length} en lista)</div>
+  </div>
+</div>
+
+<h2>Pagos</h2>
+${rangePayments.length === 0
+  ? '<div class="none">Sin pagos en este período</div>'
+  : `<table><thead><tr><th>HC</th><th>Paciente</th><th>Fecha</th><th>Importe</th></tr></thead><tbody>${payRows}</tbody></table>`}
+
+<h2>Implantes</h2>
+${implantItems.length === 0
+  ? '<div class="none">Sin implantes en este período</div>'
+  : `<table><thead><tr><th>HC</th><th>Paciente</th><th>Tratamiento</th><th>Estado</th></tr></thead><tbody>${implantRows}</tbody></table>`}
+
+<h2>Ortodoncia</h2>
+${orthoItems.length === 0
+  ? '<div class="none">Sin ortodoncia en este período</div>'
+  : `<table><thead><tr><th>HC</th><th>Paciente</th><th>Tratamiento</th><th>Estado</th></tr></thead><tbody>${orthoRows}</tbody></table>`}
+
+</body></html>`;
+
+    const w = window.open("", "_blank");
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    w.print();
+  };
+
   const StatCard = ({ id, label, value, sub, color }) => {
     const active = activeDetail === id;
     return (
@@ -821,6 +908,8 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
         <div style={{fontSize:11,color:"#c9a84c",letterSpacing:2,fontWeight:700}}>📊 ESTADÍSTICAS</div>
         {syncing && <div style={{fontSize:11,color:"#555"}}>Sincronizando...</div>}
+        <div style={{flex:1}}/>
+        <button onClick={printStats} style={{...s.btnDark, fontSize:12, padding:"6px 16px"}}>🖨 Imprimir</button>
       </div>
       <div style={{display:"flex",gap:12,marginBottom:28,alignItems:"flex-end",flexWrap:"wrap"}}>
         <div>
