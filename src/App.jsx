@@ -1477,8 +1477,12 @@ export default function App() {
 
   const deletePatient = async (patient) => {
     if (!confirm(`¿Seguro que querés eliminar a ${patient.name}? Esta acción no se puede deshacer`)) return;
-    await supabase.from("patients").delete().eq("id",patient.id);
-    await fetchPatients(); await fetchItems();
+    await Promise.all([
+      supabase.from("payments").delete().eq("patient_id", patient.id),
+      supabase.from("treatment_items").delete().eq("patient_id", patient.id),
+    ]);
+    await supabase.from("patients").delete().eq("id", patient.id);
+    await Promise.all([fetchPatients(), fetchItems(), fetchPayments()]);
   };
 
   const openEdit = (p) => { setEditing(p); setView("form"); };
