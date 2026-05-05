@@ -1624,9 +1624,7 @@ export default function App() {
   const openEdit = (p) => { setEditing(p); setView("form"); };
   const newPt    = ()  => { setEditing(emptyPatient()); setView("form"); };
 
-  const old    = patients.filter(p=>getStatus(p)==="cerrado" && daysDiff(p.last_contact)>=30);
-  const oldIds = new Set(old.map(p=>p.id));
-  const recent = patients.filter(p=>!oldIds.has(p.id));
+  const recent = patients;
 
   const pendingDebtPatients = patients.filter(p=>{
     const hasPayments = payments.some(pay=>pay.patient_id===p.id);
@@ -1663,7 +1661,6 @@ export default function App() {
         <span style={{fontSize:10,color:"#3a3a4a",letterSpacing:2}}>GESTIÓN DE PACIENTES</span>
         <div style={{flex:1}}/>
         <NavBtn id="dashboard" label="Pacientes"     badge={0}/>
-        <NavBtn id="old"       label="+30 días"     badge={old.length}/>
         <NavBtn id="debts"     label="Deudas"       badge={pendingDebtPatients.length}/>
         <NavBtn id="clinica"   label="Clínica"      badge={items.filter(i=>!i.realized_date).length}/>
         <NavBtn id="stats"     label="Estadísticas" badge={0}/>
@@ -1748,16 +1745,6 @@ export default function App() {
           </>
         )}
 
-        {!dbLoading && view==="old" && (
-          <>
-            <div style={{fontSize:12,color:"#888",letterSpacing:2,marginBottom:16,fontWeight:700}}>📅 PRESUPUESTOS CERRADOS +30 DÍAS</div>
-            {old.length===0
-              ? <div style={{textAlign:"center",color:"#333",padding:56,fontSize:14}}>No hay presupuestos cerrados de más de 30 días</div>
-              : old.map(p=><PatientCard key={p.id} patient={p} onEdit={openEdit} onSetStatus={setPatientStatus} onDelete={deletePatient}
-                  patientPayments={payments.filter(pay=>pay.patient_id===p.id)} templates={templates}/>)
-            }
-          </>
-        )}
 
 
         {!dbLoading && view==="debts" && (
