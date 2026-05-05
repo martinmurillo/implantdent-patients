@@ -730,7 +730,13 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient }) {
   const orthoRx    = /ortodoncia|orthodontic|invisalign|invisaling|invisible\s|ortod/i;
   const orthoItems = rangeItems.filter(i => orthoRx.test(i.treatment_name || ""));
 
-  const findPatient = (id) => patients.find(p => p.id === id);
+  const findPatient     = (id) => patients.find(p => p.id === id);
+  const findPatientName = (id) => {
+    const pat = patients.find(p => p.id === id);
+    if (pat) return pat.name;
+    const item = items.find(i => i.patient_id === id);
+    return item?.patient_name || null;
+  };
 
   const toggle = (id) => setDetail(prev => prev === id ? null : id);
 
@@ -792,10 +798,24 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient }) {
           {rangePayments.length === 0
             ? <div style={{color:"#555",padding:20,textAlign:"center"}}>Sin pagos en este período</div>
             : rangePayments.map(pay => {
-                const pat = findPatient(pay.patient_id);
-                return <DetailRow key={pay.id} id={pay.id} patientId={pay.patient_id}
-                  name={pat?.name || "Paciente desconocido"}
-                  subtitle={`${fmtDate(pay.date)} · ${fmtEur(pay.amount)}${pay.note ? " · " + pay.note : ""}`}/>;
+                const pat      = findPatient(pay.patient_id);
+                const nameStr  = findPatientName(pay.patient_id);
+                const deleted  = !pat && nameStr;
+                const unknown  = !pat && !nameStr;
+                const label    = pat?.name || (nameStr ? `${nameStr} (eliminado)` : "Paciente desconocido");
+                const noteStr  = pay.note ? ` · ${pay.note}` : "";
+                return (
+                  <div key={pay.id}>
+                    <DetailRow id={pay.id} patientId={pay.patient_id}
+                      name={label}
+                      subtitle={`${fmtDate(pay.date)} · ${fmtEur(pay.amount)}${noteStr}`}/>
+                    {unknown && (
+                      <div style={{fontSize:11,color:"#e74c3c",marginTop:-4,marginBottom:8,paddingLeft:8}}>
+                        ID del pago: {pay.patient_id} — el paciente fue eliminado o hay un error de vinculación
+                      </div>
+                    )}
+                  </div>
+                );
               })
           }
         </div>
