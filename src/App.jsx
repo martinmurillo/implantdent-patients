@@ -705,21 +705,31 @@ function MonthNav({ year, month, onChange }) {
 }
 
 // ─── EstadisticasPanel ───────────────────────────────────────────────────────
-function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefreshItems }) {
+function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefreshItems, onSync }) {
   const now = new Date();
   const y = now.getFullYear(), mo = now.getMonth();
   const [from,         setFrom]   = useState(`${y}-${String(mo+1).padStart(2,"0")}-01`);
   const [to,           setTo]     = useState(now.toISOString().split("T")[0]);
   const [activeDetail, setDetail] = useState(null);
   const [busy,         setBusy]   = useState(null);
+  const [syncing,      setSyncing] = useState(false);
 
-  const inRange = (d) => d && d >= from && d <= to;
+  useEffect(() => {
+    setSyncing(true);
+    onSync().finally(() => setSyncing(false));
+  }, []);
+
+  const inRange = (d) => {
+    if (!d) return false;
+    const ds = d.slice(0, 10);
+    return ds >= from && ds <= to;
+  };
 
   const rangePayments = payments.filter(pay => inRange(pay.date));
   const totalPaid     = rangePayments.reduce((a,p) => a + (parseFloat(p.amount)||0), 0);
-  const rangeItems    = items.filter(i => inRange(i.closed_date));
+  const rangeItems    = items.filter(i => inRange(i.closed_date) || inRange(i.created_at));
 
-  const implantRx  = /implante/i;
+  const implantRx  = /implant/i;
   const implantItems = rangeItems.filter(i => implantRx.test(i.treatment_name || ""));
   let implantTotal = 0;
   implantItems.forEach(item => {
@@ -808,7 +818,10 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
 
   return (
     <div>
-      <div style={{fontSize:11,color:"#c9a84c",letterSpacing:2,marginBottom:20,fontWeight:700}}>📊 ESTADÍSTICAS</div>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
+        <div style={{fontSize:11,color:"#c9a84c",letterSpacing:2,fontWeight:700}}>📊 ESTADÍSTICAS</div>
+        {syncing && <div style={{fontSize:11,color:"#555"}}>Sincronizando...</div>}
+      </div>
       <div style={{display:"flex",gap:12,marginBottom:28,alignItems:"flex-end",flexWrap:"wrap"}}>
         <div>
           <label style={s.label}>Desde</label>
@@ -1471,7 +1484,7 @@ export default function App() {
       patient_id: patient.id, patient_name: patient.name, hc: patient.hc,
       treatment_name: tr.name,
       amount: parseFloat(tr.value)||0,
-      doctor_id: null, closed_date: patient.date||today(), realized_date: null,
+      doctor_id: null, closed_date: today(), realized_date: null,
     }));
     if (rows.length > 0) await supabase.from("treatment_items").insert(rows);
   };
@@ -1493,11 +1506,19 @@ export default function App() {
     await supabase.from("patients").update({
       status: newStatus, closed: newStatus === "cerrado", last_contact: today()
     }).eq("id", patient.id);
-    if (newStatus === "cerrado") {
-      await insertTreatmentItems({...patient, status:"cerrado", closed:true});
+    if (newStatus === "cerrado" || newStatus === "en curso") {
+      await insertTreatmentItems({...patient, status:newStatus, closed:newStatus==="cerrado"});
       await fetchItems();
     }
     await fetchPatients();
+  };
+
+  const syncAllItems = async () => {
+    const toSync = patients.filter(p => getStatus(p) === "cerrado" || getStatus(p) === "en curso");
+    const existingIds = new Set(items.map(i => i.patient_id));
+    const missing = toSync.filter(p => !existingIds.has(p.id));
+    await Promise.all(missing.map(p => insertTreatmentItems(p)));
+    if (missing.length > 0) await fetchItems();
   };
 
   const deletePatient = async (patient) => {
@@ -1663,7 +1684,7 @@ export default function App() {
         )}
 
         {!dbLoading && view==="stats" && (
-          <EstadisticasPanel payments={payments} items={items} patients={patients} onOpenPatient={openEdit} onRefreshItems={fetchItems}/>
+          <EstadisticasPanel payments={payments} items={items} patients={patients} onOpenPatient={openEdit} onRefreshItems={fetchItems} onSync={syncAllItems}/>
         )}
       </div>
     </div>
