@@ -705,12 +705,13 @@ function MonthNav({ year, month, onChange }) {
 }
 
 // ─── EstadisticasPanel ───────────────────────────────────────────────────────
-function EstadisticasPanel({ payments, items, patients, onOpenPatient }) {
+function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefreshItems }) {
   const now = new Date();
   const y = now.getFullYear(), mo = now.getMonth();
   const [from,         setFrom]   = useState(`${y}-${String(mo+1).padStart(2,"0")}-01`);
   const [to,           setTo]     = useState(now.toISOString().split("T")[0]);
   const [activeDetail, setDetail] = useState(null);
+  const [busy,         setBusy]   = useState(null);
 
   const inRange = (d) => d && d >= from && d <= to;
 
@@ -718,24 +719,37 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient }) {
   const totalPaid     = rangePayments.reduce((a,p) => a + (parseFloat(p.amount)||0), 0);
   const rangeItems    = items.filter(i => inRange(i.closed_date));
 
+  const implantRx  = /implante/i;
+  const implantItems = rangeItems.filter(i => implantRx.test(i.treatment_name || ""));
   let implantTotal = 0;
-  const implantItems = rangeItems.filter(item => {
-    const name = item.treatment_name || "";
-    if (!/implante/i.test(name)) return false;
-    const m = name.match(/(\d+)\s*implante/i);
+  implantItems.forEach(item => {
+    if (!item.realized_date) return;
+    const m = (item.treatment_name||"").match(/(\d+)\s*implante/i);
     implantTotal += m ? parseInt(m[1]) : 1;
-    return true;
   });
 
   const orthoRx    = /ortodoncia|orthodontic|invisalign|invisaling|invisible\s|ortod/i;
   const orthoItems = rangeItems.filter(i => orthoRx.test(i.treatment_name || ""));
+  const orthoTotal = orthoItems.filter(i => i.realized_date).length;
 
-  const findPatient     = (id) => patients.find(p => p.id === id);
-  const findPatientName = (id) => {
-    const pat = patients.find(p => p.id === id);
-    if (pat) return pat.name;
-    const item = items.find(i => i.patient_id === id);
-    return item?.patient_name || null;
+  const findPatient = (id) => patients.find(p => p.id === id);
+
+  const deleteItem = async (e, itemId) => {
+    e.stopPropagation();
+    if (!confirm("¿Eliminar este item de estadísticas? No afecta el presupuesto del paciente.")) return;
+    setBusy(itemId);
+    await supabase.from("treatment_items").delete().eq("id", itemId);
+    await onRefreshItems();
+    setBusy(null);
+  };
+
+  const toggleRealized = async (e, item) => {
+    e.stopPropagation();
+    setBusy(item.id);
+    const newDate = item.realized_date ? null : today();
+    await supabase.from("treatment_items").update({ realized_date: newDate }).eq("id", item.id);
+    await onRefreshItems();
+    setBusy(null);
   };
 
   const toggle = (id) => setDetail(prev => prev === id ? null : id);
@@ -757,18 +771,37 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient }) {
     );
   };
 
-  const DetailRow = ({ id, name, subtitle, patientId }) => {
-    const pat = findPatient(patientId);
+  const ItemRow = ({ item, qty }) => {
+    const pat       = findPatient(item.patient_id);
+    const name      = item.patient_name || pat?.name || "—";
+    const realizado = !!item.realized_date;
+    const loading   = busy === item.id;
     return (
-      <div key={id} onClick={() => pat && onOpenPatient(pat)}
-        style={{...s.card, cursor: pat ? "pointer" : "default", display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6}}
-        onMouseEnter={e => { if(pat) e.currentTarget.style.background="#1a1e2a"; }}
-        onMouseLeave={e => { if(pat) e.currentTarget.style.background="#12151e"; }}>
-        <div>
-          <div style={{fontWeight:700,color:"#e8e6e0",fontSize:14}}>{name}</div>
-          <div style={{fontSize:12,color:"#777",marginTop:2}}>{subtitle}</div>
+      <div style={{...s.card, marginBottom:6, opacity: loading ? 0.5 : 1}}>
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
+          <div onClick={() => pat && onOpenPatient(pat)}
+            style={{flex:1, cursor: pat ? "pointer" : "default"}}>
+            <div style={{fontWeight:700, color:"#e8e6e0", fontSize:14}}>{name}</div>
+            <div style={{fontSize:12, color:"#777", marginTop:2}}>
+              {item.treatment_name}{qty > 1 ? ` · ${qty} uds` : ""} · {fmtEur(item.amount)}
+            </div>
+          </div>
+          <div style={{display:"flex", gap:6, alignItems:"center", flexShrink:0, marginLeft:12}}>
+            <button onClick={e => toggleRealized(e, item)} disabled={loading}
+              style={{background: realizado ? "#2ecc7122" : "#0d1117",
+                border: `1px solid ${realizado ? "#2ecc71" : "#555"}`,
+                borderRadius:6, color: realizado ? "#2ecc71" : "#888",
+                padding:"4px 10px", cursor:"pointer", fontSize:11, fontWeight:700}}>
+              {realizado ? "Realizado" : "Pendiente"}
+            </button>
+            {pat && <span onClick={() => onOpenPatient(pat)} style={{color:"#c9a84c",fontSize:20,lineHeight:1,cursor:"pointer"}}>›</span>}
+            <button onClick={e => deleteItem(e, item.id)} disabled={loading}
+              style={{background:"#2a0a0a", border:"1px solid #e74c3c88", borderRadius:6,
+                color:"#e74c3c", padding:"4px 8px", cursor:"pointer", fontSize:12, fontWeight:700}}>
+              ×
+            </button>
+          </div>
         </div>
-        {pat && <span style={{color:"#c9a84c",fontSize:20,lineHeight:1}}>›</span>}
       </div>
     );
   };
@@ -788,8 +821,8 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient }) {
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:20}}>
         <StatCard id="pagos"      label="Pagos recibidos" value={fmtEur(totalPaid)} sub={`${rangePayments.length} pago(s)`} color="#2ecc71"/>
-        <StatCard id="implantes"  label="Implantes"        value={implantTotal}      sub="unidades"                          color="#3498db"/>
-        <StatCard id="ortodoncia" label="Ortodoncia"       value={orthoItems.length} sub="tratamientos"                     color="#9b59b6"/>
+        <StatCard id="implantes"  label="Implantes"        value={implantTotal}      sub={`de ${implantItems.length} en lista`} color="#3498db"/>
+        <StatCard id="ortodoncia" label="Ortodoncia"       value={orthoTotal}        sub={`de ${orthoItems.length} en lista`}  color="#9b59b6"/>
       </div>
 
       {activeDetail === "pagos" && (
@@ -798,22 +831,19 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient }) {
           {rangePayments.length === 0
             ? <div style={{color:"#555",padding:20,textAlign:"center"}}>Sin pagos en este período</div>
             : rangePayments.map(pay => {
-                const pat      = findPatient(pay.patient_id);
-                const nameStr  = findPatientName(pay.patient_id);
-                const deleted  = !pat && nameStr;
-                const unknown  = !pat && !nameStr;
-                const label    = pat?.name || (nameStr ? `${nameStr} (eliminado)` : "Paciente desconocido");
-                const noteStr  = pay.note ? ` · ${pay.note}` : "";
+                const pat     = findPatient(pay.patient_id);
+                const name    = pat?.name || "Paciente eliminado";
+                const noteStr = pay.note ? ` · ${pay.note}` : "";
                 return (
-                  <div key={pay.id}>
-                    <DetailRow id={pay.id} patientId={pay.patient_id}
-                      name={label}
-                      subtitle={`${fmtDate(pay.date)} · ${fmtEur(pay.amount)}${noteStr}`}/>
-                    {unknown && (
-                      <div style={{fontSize:11,color:"#e74c3c",marginTop:-4,marginBottom:8,paddingLeft:8}}>
-                        ID del pago: {pay.patient_id} — el paciente fue eliminado o hay un error de vinculación
-                      </div>
-                    )}
+                  <div key={pay.id} onClick={() => pat && onOpenPatient(pat)}
+                    style={{...s.card, cursor: pat?"pointer":"default", display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6}}
+                    onMouseEnter={e => { if(pat) e.currentTarget.style.background="#1a1e2a"; }}
+                    onMouseLeave={e => { if(pat) e.currentTarget.style.background="#12151e"; }}>
+                    <div>
+                      <div style={{fontWeight:700,color:"#e8e6e0",fontSize:14}}>{name}</div>
+                      <div style={{fontSize:12,color:"#777",marginTop:2}}>{fmtDate(pay.date)} · {fmtEur(pay.amount)}{noteStr}</div>
+                    </div>
+                    {pat && <span style={{color:"#c9a84c",fontSize:20,lineHeight:1}}>›</span>}
                   </div>
                 );
               })
@@ -823,15 +853,13 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient }) {
 
       {activeDetail === "implantes" && (
         <div>
-          <div style={{fontSize:11,color:"#3498db",letterSpacing:2,marginBottom:12,fontWeight:700}}>IMPLANTES — {fmtDate(from)} al {fmtDate(to)}</div>
+          <div style={{fontSize:11,color:"#3498db",letterSpacing:2,marginBottom:8,fontWeight:700}}>IMPLANTES — {fmtDate(from)} al {fmtDate(to)}</div>
+          <div style={{fontSize:12,color:"#555",marginBottom:12}}>Marcá "Realizado" para sumar al contador. Eliminá falsos positivos con ×.</div>
           {implantItems.length === 0
             ? <div style={{color:"#555",padding:20,textAlign:"center"}}>Sin implantes en este período</div>
             : implantItems.map(item => {
                 const m = (item.treatment_name||"").match(/(\d+)\s*implante/i);
-                const qty = m ? parseInt(m[1]) : 1;
-                return <DetailRow key={item.id} id={item.id} patientId={item.patient_id}
-                  name={item.patient_name || findPatient(item.patient_id)?.name || "—"}
-                  subtitle={`${item.treatment_name} · ${qty} implante(s) · ${fmtEur(item.amount)}`}/>;
+                return <ItemRow key={item.id} item={item} qty={m ? parseInt(m[1]) : 1}/>;
               })
           }
         </div>
@@ -839,14 +867,11 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient }) {
 
       {activeDetail === "ortodoncia" && (
         <div>
-          <div style={{fontSize:11,color:"#9b59b6",letterSpacing:2,marginBottom:12,fontWeight:700}}>ORTODONCIA — {fmtDate(from)} al {fmtDate(to)}</div>
+          <div style={{fontSize:11,color:"#9b59b6",letterSpacing:2,marginBottom:8,fontWeight:700}}>ORTODONCIA — {fmtDate(from)} al {fmtDate(to)}</div>
+          <div style={{fontSize:12,color:"#555",marginBottom:12}}>Marcá "Realizado" para sumar al contador. Eliminá falsos positivos con ×.</div>
           {orthoItems.length === 0
             ? <div style={{color:"#555",padding:20,textAlign:"center"}}>Sin ortodoncia en este período</div>
-            : orthoItems.map(item => (
-                <DetailRow key={item.id} id={item.id} patientId={item.patient_id}
-                  name={item.patient_name || findPatient(item.patient_id)?.name || "—"}
-                  subtitle={`${item.treatment_name} · ${fmtEur(item.amount)}`}/>
-              ))
+            : orthoItems.map(item => <ItemRow key={item.id} item={item} qty={1}/>)
           }
         </div>
       )}
@@ -1638,7 +1663,7 @@ export default function App() {
         )}
 
         {!dbLoading && view==="stats" && (
-          <EstadisticasPanel payments={payments} items={items} patients={patients} onOpenPatient={openEdit}/>
+          <EstadisticasPanel payments={payments} items={items} patients={patients} onOpenPatient={openEdit} onRefreshItems={fetchItems}/>
         )}
       </div>
     </div>
