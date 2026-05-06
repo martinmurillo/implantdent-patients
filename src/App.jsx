@@ -1568,6 +1568,12 @@ export default function App() {
 
   useEffect(()=>{ Promise.all([fetchPatients(),fetchDoctors(),fetchItems(),fetchTemplates(),fetchTranslations(),fetchPayments()]).finally(()=>setDbLoad(false)); },[]);
 
+  useEffect(()=>{
+    if (!unlocked) return;
+    setDbLoad(true);
+    Promise.all([fetchPatients(),fetchDoctors(),fetchItems(),fetchTemplates(),fetchTranslations(),fetchPayments()])
+      .finally(()=>setDbLoad(false));
+  },[unlocked]);
 
   const insertTreatmentItems = async (patient) => {
     const {data:existing} = await supabase.from("treatment_items").select("id").eq("patient_id", patient.id);
