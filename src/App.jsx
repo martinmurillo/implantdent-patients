@@ -1023,303 +1023,6 @@ function DoctorsPanel({ doctors, onRefresh }) {
   );
 }
 
-// ─── PendingPanel ─────────────────────────────────────────────────────────────
-function PendingPanel({ items, doctors, onRefresh }) {
-  const [saving, setSaving] = useState({});
-  const pending = items.filter(i => !i.realized_date);
-
-  const updateItem = async (id, fields) => {
-    setSaving(prev=>({...prev,[id]:true}));
-    await supabase.from("treatment_items").update(fields).eq("id", id);
-    await onRefresh();
-    setSaving(prev=>({...prev,[id]:false}));
-  };
-
-  const markRealized = async (item) => {
-    const date = prompt("Fecha de realización (YYYY-MM):", today().slice(0,7));
-    if (!date) return;
-    await updateItem(item.id, { realized_date: date + "-01" });
-  };
-
-  if (pending.length === 0) return (
-    <div>
-      <div style={{fontSize:11,color:"#c9a84c",letterSpacing:2,marginBottom:16,fontWeight:700}}>⏳ TRATAMIENTOS PENDIENTES DE REALIZAR</div>
-      <div style={{textAlign:"center",color:"#333",padding:56,fontSize:14}}>No hay tratamientos pendientes</div>
-    </div>
-  );
-
-  return (
-    <div>
-      <div style={{fontSize:11,color:"#c9a84c",letterSpacing:2,marginBottom:16,fontWeight:700}}>
-        ⏳ TRATAMIENTOS PENDIENTES DE REALIZAR
-        <span style={{background:"#e74c3c",color:"#fff",borderRadius:"50%",width:20,height:20,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,marginLeft:8}}>{pending.length}</span>
-      </div>
-      <div style={{overflowX:"auto"}}>
-        <table style={{width:"100%",borderCollapse:"collapse"}}>
-          <thead>
-            <tr style={{borderBottom:"1px solid #1e2230"}}>
-              {["Paciente","HC","Tratamiento","Importe","Doctor",""].map(h=>(
-                <th key={h} style={{textAlign:"left",padding:"8px 12px",fontSize:11,color:"#c9a84c",letterSpacing:1,fontWeight:700,whiteSpace:"nowrap"}}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {pending.map(item => (
-              <tr key={item.id} style={{borderBottom:"1px solid #1a1e2a"}}>
-                <td style={{padding:"10px 12px",color:"#e8e6e0",fontSize:13}}>{item.patient_name}</td>
-                <td style={{padding:"10px 12px",color:"#666",fontSize:12}}>{item.hc||"—"}</td>
-                <td style={{padding:"10px 12px",color:"#aaa",fontSize:13}}>{item.treatment_name}</td>
-                <td style={{padding:"10px 12px",color:"#c9a84c",fontWeight:600,fontSize:13,whiteSpace:"nowrap"}}>{fmtEur(item.amount)}</td>
-                <td style={{padding:"6px 12px",minWidth:160}}>
-                  <select value={item.doctor_id||""} onChange={e=>updateItem(item.id,{doctor_id:e.target.value||null})}
-                    style={{...s.smInput,fontSize:12}} disabled={saving[item.id]}>
-                    <option value="">Sin asignar</option>
-                    {doctors.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
-                  </select>
-                </td>
-                <td style={{padding:"6px 12px"}}>
-                  <button onClick={()=>markRealized(item)}
-                    style={{...s.btnSm,background:"#0d2014",border:"1px solid #2ecc7144",color:"#2ecc71",whiteSpace:"nowrap"}}
-                    disabled={saving[item.id]}>
-                    ✓ Marcar realizado
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-// ─── ResumenPanel ─────────────────────────────────────────────────────────────
-function ResumenPanel({ items, doctors }) {
-  const now = new Date();
-  const [year, setYear]   = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth());
-  const [selectedRealized, setSelectedRealized] = useState(new Set());
-
-  const monthStr   = `${year}-${String(month+1).padStart(2,"0")}`;
-  const vendidos   = items.filter(i => i.closed_date   && i.closed_date.startsWith(monthStr));
-  const realizados = items.filter(i => i.realized_date && i.realized_date.startsWith(monthStr));
-
-  const getDoctorName = (id) => doctors.find(d=>d.id===id)?.name || "Sin doctor";
-
-  const groupByDoctorTreatment = (list) => {
-    const map = {};
-    list.forEach(item => {
-      const docKey  = item.doctor_id || "__none__";
-      const docName = getDoctorName(item.doctor_id);
-      if (!map[docKey]) map[docKey] = { name: docName, treatments: {} };
-      const txKey = item.treatment_name;
-      if (!map[docKey].treatments[txKey]) map[docKey].treatments[txKey] = { name: txKey, items: [] };
-      map[docKey].treatments[txKey].items.push(item);
-    });
-    return map;
-  };
-
-  const toggleRealized = (id) => {
-    setSelectedRealized(prev => { const next = new Set(prev); if(next.has(id)) next.delete(id); else next.add(id); return next; });
-  };
-
-  const printResumen = (lista, titulo, agruparPorHC=false) => {
-    const getDrName = (id) => doctors.find(d=>d.id===id)?.name || "Sin doctor";
-    let grandTotal = 0;
-    let rows = "";
-
-    if (agruparPorHC) {
-      // Doctor → Paciente (HC) → tratamientos
-      const byDoc = {};
-      lista.forEach(item => {
-        const dk = item.doctor_id||"__none__";
-        if (!byDoc[dk]) byDoc[dk] = { name:getDrName(item.doctor_id), patients:{} };
-        const pk = item.hc||item.patient_name;
-        if (!byDoc[dk].patients[pk]) byDoc[dk].patients[pk] = { hc:item.hc, name:item.patient_name, items:[] };
-        byDoc[dk].patients[pk].items.push(item);
-      });
-      rows = Object.values(byDoc).map(doc => {
-        let docTotal = 0;
-        const patRows = Object.values(doc.patients).map(pat => {
-          const patTotal = pat.items.reduce((a,i)=>a+(parseFloat(i.amount)||0),0);
-          docTotal += patTotal; grandTotal += patTotal;
-          const txRows = pat.items.map(item => {
-            const pieza = (item.treatment_name.match(/\s{2,}(\d{1,2})$/) || [])[1] || "—";
-            return `<tr>
-              <td style="padding:7px 12px;border-bottom:1px solid #f0ede6;color:#888;font-size:11px">${pat.hc||"—"}</td>
-              <td style="padding:7px 12px;border-bottom:1px solid #f0ede6;color:#555;font-size:11px">${pat.name}</td>
-              <td style="padding:7px 12px;border-bottom:1px solid #f0ede6;color:#333;padding-left:20px">${item.treatment_name}</td>
-              <td style="padding:7px 12px;border-bottom:1px solid #f0ede6;color:#888;font-size:12px;text-align:center">${pieza}</td>
-              <td style="padding:7px 12px;border-bottom:1px solid #f0ede6;text-align:right;font-weight:600">${fmtEur(item.amount)}</td>
-            </tr>`;
-          }).join("");
-          return `<tr style="background:#f9f8f5">
-            <td colspan="4" style="padding:8px 12px;font-weight:700;color:#1a1a2e;font-size:12px;border-left:3px solid #c9a84c">HC ${pat.hc||"—"} — ${pat.name}</td>
-            <td style="padding:8px 12px;text-align:right;color:#c9a84c;font-weight:700">${fmtEur(patTotal)}</td>
-          </tr>${txRows}`;
-        }).join("");
-        return `<tr style="background:#e8e4dc">
-          <td colspan="4" style="padding:10px 12px;font-weight:800;color:#1a1a2e;font-size:14px">👨‍⚕️ ${doc.name}</td>
-          <td style="padding:10px 12px;text-align:right;font-weight:800;color:#c9a84c">${fmtEur(docTotal)}</td>
-        </tr>${patRows}`;
-      }).join("");
-    } else {
-      // Doctor → filas individuales (HC, nombre, tratamiento, pieza, importe)
-      const byDoc = {};
-      lista.forEach(item => {
-        const dk = item.doctor_id||"__none__";
-        if (!byDoc[dk]) byDoc[dk] = { name:getDrName(item.doctor_id), items:[] };
-        byDoc[dk].items.push(item);
-      });
-      rows = Object.values(byDoc).map(doc => {
-        let docTotal = 0;
-        const itemRows = doc.items.map(item => {
-          const pieza = (item.treatment_name.match(/\s{2,}(\d{1,2})$/) || [])[1] || "—";
-          const amt = parseFloat(item.amount)||0;
-          docTotal += amt; grandTotal += amt;
-          return `<tr>
-            <td style="padding:7px 12px;border-bottom:1px solid #f0ede6;color:#888;font-size:11px">${item.hc||"—"}</td>
-            <td style="padding:7px 12px;border-bottom:1px solid #f0ede6;color:#555;font-size:11px">${item.patient_name}</td>
-            <td style="padding:7px 12px;border-bottom:1px solid #f0ede6;color:#333">${item.treatment_name}</td>
-            <td style="padding:7px 12px;border-bottom:1px solid #f0ede6;color:#888;font-size:12px;text-align:center">${pieza}</td>
-            <td style="padding:7px 12px;border-bottom:1px solid #f0ede6;text-align:right;font-weight:600">${fmtEur(item.amount)}</td>
-          </tr>`;
-        }).join("");
-        return `<tr style="background:#e8e4dc">
-          <td colspan="4" style="padding:10px 12px;font-weight:800;color:#1a1a2e;font-size:14px">👨‍⚕️ ${doc.name}</td>
-          <td style="padding:10px 12px;text-align:right;font-weight:800;color:#c9a84c">${fmtEur(docTotal)}</td>
-        </tr>${itemRows}`;
-      }).join("");
-    }
-
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-      body{font-family:Georgia,serif;margin:36px 40px;color:#1a1a2e;font-size:13px}
-      h1{font-size:20px;letter-spacing:4px;border-bottom:3px solid #c9a84c;padding-bottom:12px;margin-bottom:6px}
-      h2{font-size:13px;color:#888;font-weight:400;margin:0 0 24px}
-      table{width:100%;border-collapse:collapse}
-      th{background:#1a1a2e;color:#ffffff;padding:10px 12px;text-align:left;font-size:14px;letter-spacing:1px}
-      th:last-child,td:last-child{text-align:right}
-      .grand{background:#1a1a2e;color:#c9a84c;font-size:16px;font-weight:800}
-      .grand td{padding:14px 12px}
-    </style></head><body>
-      <h1>${titulo}</h1><h2>${fmtMonthLabel(year, month)}</h2>
-      <table><thead><tr>
-        <th>HC</th><th>Paciente</th><th>Tratamiento</th><th style="text-align:center">Pieza</th><th>Importe</th>
-      </tr></thead><tbody>
-        ${rows}
-        <tr class="grand"><td colspan="4">TOTAL GENERAL</td><td>${fmtEur(grandTotal)}</td></tr>
-      </tbody></table>
-    </body></html>`;
-    const win = window.open("","_blank");
-    win.document.write(html); win.document.close();
-    setTimeout(()=>win.print(), 600);
-  };
-
-  const ListaResumen = ({ lista, titulo, color, selectable=false }) => {
-    if (lista.length === 0) return (
-      <div style={{textAlign:"center",color:"#333",padding:32,background:"#0d1117",borderRadius:10,fontSize:13}}>
-        Sin datos para {fmtMonthLabel(year, month)}
-      </div>
-    );
-    const grouped = groupByDoctorTreatment(lista);
-    return (
-      <div>
-        {Object.values(grouped).map(doc => {
-          let docTotal = 0;
-          return (
-            <div key={doc.name} style={{marginBottom:16}}>
-              <div style={{background:"#12151e",borderLeft:`4px solid ${color}`,borderRadius:"8px 8px 0 0",padding:"10px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{color:"#e8e6e0",fontWeight:700,fontSize:14}}>👨‍⚕️ {doc.name}</span>
-              </div>
-              <div style={{background:"#0d1117",borderRadius:"0 0 8px 8px",overflow:"hidden"}}>
-                {Object.values(doc.treatments).map(tx => {
-                  const total = tx.items.reduce((a,i)=>a+(parseFloat(i.amount)||0),0);
-                  docTotal += total;
-                  return tx.items.map(item => {
-                    const isSel = selectedRealized.has(item.id);
-                    return (
-                      <div key={item.id}
-                        onClick={selectable?()=>toggleRealized(item.id):undefined}
-                        style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 16px",borderBottom:"1px solid #1a1e2a",cursor:selectable?"pointer":"default",background:selectable&&isSel?"#0d2014":"transparent",transition:"background 0.1s"}}
-                        onMouseEnter={selectable&&!isSel?e=>{e.currentTarget.style.background="#12151e";}:undefined}
-                        onMouseLeave={selectable?e=>{e.currentTarget.style.background=isSel?"#0d2014":"transparent";}:undefined}>
-                        <div style={{display:"flex",alignItems:"center",gap:10}}>
-                          {selectable && (
-                            <span style={{width:16,height:16,borderRadius:4,border:`2px solid ${isSel?"#2ecc71":"#333"}`,background:isSel?"#2ecc71":"transparent",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#0a0d14",flexShrink:0}}>
-                              {isSel?"✓":""}
-                            </span>
-                          )}
-                          <div>
-                            <div style={{color:"#aaa",fontSize:13}}>{item.treatment_name}</div>
-                            <div style={{color:"#444",fontSize:11}}>{item.patient_name}{item.hc?` · HC ${item.hc}`:""}</div>
-                          </div>
-                        </div>
-                        <span style={{color:color,fontWeight:600,fontSize:13,whiteSpace:"nowrap"}}>{fmtEur(item.amount)}</span>
-                      </div>
-                    );
-                  });
-                })}
-                <div style={{display:"flex",justifyContent:"space-between",padding:"10px 16px",background:"#12151e"}}>
-                  <span style={{color:"#555",fontSize:12}}>Total {doc.name}</span>
-                  <span style={{color:color,fontWeight:700}}>{fmtEur(docTotal)}</span>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
-  const realizadosSelected = realizados.filter(i => selectedRealized.has(i.id));
-  const grandVendidos   = vendidos.reduce((a,i)=>a+(parseFloat(i.amount)||0),0);
-  const grandRealizados = realizados.reduce((a,i)=>a+(parseFloat(i.amount)||0),0);
-
-  return (
-    <div>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20,flexWrap:"wrap",gap:12}}>
-        <div style={{fontSize:11,color:"#c9a84c",letterSpacing:2,fontWeight:700}}>📊 RESUMEN CLÍNICO</div>
-        <MonthNav year={year} month={month} onChange={(y,m)=>{setYear(y);setMonth(m);setSelectedRealized(new Set());}}/>
-      </div>
-
-      {/* Lista 1 */}
-      <div style={{marginBottom:28}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-          <div>
-            <div style={{fontSize:11,color:"#c9a84c",letterSpacing:2,fontWeight:700}}>💰 VENDIDOS / CERRADOS</div>
-            <div style={{fontSize:12,color:"#555",marginTop:2}}>{vendidos.length} tratamiento(s) · <span style={{color:"#c9a84c",fontWeight:600}}>{fmtEur(grandVendidos)}</span></div>
-          </div>
-          <button onClick={()=>printResumen(vendidos,"PRESUPUESTOS CERRADOS",true)} style={s.btnDark}>🖨 Imprimir</button>
-        </div>
-        <ListaResumen lista={vendidos} color="#c9a84c" selectable={false}/>
-      </div>
-
-      {/* Lista 2 */}
-      <div>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-          <div>
-            <div style={{fontSize:11,color:"#2ecc71",letterSpacing:2,fontWeight:700}}>✅ REALIZADOS</div>
-            <div style={{fontSize:11,color:"#444",marginTop:3}}>
-              {realizados.length} tratamiento(s) · <span style={{color:"#2ecc71",fontWeight:600}}>{fmtEur(grandRealizados)}</span>
-              {" · Tocá los ítems para seleccionarlos"}
-            </div>
-          </div>
-          <div style={{display:"flex",gap:8}}>
-            {selectedRealized.size > 0 && (
-              <button onClick={()=>printResumen(realizadosSelected,"TRATAMIENTOS REALIZADOS")}
-                style={{...s.btnDark,border:"1px solid #2ecc7144",color:"#2ecc71"}}>
-                🖨 Selección ({selectedRealized.size})
-              </button>
-            )}
-            <button onClick={()=>printResumen(realizados,"TRATAMIENTOS REALIZADOS")}
-              style={{...s.btnDark,border:"1px solid #2ecc7144",color:"#2ecc71"}}>🖨 Todos</button>
-          </div>
-        </div>
-        <ListaResumen lista={realizados} color="#2ecc71" selectable={true}/>
-      </div>
-    </div>
-  );
-}
 
 
 // ─── PlantillasPanel ──────────────────────────────────────────────────────────
@@ -1510,24 +1213,19 @@ function TraduccionesPanel({ translations, onRefresh }) {
 }
 
 // ─── ClinicaPanel ─────────────────────────────────────────────────────────────
-function ClinicaPanel({ doctors, items, templates, translations, onRefreshDoctors, onRefreshItems, onRefreshTemplates, onRefreshTranslations }) {
-  const [tab, setTab] = useState("resumen");
-  const pendingCount  = items.filter(i=>!i.realized_date).length;
+function ClinicaPanel({ doctors, templates, translations, onRefreshDoctors, onRefreshTemplates, onRefreshTranslations }) {
+  const [tab, setTab] = useState("doctors");
 
   return (
     <div>
       <div style={{display:"flex",gap:0,marginBottom:20,background:"#0d1117",borderRadius:10,padding:4,width:"fit-content"}}>
-        {[["resumen","Resumen"],["pending","Pendientes"],["doctors","Doctores"],["plantillas","Plantillas"],["traducciones","Traducciones"]].map(([id,label])=>(
+        {[["doctors","Doctores"],["plantillas","Plantillas"],["traducciones","Traducciones"]].map(([id,label])=>(
           <button key={id} onClick={()=>setTab(id)}
             style={{background:tab===id?"#1a2240":"none",border:"none",borderRadius:8,color:tab===id?"#c9a84c":"#555",padding:"8px 20px",cursor:"pointer",fontSize:13,fontWeight:tab===id?700:400,transition:"all 0.15s"}}>
             {label}
-            {id==="pending" && pendingCount > 0 &&
-              <span style={{background:"#e74c3c",color:"#fff",borderRadius:"50%",width:16,height:16,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,marginLeft:6}}>{pendingCount}</span>}
           </button>
         ))}
       </div>
-      {tab==="resumen"    && <ResumenPanel items={items} doctors={doctors}/>}
-      {tab==="pending"    && <PendingPanel items={items} doctors={doctors} onRefresh={onRefreshItems}/>}
       {tab==="doctors"    && <DoctorsPanel doctors={doctors} onRefresh={onRefreshDoctors}/>}
       {tab==="plantillas"   && <PlantillasPanel templates={templates} onRefresh={onRefreshTemplates}/>}
       {tab==="traducciones" && <TraduccionesPanel translations={translations} onRefresh={onRefreshTranslations}/>}
@@ -1679,7 +1377,7 @@ export default function App() {
         <div style={{flex:1}}/>
         <NavBtn id="dashboard" label="Pacientes"     badge={0}/>
         <NavBtn id="debts"     label="Deudas"       badge={pendingDebtPatients.length}/>
-        <NavBtn id="clinica"   label="Clínica"      badge={items.filter(i=>!i.realized_date).length}/>
+        <NavBtn id="clinica"   label="Clínica"      badge={0}/>
         <NavBtn id="stats"     label="Estadísticas" badge={0}/>
 
         {/* ── Campanita ─────────────────────────────────────────────── */}
@@ -1847,8 +1545,8 @@ export default function App() {
         )}
 
         {!dbLoading && view==="clinica" && (
-          <ClinicaPanel doctors={doctors} items={items} templates={templates} translations={translations}
-            onRefreshDoctors={fetchDoctors} onRefreshItems={fetchItems} onRefreshTemplates={fetchTemplates} onRefreshTranslations={fetchTranslations}/>
+          <ClinicaPanel doctors={doctors} templates={templates} translations={translations}
+            onRefreshDoctors={fetchDoctors} onRefreshTemplates={fetchTemplates} onRefreshTranslations={fetchTranslations}/>
         )}
 
         {!dbLoading && view==="stats" && (
