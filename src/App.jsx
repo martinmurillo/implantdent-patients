@@ -725,13 +725,14 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
     return ds >= from && ds <= to;
   };
 
+  // Pagos: filtrados por rango de fechas
   const rangePayments = payments.filter(pay => inRange(pay.date));
   const totalPaid     = rangePayments.reduce((a,p) => a + (parseFloat(p.amount)||0), 0);
-  const rangeItems    = items.filter(i => inRange(i.closed_date) || inRange(i.created_at));
 
-  const implantRx  = /implant/i;
-  const implantItems = rangeItems.filter(i => implantRx.test(i.treatment_name || ""));
-  let implantTotal = 0;
+  // Implantes y ortodoncia: TODOS los items, sin filtro de fecha
+  const implantRx    = /implant/i;
+  const implantItems = items.filter(i => implantRx.test(i.treatment_name || ""));
+  let implantTotal   = 0;
   implantItems.forEach(item => {
     if (!item.realized_date) return;
     const m = (item.treatment_name||"").match(/(\d+)\s*implante/i);
@@ -739,7 +740,7 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
   });
 
   const orthoRx    = /ortodoncia|orthodontic|invisalign|invisaling|invisible\s|ortod/i;
-  const orthoItems = rangeItems.filter(i => orthoRx.test(i.treatment_name || ""));
+  const orthoItems = items.filter(i => orthoRx.test(i.treatment_name || ""));
   const orthoTotal = orthoItems.filter(i => i.realized_date).length;
 
   const findPatient = (id) => patients.find(p => p.id === id);
@@ -923,8 +924,8 @@ ${orthoItems.length === 0
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:20}}>
         <StatCard id="pagos"      label="Pagos recibidos" value={fmtEur(totalPaid)} sub={`${rangePayments.length} pago(s)`} color="#2ecc71"/>
-        <StatCard id="implantes"  label="Implantes"        value={implantTotal}      sub={`de ${implantItems.length} en lista`} color="#3498db"/>
-        <StatCard id="ortodoncia" label="Ortodoncia"       value={orthoTotal}        sub={`de ${orthoItems.length} en lista`}  color="#9b59b6"/>
+        <StatCard id="implantes"  label="Implantes"        value={implantTotal}      sub={`${implantItems.filter(i=>!i.realized_date).length} pendiente(s)`} color="#3498db"/>
+        <StatCard id="ortodoncia" label="Ortodoncia"       value={orthoTotal}        sub={`${orthoItems.filter(i=>!i.realized_date).length} pendiente(s)`}  color="#9b59b6"/>
       </div>
 
       {activeDetail === "pagos" && (
@@ -955,7 +956,7 @@ ${orthoItems.length === 0
 
       {activeDetail === "implantes" && (
         <div>
-          <div style={{fontSize:11,color:"#3498db",letterSpacing:2,marginBottom:8,fontWeight:700}}>IMPLANTES — {fmtDate(from)} al {fmtDate(to)}</div>
+          <div style={{fontSize:11,color:"#3498db",letterSpacing:2,marginBottom:8,fontWeight:700}}>IMPLANTES — TODOS LOS TRATAMIENTOS</div>
           <div style={{fontSize:12,color:"#555",marginBottom:12}}>Marcá "Realizado" para sumar al contador. Eliminá falsos positivos con ×.</div>
           {implantItems.length === 0
             ? <div style={{color:"#555",padding:20,textAlign:"center"}}>Sin implantes en este período</div>
@@ -969,7 +970,7 @@ ${orthoItems.length === 0
 
       {activeDetail === "ortodoncia" && (
         <div>
-          <div style={{fontSize:11,color:"#9b59b6",letterSpacing:2,marginBottom:8,fontWeight:700}}>ORTODONCIA — {fmtDate(from)} al {fmtDate(to)}</div>
+          <div style={{fontSize:11,color:"#9b59b6",letterSpacing:2,marginBottom:8,fontWeight:700}}>ORTODONCIA — TODOS LOS TRATAMIENTOS</div>
           <div style={{fontSize:12,color:"#555",marginBottom:12}}>Marcá "Realizado" para sumar al contador. Eliminá falsos positivos con ×.</div>
           {orthoItems.length === 0
             ? <div style={{color:"#555",padding:20,textAlign:"center"}}>Sin ortodoncia en este período</div>
