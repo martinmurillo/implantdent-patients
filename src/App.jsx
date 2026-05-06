@@ -1545,9 +1545,10 @@ export default function App() {
   const [payments,      setPayments]      = useState([]);
   const [view,      setView]      = useState("dashboard");
   const [statusTab, setStatusTab] = useState("pendiente");
-  const [editing,   setEditing]   = useState(null);
-  const [filter,    setFilter]    = useState("");
-  const [dbLoading, setDbLoad]    = useState(true);
+  const [editing,    setEditing]   = useState(null);
+  const [filter,     setFilter]    = useState("");
+  const [dbLoading,  setDbLoad]    = useState(true);
+  const [showAlerts, setShowAlerts] = useState(false);
 
   const fetchPatients  = async () => { const {data}=await supabase.from("patients").select("*").order("created_at",{ascending:false}); setPatients(data||[]); };
   const fetchDoctors   = async () => { const {data}=await supabase.from("doctors").select("*").order("name"); setDoctors(data||[]); };
@@ -1626,6 +1627,15 @@ export default function App() {
 
   const recent = patients;
 
+  const todayStr = today();
+  const todayAppts = [];
+  patients.forEach(p => {
+    (p.appointments || []).forEach(appt => {
+      if (appt.date === todayStr) todayAppts.push({ patient: p, appt });
+    });
+  });
+  todayAppts.sort((a,b) => (a.appt.time||"").localeCompare(b.appt.time||""));
+
   const pendingDebtPatients = patients.filter(p=>{
     const hasPayments = payments.some(pay=>pay.patient_id===p.id);
     if (!hasPayments) return false;
@@ -1664,6 +1674,58 @@ export default function App() {
         <NavBtn id="debts"     label="Deudas"       badge={pendingDebtPatients.length}/>
         <NavBtn id="clinica"   label="Clínica"      badge={items.filter(i=>!i.realized_date).length}/>
         <NavBtn id="stats"     label="Estadísticas" badge={0}/>
+
+        {/* ── Campanita ─────────────────────────────────────────────── */}
+        <div style={{position:"relative"}}>
+          <button onClick={()=>setShowAlerts(v=>!v)}
+            style={{background:"none",border:"none",cursor:"pointer",fontSize:22,lineHeight:1,padding:"4px 6px",
+              color: todayAppts.length>0 ? "#c9a84c" : "#444", position:"relative"}}>
+            🔔
+            {todayAppts.length > 0 && (
+              <span style={{position:"absolute",top:-4,right:-4,background:"#e74c3c",color:"#fff",
+                borderRadius:"50%",minWidth:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",
+                fontSize:10,fontWeight:800,lineHeight:1,padding:"0 3px",boxSizing:"border-box"}}>
+                {todayAppts.length}
+              </span>
+            )}
+          </button>
+
+          {showAlerts && (
+            <>
+              <div onClick={()=>setShowAlerts(false)}
+                style={{position:"fixed",inset:0,zIndex:999}}/>
+              <div style={{position:"fixed",top:64,right:24,width:320,background:"#0d1117",
+                border:"1px solid #2a2e3b",borderRadius:14,zIndex:1000,
+                boxShadow:"0 12px 40px #000c",overflow:"hidden"}}>
+                <div style={{padding:"14px 18px",borderBottom:"1px solid #1e2230",
+                  fontSize:11,color:"#c9a84c",fontWeight:700,letterSpacing:2}}>
+                  🔔 CITAS DE HOY — {fmtDate(todayStr)}
+                </div>
+                {todayAppts.length === 0
+                  ? <div style={{padding:24,color:"#555",textAlign:"center",fontSize:13}}>Sin citas para hoy</div>
+                  : todayAppts.map(({patient:pat, appt}) => (
+                      <div key={appt.id}
+                        onClick={()=>{ openEdit(pat); setShowAlerts(false); }}
+                        style={{padding:"12px 18px",borderBottom:"1px solid #1a1e2a",cursor:"pointer",
+                          display:"flex",justifyContent:"space-between",alignItems:"center"}}
+                        onMouseEnter={e=>e.currentTarget.style.background="#1a1e2a"}
+                        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                        <div>
+                          <div style={{fontWeight:700,color:"#e8e6e0",fontSize:14}}>{pat.name||"Sin nombre"}</div>
+                          <div style={{fontSize:12,color:"#777",marginTop:2}}>
+                            {appt.time ? `${appt.time} · ` : ""}{appt.label||"Cita"}
+                            {appt.doctors ? ` · ${appt.doctors}` : ""}
+                          </div>
+                        </div>
+                        <span style={{color:"#c9a84c",fontSize:20}}>›</span>
+                      </div>
+                    ))
+                }
+              </div>
+            </>
+          )}
+        </div>
+
         <button onClick={newPt} style={s.btnGold}>+ Nuevo paciente</button>
       </div>
 
