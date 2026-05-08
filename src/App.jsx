@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase";
 import { translateTreatment, setTranslationDict } from "./treatments";
 
@@ -74,8 +74,8 @@ function PinLock({ onUnlock }) {
   };
 
   return (
-    <div style={{minHeight:"100vh",background:"#0a0d14",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
-      <div style={{background:"#12151e",border:"1px solid #1e2230",borderRadius:16,padding:"48px 40px",textAlign:"center",width:320}}>
+    <div style={{minHeight:"100vh",background:"#f0f2f7",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
+      <div style={{background:"#f5f7fa",border:"1px solid #e2e5ed",borderRadius:16,padding:"48px 40px",textAlign:"center",width:320}}>
         <div style={{fontWeight:900,fontSize:18,letterSpacing:4,color:"#c9a84c",marginBottom:6}}>IMPLANTDENT</div>
         <div style={{fontSize:11,color:"#444",letterSpacing:2,marginBottom:36}}>GESTIÓN DE PACIENTES</div>
         <form onSubmit={submit}>
@@ -86,8 +86,8 @@ function PinLock({ onUnlock }) {
             onChange={()=>setError(false)}
             placeholder="PIN"
             style={{
-              background:"#0d1117", border:`1px solid ${error?"#e74c3c":"#2a2e3b"}`,
-              borderRadius:10, color:"#e8e6e0", padding:"14px 16px", fontSize:22,
+              background:"#ffffff", border:`1px solid ${error?"#e74c3c":"#dde4ef"}`,
+              borderRadius:10, color:"#2c3250", padding:"14px 16px", fontSize:22,
               textAlign:"center", letterSpacing:10, width:"100%", outline:"none",
               boxSizing:"border-box", marginBottom:16,
               animation: shake ? "shake 0.4s" : "none",
@@ -187,14 +187,14 @@ const emptyAppt = () => ({ id:genId(), label:"", date:"", time:"", doctors:"", p
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const s = {
-  card:    { background:"#12151e", border:"1px solid #1e2230", borderRadius:12, padding:"16px 20px", marginBottom:10 },
-  input:   { background:"#0d1117", border:"1px solid #2a2e3b", borderRadius:8, color:"#e8e6e0", padding:"9px 12px", fontSize:14, outline:"none", width:"100%", boxSizing:"border-box" },
-  smInput: { background:"#0d1117", border:"1px solid #2a2e3b", borderRadius:6, color:"#e8e6e0", padding:"7px 10px", fontSize:13, width:"100%", outline:"none", boxSizing:"border-box" },
+  card:    { background:"#f5f7fa", border:"1px solid #e2e5ed", borderRadius:12, padding:"16px 20px", marginBottom:10 },
+  input:   { background:"#ffffff", border:"1px solid #dde4ef", borderRadius:8, color:"#2c3250", padding:"9px 12px", fontSize:14, outline:"none", width:"100%", boxSizing:"border-box" },
+  smInput: { background:"#ffffff", border:"1px solid #dde4ef", borderRadius:6, color:"#2c3250", padding:"7px 10px", fontSize:13, width:"100%", outline:"none", boxSizing:"border-box" },
   label:   { fontSize:11, color:"#c9a84c", letterSpacing:1, textTransform:"uppercase", display:"block", marginBottom:5 },
   btnGold: { background:"linear-gradient(135deg,#c9a84c,#a07830)", border:"none", borderRadius:8, color:"#fff", padding:"9px 22px", cursor:"pointer", fontSize:13, fontWeight:700 },
-  btnDark: { background:"#1a2240", border:"1px solid #c9a84c44", borderRadius:8, color:"#c9a84c", padding:"9px 16px", cursor:"pointer", fontSize:13, fontWeight:600 },
+  btnDark: { background:"#dce8fa", border:"1px solid #c9a84c44", borderRadius:8, color:"#c9a84c", padding:"9px 16px", cursor:"pointer", fontSize:13, fontWeight:600 },
   btnGhost:{ background:"none", border:"1px solid #333", borderRadius:8, color:"#888", padding:"9px 20px", cursor:"pointer", fontSize:13 },
-  btnSm:   { background:"#1a2240", border:"1px solid #c9a84c33", borderRadius:6, color:"#c9a84c", padding:"4px 10px", cursor:"pointer", fontSize:12 },
+  btnSm:   { background:"#dce8fa", border:"1px solid #c9a84c33", borderRadius:6, color:"#c9a84c", padding:"4px 10px", cursor:"pointer", fontSize:12 },
 };
 
 // ─── PDF EXPORT ───────────────────────────────────────────────────────────────
@@ -224,7 +224,7 @@ const exportToPDF = async (patient, lang, setExporting, patPayments=[], template
       `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px">` +
       apptTxs.slice(0,20).map(tr=>`<div style="font-size:10px;line-height:1.3;word-break:break-word">☐ ${tr.name}</div>`).join("") + `</div>`;
     return `<tr>
-      <td style="font-weight:700;color:#1a1a2e;white-space:nowrap">${ordinal(idx+1, lang)}</td>
+      <td style="font-weight:700;color:#1e2230;white-space:nowrap">${ordinal(idx+1, lang)}</td>
       <td style="white-space:nowrap">${dateStr}</td>
       <td style="white-space:nowrap">${appt.doctors || "-"}</td>
       <td style="padding:6px 12px">${txGrid}</td>
@@ -232,21 +232,21 @@ const exportToPDF = async (patient, lang, setExporting, patPayments=[], template
     </tr>`;
   }).join("");
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-  *{box-sizing:border-box}body{font-family:'Georgia',serif;margin:36px 40px 60px;color:#1a1a2e;font-size:13px;line-height:1.8}
+  *{box-sizing:border-box}body{font-family:'Georgia',serif;margin:36px 40px 60px;color:#1e2230;font-size:13px;line-height:1.8}
   .header{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #c9a84c;padding-bottom:18px;margin-bottom:26px}
   .header-center{text-align:center;flex:1}.header-center h1{font-size:24px;letter-spacing:5px;margin:0 0 3px}
   .header-center p{color:#888;margin:0;font-size:12px}.logo{width:80px;height:auto}.spacer{width:80px}
   .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;margin-bottom:26px}
   .info-item{display:flex;gap:6px}.lbl{font-weight:bold;color:#c9a84c;white-space:nowrap}
   table{width:100%;border-collapse:collapse;margin-bottom:26px}
-  th{background:#1a1a2e;color:#ffffff;padding:10px 12px;text-align:left;font-size:14px;letter-spacing:1px;white-space:nowrap}
+  th{background:#1e2230;color:#ffffff;padding:10px 12px;text-align:left;font-size:14px;letter-spacing:1px;white-space:nowrap}
   td{padding:9px 12px;border-bottom:1px solid #eee;vertical-align:middle}tr:nth-child(even) td{background:#f9f8f5}
   .totals{margin-left:auto;width:290px;margin-bottom:26px}.tr{display:flex;justify-content:space-between;padding:6px 12px}
-  .tr-grand{background:#1a1a2e;color:#c9a84c;font-weight:700;font-size:15px;border-radius:4px}
-  .sec{font-size:11px;letter-spacing:3px;text-transform:uppercase;border-left:4px solid #c9a84c;padding-left:10px;margin:26px 0 12px;color:#1a1a2e}
+  .tr-grand{background:#1e2230;color:#c9a84c;font-weight:700;font-size:15px;border-radius:4px}
+  .sec{font-size:11px;letter-spacing:3px;text-transform:uppercase;border-left:4px solid #c9a84c;padding-left:10px;margin:26px 0 12px;color:#1e2230}
   .notes-box{background:#f9f8f5;border-left:3px solid #c9a84c;padding:12px 14px;border-radius:4px;font-style:italic}
   .footer{margin-top:36px;border-top:1px solid #ddd;padding-top:18px}.consent{font-style:italic;margin-bottom:24px;color:#333}
-  .sig-block{display:flex;align-items:flex-end;gap:10px;margin-bottom:28px}.sig-line{border-bottom:1px solid #1a1a2e;width:240px;height:44px}
+  .sig-block{display:flex;align-items:flex-end;gap:10px;margin-bottom:28px}.sig-line{border-bottom:1px solid #1e2230;width:240px;height:44px}
   .sig-lbl{font-size:11px;color:#888;letter-spacing:1px}.legal{font-size:10px;color:#999;line-height:1.7;border-top:1px solid #eee;padding-top:12px}
   </style></head><body>
   <div class="header"><img src="http://localhost:5173/logo.png" class="logo" alt="Logo"/>
@@ -315,10 +315,10 @@ function AppointmentRow({ appt, idx, treatments, allAppointments, onChange, onRe
     onChange("treatmentIds", ids.includes(id) ? ids.filter(x=>x!==id) : [...ids, id]);
   };
   return (
-    <div style={{background:"#0d1117",border:"1px solid #c9a84c33",borderRadius:10,padding:"14px 16px",marginBottom:10,position:"relative"}}>
+    <div style={{background:"#ffffff",border:"1px solid #c9a84c33",borderRadius:10,padding:"14px 16px",marginBottom:10,position:"relative"}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-        <span style={{background:"#c9a84c",color:"#0a0d14",borderRadius:6,padding:"3px 10px",fontSize:12,fontWeight:800}}>{idx+1}ª CITA</span>
-        <div style={{flex:1,height:1,background:"#1e2230"}}/>
+        <span style={{background:"#c9a84c",color:"#f0f2f7",borderRadius:6,padding:"3px 10px",fontSize:12,fontWeight:800}}>{idx+1}ª CITA</span>
+        <div style={{flex:1,height:1,background:"#e2e5ed"}}/>
         <button onClick={onRemove} style={{background:"none",border:"none",color:"#555",cursor:"pointer",fontSize:15}}>✕</button>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:12}}>
@@ -333,10 +333,10 @@ function AppointmentRow({ appt, idx, treatments, allAppointments, onChange, onRe
             const usedCount = (allAppointments||[]).filter(a => a.id !== appt.id && (a.treatmentIds||[]).includes(tr.id)).length;
             return (
               <button key={tr.id} onClick={()=>toggleTx(tr.id)}
-                style={{background:sel?"#c9a84c":"#12151e",border:`1px solid ${sel?"#c9a84c":"#2a2e3b"}`,borderRadius:20,color:sel?"#0a0d14":"#888",padding:"4px 12px",cursor:"pointer",fontSize:12,transition:"all 0.15s",display:"inline-flex",alignItems:"center",gap:6}}>
+                style={{background:sel?"#c9a84c":"#f5f7fa",border:`1px solid ${sel?"#c9a84c":"#dde4ef"}`,borderRadius:20,color:sel?"#f0f2f7":"#888",padding:"4px 12px",cursor:"pointer",fontSize:12,transition:"all 0.15s",display:"inline-flex",alignItems:"center",gap:6}}>
                 {tr.name||"Sin nombre"}
                 {usedCount > 0 && (
-                  <span style={{background:sel?"#0a0d14":"#c9a84c",color:sel?"#c9a84c":"#0a0d14",borderRadius:"50%",width:16,height:16,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,flexShrink:0}}>{usedCount}</span>
+                  <span style={{background:sel?"#f0f2f7":"#c9a84c",color:sel?"#c9a84c":"#f0f2f7",borderRadius:"50%",width:16,height:16,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,flexShrink:0}}>{usedCount}</span>
                 )}
               </button>
             );
@@ -433,7 +433,7 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
       <label style={s.label}>{label}</label>
       <input type={type} value={p[field]||""} onChange={e=>setF(field,e.target.value)} style={s.input}
         onFocus={e=>e.target.style.borderColor="#c9a84c"}
-        onBlur={e=>e.target.style.borderColor="#2a2e3b"}/>
+        onBlur={e=>e.target.style.borderColor="#dde4ef"}/>
     </div>
   );
 
@@ -461,13 +461,13 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
         </div>
       </div>
       <div style={{display:"flex",gap:12,marginBottom:16,alignItems:"center",flexWrap:"wrap"}}>
-        <div style={{display:"flex",gap:0,background:"#0d1117",borderRadius:10,padding:4}}>
+        <div style={{display:"flex",gap:0,background:"#ffffff",borderRadius:10,padding:4}}>
           {[["treatments","Tratamientos"],["appointments","Citas"],["payments","Pagos"]].map(([id,label])=>(
             <button key={id} onClick={()=>setTab(id)}
-              style={{background:tab===id?"#1a2240":"none",border:"none",borderRadius:8,color:tab===id?"#c9a84c":"#555",padding:"8px 20px",cursor:"pointer",fontSize:13,fontWeight:tab===id?700:400,transition:"all 0.15s"}}>
+              style={{background:tab===id?"#dce8fa":"none",border:"none",borderRadius:8,color:tab===id?"#c9a84c":"#555",padding:"8px 20px",cursor:"pointer",fontSize:13,fontWeight:tab===id?700:400,transition:"all 0.15s"}}>
               {label}
               {id==="appointments" && p.appointments.length>0 &&
-                <span style={{background:"#c9a84c",color:"#0a0d14",borderRadius:"50%",width:16,height:16,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,marginLeft:6}}>{p.appointments.length}</span>}
+                <span style={{background:"#c9a84c",color:"#f0f2f7",borderRadius:"50%",width:16,height:16,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,marginLeft:6}}>{p.appointments.length}</span>}
               {id==="payments" && patPayments.length>0 &&
                 <span style={{background:"#e74c3c",color:"#fff",borderRadius:"50%",width:16,height:16,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,marginLeft:6}}>{patPayments.length}</span>}
             </button>
@@ -489,12 +489,12 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
             <button onClick={addTx} style={s.btnDark}>+ Agregar</button>
           </div>
           {p.treatments.length===0 && (
-            <div style={{textAlign:"center",color:"#333",padding:24,background:"#0d1117",borderRadius:10,fontSize:13}}>Sin tratamientos — importá un PDF o agregá manualmente</div>
+            <div style={{textAlign:"center",color:"#333",padding:24,background:"#ffffff",borderRadius:10,fontSize:13}}>Sin tratamientos — importá un PDF o agregá manualmente</div>
           )}
           {p.treatments.map(tr=>(<TreatmentRow key={tr.id} tr={tr} onChange={(f,v)=>updTx(tr.id,f,v)} onRemove={()=>remTx(tr.id)}/>))}
           {p.treatments.length>0 && (
             <div style={{display:"flex",justifyContent:"flex-end",marginTop:10}}>
-              <div style={{background:"#1a2240",borderRadius:8,minWidth:220,overflow:"hidden"}}>
+              <div style={{background:"#dce8fa",borderRadius:8,minWidth:220,overflow:"hidden"}}>
                 {discPct>0 && (<>
                   <div style={{display:"flex",justifyContent:"space-between",padding:"8px 14px",color:"#888",fontSize:13}}>
                     <span>Subtotal</span><span>{fmtEur(subtotal)}</span>
@@ -518,7 +518,7 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
             <button onClick={addAppt} style={s.btnDark}>+ Agregar cita</button>
           </div>
           {p.appointments.length===0 && (
-            <div style={{textAlign:"center",color:"#333",padding:24,background:"#0d1117",borderRadius:10,fontSize:13}}>Sin citas — agregá la primera cita y asignale tratamientos</div>
+            <div style={{textAlign:"center",color:"#333",padding:24,background:"#ffffff",borderRadius:10,fontSize:13}}>Sin citas — agregá la primera cita y asignale tratamientos</div>
           )}
           {p.appointments.map((appt,idx)=>(
             <AppointmentRow key={appt.id} appt={appt} idx={idx} treatments={p.treatments}
@@ -529,7 +529,7 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
       {tab==="payments" && (
         <div style={{marginBottom:16}}>
           {isNew ? (
-            <div style={{textAlign:"center",color:"#555",padding:40,background:"#0d1117",borderRadius:10,fontSize:13}}>
+            <div style={{textAlign:"center",color:"#555",padding:40,background:"#ffffff",borderRadius:10,fontSize:13}}>
               Guardá el presupuesto primero para poder registrar pagos
             </div>
           ) : (
@@ -566,7 +566,7 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
                 </div>
               </div>
               {patPayments.length === 0
-                ? <div style={{textAlign:"center",color:"#333",padding:28,background:"#0d1117",borderRadius:10,fontSize:13}}>Sin pagos registrados</div>
+                ? <div style={{textAlign:"center",color:"#333",padding:28,background:"#ffffff",borderRadius:10,fontSize:13}}>Sin pagos registrados</div>
                 : patPayments.map(pay=>(
                   <div key={pay.id} style={{...s.card,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
                     <div>
@@ -575,7 +575,7 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
                       {pay.note && <span style={{color:"#555",fontSize:12,marginLeft:8}}>— {pay.note}</span>}
                     </div>
                     <button onClick={()=>deletePayment(pay.id)}
-                      style={{...s.btnSm,background:"#2a0a0a",border:"1px solid #e74c3c88",color:"#e74c3c"}}>
+                      style={{...s.btnSm,background:"#fff0f0",border:"1px solid #e74c3c88",color:"#e74c3c"}}>
                       Eliminar
                     </button>
                   </div>
@@ -621,11 +621,11 @@ function AlertCard({ patient, onOpen }) {
   const c={warn:"#f39c12",error:"#e74c3c",critical:"#8e44ad"}[level];
   return (
     <div onClick={()=>onOpen(patient)}
-      style={{background:"#12151e",border:`1px solid ${c}44`,borderLeft:`4px solid ${c}`,borderRadius:10,padding:"12px 16px",cursor:"pointer",marginBottom:8}}
-      onMouseEnter={e=>e.currentTarget.style.background="#1a1e2a"}
-      onMouseLeave={e=>e.currentTarget.style.background="#12151e"}>
+      style={{background:"#f5f7fa",border:`1px solid ${c}44`,borderLeft:`4px solid ${c}`,borderRadius:10,padding:"12px 16px",cursor:"pointer",marginBottom:8}}
+      onMouseEnter={e=>e.currentTarget.style.background="#e2e5ed"}
+      onMouseLeave={e=>e.currentTarget.style.background="#f5f7fa"}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <span style={{color:"#e8e6e0",fontWeight:600}}>{patient.name}</span>
+        <span style={{color:"#2c3250",fontWeight:600}}>{patient.name}</span>
         <span style={{fontSize:11,color:c,fontWeight:700,letterSpacing:1}}>{msg.toUpperCase()}</span>
       </div>
       <div style={{fontSize:12,color:"#555",marginTop:3}}>Presupuesto #{patient.budget_no} — Tocá para abrir</div>
@@ -650,7 +650,7 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
         <div onClick={onOpen?()=>onOpen(patient):undefined}
           style={{flex:1, cursor:onOpen?"pointer":"default"}}>
-          <div style={{fontWeight:700,color:"#e8e6e0",fontSize:15}}>{patient.name||"Sin nombre"}</div>
+          <div style={{fontWeight:700,color:"#2c3250",fontSize:15}}>{patient.name||"Sin nombre"}</div>
           <div style={{fontSize:12,color:"#555",marginTop:2}}>HC: {patient.hc||"—"} · #{patient.budget_no||"—"} · {fmtDate(patient.date)}</div>
           <div style={{fontSize:12,color:"#777",marginTop:4}}>
             {getTxItems(patient).length} tratamiento(s) · {(patient.appointments||[]).length} cita(s) · <span style={{color:"#c9a84c",fontWeight:600}}>{fmtEur(grand)}</span>
@@ -669,7 +669,7 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
           <div style={{display:"flex",gap:4}}>
             {STATUSES.map(st=>(
               <button key={st} onClick={()=>onSetStatus(patient,st)}
-                style={{background:status===st?STATUS_COLOR[st]+"22":"#0d1117",border:`1px solid ${status===st?STATUS_COLOR[st]:"#333"}`,borderRadius:6,color:status===st?STATUS_COLOR[st]:"#555",padding:"4px 9px",cursor:"pointer",fontSize:11,fontWeight:status===st?700:400}}>
+                style={{background:status===st?STATUS_COLOR[st]+"22":"#ffffff",border:`1px solid ${status===st?STATUS_COLOR[st]:"#333"}`,borderRadius:6,color:status===st?STATUS_COLOR[st]:"#555",padding:"4px 9px",cursor:"pointer",fontSize:11,fontWeight:status===st?700:400}}>
                 {STATUS_LABEL[st]}
               </button>
             ))}
@@ -677,7 +677,7 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
           <div style={{display:"flex",gap:6}}>
             <button onClick={()=>onEdit(patient)} style={{...s.btnDark,padding:"5px 12px",fontSize:12}}>Editar</button>
             <button onClick={()=>onDelete(patient)}
-              style={{...s.btnSm,background:"#2a0a0a",border:"1px solid #e74c3c88",color:"#e74c3c",padding:"5px 12px",fontSize:12}}>
+              style={{...s.btnSm,background:"#fff0f0",border:"1px solid #e74c3c88",color:"#e74c3c",padding:"5px 12px",fontSize:12}}>
               Eliminar
             </button>
           </div>
@@ -698,9 +698,9 @@ function MonthNav({ year, month, onChange }) {
   const now = new Date();
   const isNow = year === now.getFullYear() && month === now.getMonth();
   return (
-    <div style={{display:"flex",alignItems:"center",gap:12,background:"#12151e",borderRadius:10,padding:"8px 14px",border:"1px solid #1e2230"}}>
+    <div style={{display:"flex",alignItems:"center",gap:12,background:"#f5f7fa",borderRadius:10,padding:"8px 14px",border:"1px solid #e2e5ed"}}>
       <button onClick={prev} style={{background:"none",border:"none",color:"#c9a84c",cursor:"pointer",fontSize:18,lineHeight:1,padding:"0 4px"}}>‹</button>
-      <span style={{color:"#e8e6e0",fontWeight:700,fontSize:14,minWidth:160,textAlign:"center"}}>{fmtMonthLabel(year, month)}</span>
+      <span style={{color:"#2c3250",fontWeight:700,fontSize:14,minWidth:160,textAlign:"center"}}>{fmtMonthLabel(year, month)}</span>
       <button onClick={next} style={{background:"none",border:"none",color:isNow?"#333":"#c9a84c",cursor:isNow?"default":"pointer",fontSize:18,lineHeight:1,padding:"0 4px"}} disabled={isNow}>›</button>
     </div>
   );
@@ -858,11 +858,11 @@ ${orthoItems.length === 0
     const active = activeDetail === id;
     return (
       <div onClick={() => toggle(id)}
-        style={{background: active ? color+"18" : "#12151e", borderRadius:10, padding:"20px 22px",
-          borderTop:`3px solid ${color}`, border: active ? `1px solid ${color}55` : "1px solid #1e2230",
+        style={{background: active ? color+"18" : "#f5f7fa", borderRadius:10, padding:"20px 22px",
+          borderTop:`3px solid ${color}`, border: active ? `1px solid ${color}55` : "1px solid #e2e5ed",
           cursor:"pointer", transition:"background 0.15s"}}
-        onMouseEnter={e => { if(!active) e.currentTarget.style.background="#1a1e2a"; }}
-        onMouseLeave={e => { if(!active) e.currentTarget.style.background="#12151e"; }}>
+        onMouseEnter={e => { if(!active) e.currentTarget.style.background="#e2e5ed"; }}
+        onMouseLeave={e => { if(!active) e.currentTarget.style.background="#f5f7fa"; }}>
         <div style={{fontSize:34,fontWeight:800,color,lineHeight:1}}>{value}</div>
         <div style={{fontSize:12,color:"#777",marginTop:5}}>{sub}</div>
         <div style={{fontSize:11,color:"#444",marginTop:6,letterSpacing:1,textTransform:"uppercase"}}>{label}</div>
@@ -881,14 +881,14 @@ ${orthoItems.length === 0
         <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
           <div onClick={() => pat && onOpenPatient(pat)}
             style={{flex:1, cursor: pat ? "pointer" : "default"}}>
-            <div style={{fontWeight:700, color:"#e8e6e0", fontSize:14}}>{name}</div>
+            <div style={{fontWeight:700, color:"#2c3250", fontSize:14}}>{name}</div>
             <div style={{fontSize:12, color:"#777", marginTop:2}}>
               {item.treatment_name}{qty > 1 ? ` · ${qty} uds` : ""} · {fmtEur(item.amount)}
             </div>
           </div>
           <div style={{display:"flex", gap:6, alignItems:"center", flexShrink:0, marginLeft:12}}>
             <button onClick={e => toggleRealized(e, item)} disabled={loading}
-              style={{background: realizado ? "#2ecc7122" : "#0d1117",
+              style={{background: realizado ? "#2ecc7122" : "#ffffff",
                 border: `1px solid ${realizado ? "#2ecc71" : "#555"}`,
                 borderRadius:6, color: realizado ? "#2ecc71" : "#888",
                 padding:"4px 10px", cursor:"pointer", fontSize:11, fontWeight:700}}>
@@ -896,7 +896,7 @@ ${orthoItems.length === 0
             </button>
             {pat && <span onClick={() => onOpenPatient(pat)} style={{color:"#c9a84c",fontSize:20,lineHeight:1,cursor:"pointer"}}>›</span>}
             <button onClick={e => deleteItem(e, item.id)} disabled={loading}
-              style={{background:"#2a0a0a", border:"1px solid #e74c3c88", borderRadius:6,
+              style={{background:"#fff0f0", border:"1px solid #e74c3c88", borderRadius:6,
                 color:"#e74c3c", padding:"4px 8px", cursor:"pointer", fontSize:12, fontWeight:700}}>
               ×
             </button>
@@ -942,10 +942,10 @@ ${orthoItems.length === 0
                 return (
                   <div key={pay.id} onClick={() => pat && onOpenPatient(pat)}
                     style={{...s.card, cursor: pat?"pointer":"default", display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6}}
-                    onMouseEnter={e => { if(pat) e.currentTarget.style.background="#1a1e2a"; }}
-                    onMouseLeave={e => { if(pat) e.currentTarget.style.background="#12151e"; }}>
+                    onMouseEnter={e => { if(pat) e.currentTarget.style.background="#e2e5ed"; }}
+                    onMouseLeave={e => { if(pat) e.currentTarget.style.background="#f5f7fa"; }}>
                     <div>
-                      <div style={{fontWeight:700,color:"#e8e6e0",fontSize:14}}>{name}</div>
+                      <div style={{fontWeight:700,color:"#2c3250",fontSize:14}}>{name}</div>
                       <div style={{fontSize:12,color:"#777",marginTop:2}}>{fmtDate(pay.date)} · {fmtEur(pay.amount)}{noteStr}</div>
                     </div>
                     {pat && <span style={{color:"#c9a84c",fontSize:20,lineHeight:1}}>›</span>}
@@ -1013,9 +1013,9 @@ function DoctorsPanel({ doctors, onRefresh }) {
         ? <div style={{textAlign:"center",color:"#333",padding:40,fontSize:13}}>No hay doctores — agregá el primero</div>
         : doctors.map(d => (
           <div key={d.id} style={{...s.card, display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 16px"}}>
-            <span style={{color:"#e8e6e0",fontWeight:600}}>{d.name}</span>
+            <span style={{color:"#2c3250",fontWeight:600}}>{d.name}</span>
             <button onClick={()=>remove(d.id)}
-              style={{background:"#2a0a0a",border:"1px solid #e74c3c88",borderRadius:6,color:"#e74c3c",padding:"4px 12px",cursor:"pointer",fontSize:12}}>
+              style={{background:"#fff0f0",border:"1px solid #e74c3c88",borderRadius:6,color:"#e74c3c",padding:"4px 12px",cursor:"pointer",fontSize:12}}>
               Eliminar
             </button>
           </div>
@@ -1108,7 +1108,7 @@ function PlantillasPanel({ templates, onRefresh }) {
               <div style={{display:"flex",gap:6,flexShrink:0}}>
                 <button onClick={()=>startEdit(t)} style={{...s.btnSm}}>Editar</button>
                 <button onClick={()=>remove(t.id)}
-                  style={{...s.btnSm,background:"#2a0a0a",border:"1px solid #e74c3c88",color:"#e74c3c"}}>
+                  style={{...s.btnSm,background:"#fff0f0",border:"1px solid #e74c3c88",color:"#e74c3c"}}>
                   Eliminar
                 </button>
               </div>
@@ -1199,12 +1199,12 @@ function TraduccionesPanel({ translations, onRefresh }) {
             </div>
           : filtered.map(t => (
             <div key={t.id} style={{...s.card,padding:"9px 14px",display:"grid",gridTemplateColumns:"1.2fr 1fr 1fr auto",gap:12,alignItems:"center"}}>
-              <div style={{fontSize:12,color:"#e8e6e0",fontWeight:500}}>{t.name_es}</div>
+              <div style={{fontSize:12,color:"#2c3250",fontWeight:500}}>{t.name_es}</div>
               <div style={{fontSize:12,color:"#888"}}>{t.name_en||<span style={{color:"#333"}}>—</span>}</div>
               <div style={{fontSize:12,color:"#888"}}>{t.name_fr||<span style={{color:"#333"}}>—</span>}</div>
               <div style={{display:"flex",gap:5,flexShrink:0}}>
                 <button onClick={()=>startEdit(t)} style={s.btnSm}>Editar</button>
-                <button onClick={()=>remove(t.id)} style={{...s.btnSm,background:"#2a0a0a",border:"1px solid #e74c3c88",color:"#e74c3c"}}>✕</button>
+                <button onClick={()=>remove(t.id)} style={{...s.btnSm,background:"#fff0f0",border:"1px solid #e74c3c88",color:"#e74c3c"}}>✕</button>
               </div>
             </div>
           ))
@@ -1220,10 +1220,10 @@ function ClinicaPanel({ doctors, templates, translations, onRefreshDoctors, onRe
 
   return (
     <div>
-      <div style={{display:"flex",gap:0,marginBottom:20,background:"#0d1117",borderRadius:10,padding:4,width:"fit-content"}}>
+      <div style={{display:"flex",gap:0,marginBottom:20,background:"#ffffff",borderRadius:10,padding:4,width:"fit-content"}}>
         {[["doctors","Doctores"],["plantillas","Plantillas"],["traducciones","Traducciones"]].map(([id,label])=>(
           <button key={id} onClick={()=>setTab(id)}
-            style={{background:tab===id?"#1a2240":"none",border:"none",borderRadius:8,color:tab===id?"#c9a84c":"#555",padding:"8px 20px",cursor:"pointer",fontSize:13,fontWeight:tab===id?700:400,transition:"all 0.15s"}}>
+            style={{background:tab===id?"#dce8fa":"none",border:"none",borderRadius:8,color:tab===id?"#c9a84c":"#555",padding:"8px 20px",cursor:"pointer",fontSize:13,fontWeight:tab===id?700:400,transition:"all 0.15s"}}>
             {label}
           </button>
         ))}
@@ -1372,8 +1372,8 @@ export default function App() {
   if (!unlocked) return <PinLock onUnlock={()=>setUnlocked(true)} />;
 
   return (
-    <div style={{minHeight:"100vh",background:"#0a0d14",color:"#e8e6e0",fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
-      <div style={{background:"#0d1117",borderBottom:"1px solid #1e2230",padding:"0 28px",display:"flex",alignItems:"center",gap:28,height:60}}>
+    <div style={{minHeight:"100vh",background:"#f0f2f7",color:"#2c3250",fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
+      <div style={{background:"#ffffff",borderBottom:"1px solid #e2e5ed",padding:"0 28px",display:"flex",alignItems:"center",gap:28,height:60}}>
         <span style={{fontWeight:900,fontSize:15,letterSpacing:3,color:"#c9a84c"}}>IMPLANTDENT</span>
         <span style={{fontSize:10,color:"#3a3a4a",letterSpacing:2}}>GESTIÓN DE PACIENTES</span>
         <div style={{flex:1}}/>
@@ -1401,10 +1401,10 @@ export default function App() {
             <>
               <div onClick={()=>setShowAlerts(false)}
                 style={{position:"fixed",inset:0,zIndex:999}}/>
-              <div style={{position:"fixed",top:64,right:24,width:320,background:"#0d1117",
-                border:"1px solid #2a2e3b",borderRadius:14,zIndex:1000,
+              <div style={{position:"fixed",top:64,right:24,width:320,background:"#ffffff",
+                border:"1px solid #dde4ef",borderRadius:14,zIndex:1000,
                 boxShadow:"0 12px 40px #000c",overflow:"hidden"}}>
-                <div style={{padding:"14px 18px",borderBottom:"1px solid #1e2230",
+                <div style={{padding:"14px 18px",borderBottom:"1px solid #e2e5ed",
                   fontSize:11,color:"#c9a84c",fontWeight:700,letterSpacing:2}}>
                   🔔 CITAS DE HOY — {fmtDate(todayStr)}
                 </div>
@@ -1413,12 +1413,12 @@ export default function App() {
                   : todayAppts.map(({patient:pat, appt}) => (
                       <div key={appt.id}
                         onClick={()=>{ openEdit(pat); setShowAlerts(false); }}
-                        style={{padding:"12px 18px",borderBottom:"1px solid #1a1e2a",cursor:"pointer",
+                        style={{padding:"12px 18px",borderBottom:"1px solid #e2e5ed",cursor:"pointer",
                           display:"flex",justifyContent:"space-between",alignItems:"center"}}
-                        onMouseEnter={e=>e.currentTarget.style.background="#1a1e2a"}
+                        onMouseEnter={e=>e.currentTarget.style.background="#e2e5ed"}
                         onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                         <div>
-                          <div style={{fontWeight:700,color:"#e8e6e0",fontSize:14}}>{pat.name||"Sin nombre"}</div>
+                          <div style={{fontWeight:700,color:"#2c3250",fontSize:14}}>{pat.name||"Sin nombre"}</div>
                           <div style={{fontSize:12,color:"#777",marginTop:2}}>
                             {appt.time ? `${appt.time} · ` : ""}{appt.label||"Cita"}
                             {appt.doctors ? ` · ${appt.doctors}` : ""}
@@ -1443,7 +1443,7 @@ export default function App() {
           <>
             <div style={{marginBottom:20,display:"flex",alignItems:"center",gap:12}}>
               <button onClick={()=>{setView("dashboard");setEditing(null);}} style={{background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:22}}>←</button>
-              <h2 style={{margin:0,color:"#e8e6e0",fontSize:18,fontWeight:700}}>
+              <h2 style={{margin:0,color:"#2c3250",fontSize:18,fontWeight:700}}>
                 {editing.name?`Editando: ${editing.name}`:"Nuevo paciente"}
               </h2>
             </div>
@@ -1471,12 +1471,12 @@ export default function App() {
                       const active = !isSearching && statusTab === tab.id;
                       return (
                         <div key={tab.id} onClick={()=>{setStatusTab(tab.id);setFilter("");}}
-                          style={{background: active ? tab.color+"1a":"#12151e", borderRadius:10, padding:"14px 18px",
+                          style={{background: active ? tab.color+"1a":"#f5f7fa", borderRadius:10, padding:"14px 18px",
                             borderTop:`3px solid ${tab.color}`,
-                            border: active ? `1px solid ${tab.color}55`:"1px solid #1e2230",
+                            border: active ? `1px solid ${tab.color}55`:"1px solid #e2e5ed",
                             cursor:"pointer", transition:"all 0.15s"}}
-                          onMouseEnter={e=>{ if(!active) e.currentTarget.style.background="#1a1e2a"; }}
-                          onMouseLeave={e=>{ if(!active) e.currentTarget.style.background="#12151e"; }}>
+                          onMouseEnter={e=>{ if(!active) e.currentTarget.style.background="#e2e5ed"; }}
+                          onMouseLeave={e=>{ if(!active) e.currentTarget.style.background="#f5f7fa"; }}>
                           <div style={{fontSize:28,fontWeight:800,color:tab.color,lineHeight:1}}>{tab.list.length}</div>
                           <div style={{fontSize:12,color: active?tab.color:"#555",marginTop:4,fontWeight:active?700:400}}>{tab.label}</div>
                         </div>
@@ -1529,10 +1529,10 @@ export default function App() {
                   return (
                     <div key={p.id} onClick={()=>openEdit(p)}
                       style={{...s.card,cursor:"pointer",borderLeft:"4px solid #e74c3c88",display:"flex",justifyContent:"space-between",alignItems:"center"}}
-                      onMouseEnter={e=>e.currentTarget.style.background="#1a1e2a"}
-                      onMouseLeave={e=>e.currentTarget.style.background="#12151e"}>
+                      onMouseEnter={e=>e.currentTarget.style.background="#e2e5ed"}
+                      onMouseLeave={e=>e.currentTarget.style.background="#f5f7fa"}>
                       <div>
-                        <div style={{fontWeight:700,color:"#e8e6e0",fontSize:15}}>{p.name||"Sin nombre"}</div>
+                        <div style={{fontWeight:700,color:"#2c3250",fontSize:15}}>{p.name||"Sin nombre"}</div>
                         <div style={{fontSize:12,color:"#555",marginTop:2}}>HC: {p.hc||"—"} · #{p.budget_no||"—"}</div>
                         <div style={{fontSize:12,color:"#777",marginTop:2}}>Total: {fmtEur(grand)} · Pagado: {fmtEur(paid)}</div>
                       </div>
