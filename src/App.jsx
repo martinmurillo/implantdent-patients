@@ -1377,7 +1377,7 @@ export default function App() {
         <div style={{flex:1}}/>
         <NavBtn id="dashboard" label="Pacientes"     badge={0}/>
         <NavBtn id="debts"     label="Deudas"       badge={pendingDebtPatients.length}/>
-        <NavBtn id="clinica"   label="Clínica"      badge={0}/>
+        <NavBtn id="clinica"   label="Clínica"/>
         <NavBtn id="stats"     label="Estadísticas" badge={0}/>
 
         {/* ── Campanita ─────────────────────────────────────────────── */}
