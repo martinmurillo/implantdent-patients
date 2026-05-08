@@ -108,9 +108,11 @@ function PinLock({ onUnlock }) {
 const genId    = () => Math.random().toString(36).slice(2,10);
 const today    = () => new Date().toISOString().split("T")[0];
 const daysDiff = (d) => !d ? 999 : Math.floor((new Date()-new Date(d))/86400000);
-const STATUSES = ["pendiente","en curso","cerrado"];
-const STATUS_COLOR = { "pendiente":"#c9a84c", "en curso":"#3498db", "cerrado":"#2ecc71" };
-const getStatus = (p) => STATUSES.includes(p.status) ? p.status : (p.closed ? "cerrado" : "pendiente");
+const STATUSES = ["pendiente","en curso","cerrado con deuda","cerrado sin deuda"];
+const STATUS_COLOR = { "pendiente":"#c9a84c", "en curso":"#3498db", "cerrado con deuda":"#e67e22", "cerrado sin deuda":"#2ecc71" };
+const STATUS_LABEL = { "pendiente":"Pendiente", "en curso":"En curso", "cerrado con deuda":"C/ deuda", "cerrado sin deuda":"Sin deuda" };
+const isCerrado = (st) => st === "cerrado con deuda" || st === "cerrado sin deuda";
+const getStatus = (p) => STATUSES.includes(p.status) ? p.status : (p.closed ? "cerrado con deuda" : "pendiente");
 const fmtEur   = (v) => v && parseFloat(v) ? `€${parseFloat(v).toLocaleString("es-ES",{minimumFractionDigits:2})}` : "-";
 const effectiveValue = (tr) => parseFloat(tr.value) || 0;
 
@@ -640,7 +642,7 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
   const days = daysDiff(patient.last_contact);
   const status = getStatus(patient);
   let bc;
-  if (status === "cerrado") bc = "#2ecc71";
+  if (isCerrado(status)) bc = STATUS_COLOR[status];
   else if (status === "en curso") bc = "#3498db";
   else { if(days>=30) bc="#8e44ad"; else if(days>=15) bc="#e74c3c"; else if(days>=7) bc="#f39c12"; else bc="#c9a84c44"; }
   return (
@@ -668,7 +670,7 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
             {STATUSES.map(st=>(
               <button key={st} onClick={()=>onSetStatus(patient,st)}
                 style={{background:status===st?STATUS_COLOR[st]+"22":"#0d1117",border:`1px solid ${status===st?STATUS_COLOR[st]:"#333"}`,borderRadius:6,color:status===st?STATUS_COLOR[st]:"#555",padding:"4px 9px",cursor:"pointer",fontSize:11,fontWeight:status===st?700:400}}>
-                {st}
+                {STATUS_LABEL[st]}
               </button>
             ))}
           </div>
@@ -1290,7 +1292,7 @@ export default function App() {
       name:p.name, hc:p.hc, dni:p.dni||"", budget_no:p.budgetNo||p.budget_no, date:p.date, time:p.time,
       treatments:{ items: p.treatments, discountPct: p.discountPct||"0" },
       appointments:p.appointments||[], notes:p.notes,
-      status:p.status||"pendiente", last_contact:p.last_contact||today(), closed:p.status==="cerrado",
+      status:p.status||"pendiente", last_contact:p.last_contact||today(), closed:isCerrado(p.status),
     };
     const isNew = !patients.some(x=>x.id===p.id);
     if (isNew) await supabase.from("patients").insert([payload]);
@@ -1300,17 +1302,17 @@ export default function App() {
 
   const setPatientStatus = async (patient, newStatus) => {
     await supabase.from("patients").update({
-      status: newStatus, closed: newStatus === "cerrado", last_contact: today()
+      status: newStatus, closed: isCerrado(newStatus), last_contact: today()
     }).eq("id", patient.id);
-    if (newStatus === "cerrado" || newStatus === "en curso") {
-      await insertTreatmentItems({...patient, status:newStatus, closed:newStatus==="cerrado"});
+    if (isCerrado(newStatus) || newStatus === "en curso") {
+      await insertTreatmentItems({...patient, status:newStatus, closed:isCerrado(newStatus)});
       await fetchItems();
     }
     await fetchPatients();
   };
 
   const syncAllItems = async () => {
-    const toSync = patients.filter(p => getStatus(p) === "cerrado" || getStatus(p) === "en curso");
+    const toSync = patients.filter(p => isCerrado(getStatus(p)) || getStatus(p) === "en curso");
     const existingIds = new Set(items.map(i => i.patient_id));
     const missing = toSync.filter(p => !existingIds.has(p.id));
     await Promise.all(missing.map(p => insertTreatmentItems(p)));
@@ -1454,16 +1456,17 @@ export default function App() {
           <>
             {(() => {
               const tabs = [
-                { id:"pendiente", label:"Pendientes", color:"#c9a84c", list: recent.filter(p=>getStatus(p)==="pendiente") },
-                { id:"en curso",  label:"En curso",   color:"#3498db", list: recent.filter(p=>getStatus(p)==="en curso")  },
-                { id:"cerrado",   label:"Cerrados",   color:"#2ecc71", list: recent.filter(p=>getStatus(p)==="cerrado")   },
+                { id:"pendiente",          label:"Pendientes",      color:"#c9a84c", list: recent.filter(p=>getStatus(p)==="pendiente")          },
+                { id:"en curso",           label:"En curso",         color:"#3498db", list: recent.filter(p=>getStatus(p)==="en curso")           },
+                { id:"cerrado con deuda",  label:"Cerrados c/ deuda",color:"#e67e22", list: recent.filter(p=>getStatus(p)==="cerrado con deuda")  },
+                { id:"cerrado sin deuda",  label:"Cerrados sin deuda",color:"#2ecc71",list: recent.filter(p=>getStatus(p)==="cerrado sin deuda")  },
               ];
               const activeTab = tabs.find(t=>t.id===statusTab) || tabs[0];
               const tabList   = isSearching ? filtered : activeTab.list;
 
               return (
                 <>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
                     {tabs.map(tab => {
                       const active = !isSearching && statusTab === tab.id;
                       return (
