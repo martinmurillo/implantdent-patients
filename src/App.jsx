@@ -263,7 +263,6 @@ const exportToPDF = async (patient, lang, setExporting, patPayments=[], template
   <table><thead><tr><th>${t.treatment}</th><th style="text-align:right">${t.total}</th></tr></thead>
   <tbody>${txRows}</tbody></table>
   <div class="totals">
-    ${discPct>0?`<div class="tr" style="color:#888;font-size:11px"><span>Precios con ${discPct}% de descuento incluido</span></div>`:""}
     <div class="tr tr-grand"><span>${t.grandTotal}</span><span>${fmtEur(grand)}</span></div>
   </div>
   ${appointments.length > 0 ? `<div class="sec">${t.appointmentDetail}</div>
