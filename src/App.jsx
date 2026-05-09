@@ -208,13 +208,14 @@ const exportToPDF = async (patient, lang, setExporting, patPayments=[], template
     treatments = treatments.map(tr => ({ ...tr, name: translateTreatment(tr.name, lang) }));
   }
   const t     = T[lang];
-  const subtotal = treatments.reduce((a,tr)=>a+(parseFloat(tr.value)||0),0);
+  const subtotal   = treatments.reduce((a,tr)=>a+(parseFloat(tr.value)||0),0);
   const { discAmt, grand } = applyDiscount(subtotal, discPct);
-  const totalPaid = (patPayments||[]).reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
-  const remaining = grand - totalPaid;
+  const pdfFactor  = subtotal > 0 && discPct > 0 ? grand / subtotal : 1;
+  const totalPaid  = (patPayments||[]).reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
+  const remaining  = grand - totalPaid;
   const txRows = treatments.map(tr=>`
     <tr>
-      <td>${tr.name}</td><td style="text-align:right">${fmtEur(tr.value)}</td>
+      <td>${tr.name}</td><td style="text-align:right">${fmtEur(parseFloat(tr.value||0) * pdfFactor)}</td>
     </tr>`).join("");
   const txMap = Object.fromEntries(treatments.map(tr=>[tr.id, tr]));
   const apptRows = appointments.map((appt, idx) => {
@@ -262,7 +263,7 @@ const exportToPDF = async (patient, lang, setExporting, patPayments=[], template
   <table><thead><tr><th>${t.treatment}</th><th style="text-align:right">${t.total}</th></tr></thead>
   <tbody>${txRows}</tbody></table>
   <div class="totals">
-    ${discPct>0?`<div class="tr"><span>Subtotal</span><span>${fmtEur(subtotal)}</span></div><div class="tr" style="color:#c0392b"><span>Descuento ${discPct}%</span><span>-${fmtEur(discAmt)}</span></div>`:""}
+    ${discPct>0?`<div class="tr" style="color:#888;font-size:11px"><span>Precios con ${discPct}% de descuento incluido</span></div>`:""}
     <div class="tr tr-grand"><span>${t.grandTotal}</span><span>${fmtEur(grand)}</span></div>
   </div>
   ${appointments.length > 0 ? `<div class="sec">${t.appointmentDetail}</div>
@@ -290,12 +291,18 @@ const exportToPDF = async (patient, lang, setExporting, patPayments=[], template
 };
 
 // ─── TreatmentRow ─────────────────────────────────────────────────────────────
-function TreatmentRow({ tr, onChange, onRemove }) {
+function TreatmentRow({ tr, onChange, onRemove, discFactor=1 }) {
+  const discVal = discFactor !== 1 ? parseFloat(tr.value||0) * discFactor : null;
   return (
     <div style={{...s.card, padding:"12px 14px", position:"relative", marginBottom:8}}>
       <div style={{display:"grid", gridTemplateColumns:"2.5fr 1fr", gap:8}}>
         <input placeholder="Tratamiento" value={tr.name} onChange={e=>onChange("name",e.target.value)} style={s.smInput}/>
-        <input type="number" placeholder="Importe €" value={tr.value} onChange={e=>onChange("value",e.target.value)} style={s.smInput}/>
+        <div>
+          <input type="number" placeholder="Importe €" value={tr.value} onChange={e=>onChange("value",e.target.value)} style={s.smInput}/>
+          {discVal !== null && (
+            <div style={{fontSize:11,color:"#2ecc71",marginTop:3,textAlign:"right",fontWeight:600}}>con desc.: {fmtEur(discVal)}</div>
+          )}
+        </div>
       </div>
       <button onClick={onRemove} style={{position:"absolute",top:8,right:8,background:"none",border:"none",color:"#555",cursor:"pointer",fontSize:15,lineHeight:1}}>✕</button>
     </div>
@@ -389,9 +396,10 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
   const updAppt = (id,f,v) => setP(prev=>({...prev, appointments:prev.appointments.map(a=>a.id===id?{...a,[f]:v}:a)}));
   const remAppt = (id) => setP(prev=>({...prev, appointments:prev.appointments.filter(a=>a.id!==id)}));
 
-  const subtotal = p.treatments.reduce((a,t)=>a+(parseFloat(t.value)||0),0);
-  const discPct  = parseInt(p.discountPct)||0;
+  const subtotal   = p.treatments.reduce((a,t)=>a+(parseFloat(t.value)||0),0);
+  const discPct    = parseInt(p.discountPct)||0;
   const { discAmt, grand } = applyDiscount(subtotal, discPct);
+  const discFactor = subtotal > 0 && discPct > 0 ? grand / subtotal : 1;
 
   const patPayments = payments.filter(pay => pay.patient_id === p.id);
   const totalPaid   = patPayments.reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
@@ -491,7 +499,7 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
           {p.treatments.length===0 && (
             <div style={{textAlign:"center",color:"#333",padding:24,background:"#ffffff",borderRadius:10,fontSize:13}}>Sin tratamientos — importá un PDF o agregá manualmente</div>
           )}
-          {p.treatments.map(tr=>(<TreatmentRow key={tr.id} tr={tr} onChange={(f,v)=>updTx(tr.id,f,v)} onRemove={()=>remTx(tr.id)}/>))}
+          {p.treatments.map(tr=>(<TreatmentRow key={tr.id} tr={tr} onChange={(f,v)=>updTx(tr.id,f,v)} onRemove={()=>remTx(tr.id)} discFactor={discFactor}/>))}
           {p.treatments.length>0 && (
             <div style={{display:"flex",justifyContent:"flex-end",marginTop:10}}>
               <div style={{background:"#dce8fa",borderRadius:8,minWidth:220,overflow:"hidden"}}>
