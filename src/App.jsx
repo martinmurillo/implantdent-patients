@@ -643,7 +643,7 @@ function AlertCard({ patient, onOpen }) {
 // ─── PatientCard ──────────────────────────────────────────────────────────────
 function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[], onOpen=null, templates=[] }) {
   const [exporting, setExp] = useState(null);
-  const [recalled, setRecalled] = useState(false);
+  const [recalled, setRecalled] = useState(() => localStorage.getItem(`recalled_${patient.id}`) === "1");
   const grand = patientGrand(patient);
   const totalPaid = patientPayments.reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
   const hasPending = patientPayments.length > 0 && totalPaid < grand;
@@ -683,7 +683,7 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
             ))}
           </div>
           <div style={{display:"flex",gap:6}}>
-            <button onClick={()=>setRecalled(r=>!r)} title="Recordatorio de rellamada"
+            <button onClick={()=>setRecalled(r=>{ const next=!r; next ? localStorage.setItem(`recalled_${patient.id}`,"1") : localStorage.removeItem(`recalled_${patient.id}`); return next; })} title="Recordatorio de rellamada"
               style={{background:recalled?"#c9a84c22":"#ffffff",border:`1px solid ${recalled?"#c9a84c":"#bbb"}`,borderRadius:6,color:recalled?"#c9a84c":"#bbb",padding:"5px 9px",cursor:"pointer",fontSize:12,fontWeight:700,transition:"all 0.15s"}}>
               R
             </button>
