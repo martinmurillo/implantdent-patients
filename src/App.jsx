@@ -38,7 +38,8 @@ const parsePDF = async (file) => {
     const value = parseFloat((base * 1.1).toFixed(2));
     treatments.push({ id:genId(), name:m[2].trim(), value:String(value), discount:"0" });
   }
-  return { hc, name, dni, budgetNo, date, time:"", treatments };
+  const phone = get(/(?:Móv\.\/Teléf\.|Móv\.\/Telef\.|Mov\.\/Tel[eé]f\.|Tel[eé]fono|Móvil|Movil|Tel\.?)\s*:?\s*([\d\s\+\(\)\-]{6,})/i).replace(/\s+/g,"");
+  return { hc, name, dni, budgetNo, date, time:"", phone, treatments };
 };
 
 // ─── PIN AUTH ────────────────────────────────────────────────────────────────
@@ -429,6 +430,7 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
       const parsed = await parsePDF(file);
       setP(prev=>({...prev, name:parsed.name||prev.name, hc:parsed.hc||prev.hc,
         dni:parsed.dni||prev.dni, budgetNo:parsed.budgetNo||prev.budgetNo, date:parsed.date||prev.date,
+        phone:parsed.phone||prev.phone,
         treatments:parsed.treatments.length?parsed.treatments:prev.treatments }));
       setMsg(`✓ ${parsed.treatments.length} tratamiento(s) importados`);
     } catch(e) { setMsg("Error al leer el PDF — completá manualmente"); }
@@ -462,9 +464,10 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
           <Field label="DNI" field="dni"/>
           <Field label="Nº Presupuesto" field="budgetNo"/>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14}}>
           <Field label="Fecha" field="date" type="date"/>
           <Field label="Hora" field="time" type="time"/>
+          <Field label="Teléfono" field="phone" type="tel"/>
         </div>
       </div>
       <div style={{display:"flex",gap:12,marginBottom:16,alignItems:"center",flexWrap:"wrap"}}>
@@ -687,6 +690,13 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
               style={{background:recalled?"#c9a84c22":"#ffffff",border:`1px solid ${recalled?"#c9a84c":"#bbb"}`,borderRadius:6,color:recalled?"#c9a84c":"#bbb",padding:"5px 9px",cursor:"pointer",fontSize:12,fontWeight:700,transition:"all 0.15s"}}>
               R
             </button>
+            {patient.phone && (
+              <a href={`https://wa.me/${patient.phone.replace(/\D/g,"")}`} target="_blank" rel="noreferrer"
+                title={`WhatsApp ${patient.phone}`}
+                style={{background:"#25d36622",border:"1px solid #25d36688",borderRadius:6,color:"#25d366",padding:"5px 9px",cursor:"pointer",fontSize:14,fontWeight:700,textDecoration:"none",display:"inline-flex",alignItems:"center",lineHeight:1}}>
+                &#x1F4AC;
+              </a>
+            )}
             <button onClick={()=>onEdit(patient)} style={{...s.btnDark,padding:"5px 12px",fontSize:12}}>Editar</button>
             <button onClick={()=>onDelete(patient)}
               style={{...s.btnSm,background:"#fff0f0",border:"1px solid #e74c3c88",color:"#e74c3c",padding:"5px 12px",fontSize:12}}>
@@ -1302,6 +1312,7 @@ export default function App() {
   const savePatient = async (p) => {
     const payload = {
       name:p.name, hc:p.hc, dni:p.dni||"", budget_no:p.budgetNo||p.budget_no, date:p.date, time:p.time,
+      phone:p.phone||"",
       treatments:{ items: p.treatments, discountPct: p.discountPct||"0" },
       appointments:p.appointments||[], notes:p.notes,
       status:p.status||"pendiente", last_contact:p.last_contact||today(), closed:isCerrado(p.status),
