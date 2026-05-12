@@ -39,7 +39,7 @@ const parsePDF = async (file) => {
     const value = parseFloat((base * 1.1).toFixed(2));
     treatments.push({ id:genId(), name:m[2].trim(), value:String(value), discount:"0" });
   }
-  const phone = get(/(?:Móv\.\/Teléf\.|Móv\.\/Telef\.|Mov\.\/Tel[eé]f\.|Tel[eé]fono|Móvil|Movil|Tel\.?)\s*:?\s*([\d\s\+\(\)\-]{6,})/i).replace(/\s+/g,"");
+  const phone = get(/Móv\.?\s*[\/]\s*Tel[eé]f\.?\s*:?\s*([\d\s\+\(\)\-]{6,})/i).replace(/\s+/g,"").replace(/\/$/, "");
   return { hc, name, dni, budgetNo, date, time:"", phone, treatments };
 };
 
