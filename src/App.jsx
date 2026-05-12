@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase";
 import { translateTreatment, setTranslationDict } from "./treatments";
+import * as XLSX from "xlsx";
 
 // ─── PDF.js ───────────────────────────────────────────────────────────────────
 const loadPdfJs = () => new Promise((resolve) => {
@@ -1258,6 +1259,146 @@ function ClinicaPanel({ doctors, templates, translations, onRefreshDoctors, onRe
   );
 }
 
+// ─── PagosExcelPanel ─────────────────────────────────────────────────────────
+function PagosExcelPanel({ patients }) {
+  const [rows,    setRows]    = useState(null);
+  const [matches, setMatches] = useState(null);
+  const fileRef = useRef();
+
+  const normalize = (s) =>
+    (s || "").toString().toLowerCase()
+      .normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9\s]/g, "").trim();
+
+  const namesMatch = (a, b) => {
+    const na = normalize(a), nb = normalize(b);
+    if (!na || !nb) return false;
+    if (na === nb) return true;
+    const wordsA = na.split(/\s+/).filter(w => w.length > 2);
+    const wordsB = nb.split(/\s+/).filter(w => w.length > 2);
+    const shared = wordsA.filter(w => wordsB.includes(w));
+    return shared.length >= 2 || (wordsA.length === 1 && shared.length === 1) || (wordsB.length === 1 && shared.length === 1);
+  };
+
+  const handleFile = (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const wb = XLSX.read(ev.target.result, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+      const parsed = [];
+      for (let i = 1; i < data.length; i++) {
+        const row = data[i];
+        const name    = (row[5] || "").toString().trim();   // col F (index 5)
+        const concept = (row[8] || "").toString().trim();   // col I (index 8)
+        const amount  = (row[10] || "").toString().trim();  // col K (index 10)
+        if (name) parsed.push({ name, concept, amount });
+      }
+      setRows(parsed);
+
+      const found = [];
+      for (const exRow of parsed) {
+        const match = patients.find(p => namesMatch(exRow.name, p.name));
+        if (match) found.push({ excelName: exRow.name, patientName: match.name, concept: exRow.concept, amount: exRow.amount });
+      }
+      setMatches(found);
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = "";
+  };
+
+  const print = () => {
+    const date = new Date().toLocaleDateString("es-ES");
+    const rows = matches.map(m => `
+      <tr>
+        <td>${m.patientName}</td>
+        <td>${m.excelName !== m.patientName ? `<span class="alias">${m.excelName}</span>` : "—"}</td>
+        <td>${m.concept || "—"}</td>
+        <td class="amt">${m.amount ? `€${parseFloat(m.amount.replace(",",".")).toLocaleString("es-ES",{minimumFractionDigits:2,maximumFractionDigits:2})}` : "—"}</td>
+      </tr>`).join("");
+    const win = window.open("", "_blank");
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
+<title>Cobros — ${date}</title>
+<style>
+  body{font-family:'Segoe UI',sans-serif;color:#111;padding:32px;font-size:13px;}
+  h1{font-size:18px;margin:0 0 4px;}
+  .sub{color:#666;font-size:12px;margin-bottom:24px;}
+  table{width:100%;border-collapse:collapse;}
+  th{text-align:left;font-size:11px;color:#666;text-transform:uppercase;letter-spacing:1px;padding:6px 8px;border-bottom:2px solid #ddd;}
+  td{padding:7px 8px;border-bottom:1px solid #eee;vertical-align:top;}
+  .amt{text-align:right;font-weight:700;}
+  .alias{color:#888;font-size:11px;}
+  @media print{body{padding:16px;}}
+</style></head><body>
+<h1>IMPLANTDENT — Cobros importados</h1>
+<div class="sub">Fecha: ${date} · ${matches.length} coincidencia(s) de ${rows.length || 0} filas</div>
+<table><thead><tr><th>Paciente</th><th>Nombre en Excel</th><th>Concepto</th><th style="text-align:right">Importe</th></tr></thead>
+<tbody>${rows}</tbody></table>
+</body></html>`);
+    win.document.close();
+    setTimeout(() => win.print(), 600);
+  };
+
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
+        <div style={{fontSize:11,color:"#c9a84c",letterSpacing:2,fontWeight:700}}>📂 IMPORTAR PAGOS EXCEL</div>
+        <div style={{flex:1}}/>
+        {matches && matches.length > 0 && (
+          <button onClick={print} style={{background:"#2c3250",border:"none",borderRadius:8,color:"#fff",padding:"6px 16px",cursor:"pointer",fontSize:12,fontWeight:600}}>
+            🖨 Imprimir
+          </button>
+        )}
+      </div>
+
+      <div style={{background:"#ffffff",border:"2px dashed #c9a84c44",borderRadius:12,padding:"28px 24px",marginBottom:20,textAlign:"center"}}>
+        <div style={{fontSize:13,color:"#555",marginBottom:14}}>
+          Seleccioná el archivo Excel con la lista de cobros.<br/>
+          <span style={{fontSize:11,color:"#888"}}>Se leen: columna F (nombre), columna I (concepto), columna K (importe)</span>
+        </div>
+        <button onClick={()=>fileRef.current.click()}
+          style={{background:"linear-gradient(135deg,#c9a84c,#a07830)",border:"none",borderRadius:8,color:"#fff",padding:"10px 24px",cursor:"pointer",fontSize:13,fontWeight:700}}>
+          📊 Seleccionar Excel
+        </button>
+        <input ref={fileRef} type="file" accept=".xlsx,.xls,.ods" onChange={handleFile} style={{display:"none"}}/>
+      </div>
+
+      {matches !== null && (
+        <div>
+          <div style={{fontSize:12,color:"#555",marginBottom:12}}>
+            {rows?.length} fila(s) leídas del Excel · <span style={{color:"#c9a84c",fontWeight:700}}>{matches.length} coincidencia(s)</span> con pacientes del sistema
+          </div>
+
+          {matches.length === 0 && (
+            <div style={{textAlign:"center",color:"#888",padding:40,fontSize:13}}>No se encontraron coincidencias</div>
+          )}
+
+          {matches.length > 0 && (
+            <div style={{background:"#ffffff",borderRadius:12,border:"1px solid #e2e5ed",overflow:"hidden"}}>
+              <div style={{display:"grid",gridTemplateColumns:"2fr 1.5fr 3fr 1fr",gap:0,background:"#f5f7fa",padding:"8px 16px",borderBottom:"1px solid #e2e5ed"}}>
+                {["Paciente","Nombre en Excel","Concepto","Importe"].map(h=>(
+                  <div key={h} style={{fontSize:11,color:"#888",fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>{h}</div>
+                ))}
+              </div>
+              {matches.map((m,i)=>(
+                <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 1.5fr 3fr 1fr",gap:0,padding:"10px 16px",borderBottom:"1px solid #f0f2f7",alignItems:"center",background:i%2===0?"#ffffff":"#fafbfd"}}>
+                  <div style={{fontWeight:700,color:"#2c3250",fontSize:13}}>{m.patientName}</div>
+                  <div style={{fontSize:12,color:m.excelName!==m.patientName?"#888":"#bbb"}}>{m.excelName!==m.patientName?m.excelName:"—"}</div>
+                  <div style={{fontSize:12,color:"#555"}}>{m.concept||"—"}</div>
+                  <div style={{fontSize:13,fontWeight:700,color:"#2ecc71",textAlign:"right"}}>
+                    {m.amount ? `€${parseFloat(m.amount.replace(",",".")).toLocaleString("es-ES",{minimumFractionDigits:2,maximumFractionDigits:2})}` : "—"}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [unlocked, setUnlocked] = useState(false);
@@ -1403,6 +1544,7 @@ export default function App() {
         <div style={{flex:1}}/>
         <NavBtn id="dashboard" label="Pacientes"     badge={0}/>
         <NavBtn id="debts"     label="Deudas"       badge={pendingDebtPatients.length}/>
+        <NavBtn id="pagos"     label="Cobros Excel"/>
         <NavBtn id="clinica"   label="Clínica"/>
         <NavBtn id="stats"     label="Estadísticas" badge={0}/>
 
@@ -1570,6 +1712,10 @@ export default function App() {
                 })
             }
           </>
+        )}
+
+        {!dbLoading && view==="pagos" && (
+          <PagosExcelPanel patients={patients}/>
         )}
 
         {!dbLoading && view==="clinica" && (
