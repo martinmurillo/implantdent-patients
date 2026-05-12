@@ -109,9 +109,9 @@ function PinLock({ onUnlock }) {
 const genId    = () => Math.random().toString(36).slice(2,10);
 const today    = () => new Date().toISOString().split("T")[0];
 const daysDiff = (d) => !d ? 999 : Math.floor((new Date()-new Date(d))/86400000);
-const STATUSES = ["pendiente","en curso","cerrado con deuda","cerrado sin deuda"];
-const STATUS_COLOR = { "pendiente":"#c9a84c", "en curso":"#3498db", "cerrado con deuda":"#e67e22", "cerrado sin deuda":"#2ecc71" };
-const STATUS_LABEL = { "pendiente":"Pendiente", "en curso":"En curso", "cerrado con deuda":"C/ deuda", "cerrado sin deuda":"Sin deuda" };
+const STATUSES = ["frío","pendiente","en curso","cerrado con deuda","cerrado sin deuda"];
+const STATUS_COLOR = { "frío":"#7f8c8d", "pendiente":"#c9a84c", "en curso":"#3498db", "cerrado con deuda":"#e67e22", "cerrado sin deuda":"#2ecc71" };
+const STATUS_LABEL = { "frío":"Frío", "pendiente":"Pendiente", "en curso":"En curso", "cerrado con deuda":"C/ deuda", "cerrado sin deuda":"Sin deuda" };
 const isCerrado = (st) => st === "cerrado con deuda" || st === "cerrado sin deuda";
 const getStatus = (p) => STATUSES.includes(p.status) ? p.status : (p.closed ? "cerrado con deuda" : "pendiente");
 const fmtEur   = (v) => v && parseFloat(v) ? `€${parseFloat(v).toLocaleString("es-ES",{minimumFractionDigits:2})}` : "-";
@@ -654,6 +654,7 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
   const status = getStatus(patient);
   let bc;
   if (isCerrado(status)) bc = STATUS_COLOR[status];
+  else if (status === "frío") bc = "#7f8c8d";
   else if (status === "en curso") bc = "#3498db";
   else { if(days>=30) bc="#8e44ad"; else if(days>=15) bc="#e74c3c"; else if(days>=7) bc="#f39c12"; else bc="#c9a84c44"; }
   return (
@@ -1479,6 +1480,7 @@ export default function App() {
           <>
             {(() => {
               const tabs = [
+                { id:"frío",               label:"Fríos",            color:"#7f8c8d", list: recent.filter(p=>getStatus(p)==="frío")               },
                 { id:"pendiente",          label:"Pendientes",      color:"#c9a84c", list: recent.filter(p=>getStatus(p)==="pendiente")          },
                 { id:"en curso",           label:"En curso",         color:"#3498db", list: recent.filter(p=>getStatus(p)==="en curso")           },
                 { id:"cerrado con deuda",  label:"Cerrados c/ deuda",color:"#e67e22", list: recent.filter(p=>getStatus(p)==="cerrado con deuda")  },
@@ -1489,7 +1491,7 @@ export default function App() {
 
               return (
                 <>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12,marginBottom:20}}>
                     {tabs.map(tab => {
                       const active = !isSearching && statusTab === tab.id;
                       return (
