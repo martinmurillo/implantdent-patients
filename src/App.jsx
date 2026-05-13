@@ -1547,19 +1547,17 @@ tr:nth-child(even) td{background:#f8f8f8}
 .r{text-align:right}
 .p{text-align:right;font-weight:700;color:#c0392b}
 tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
-.notes{margin-top:28px;border-top:2px solid #ccc;padding-top:14px}
-.notes-title{font-size:14px;font-weight:700;color:#888;letter-spacing:1px;margin-bottom:10px}
-.notes-line{border-bottom:1px solid #ccc;height:28px;margin-bottom:2px}
+.notes-th{width:18%}
+.notes-cell{width:18%;border-bottom:1px solid #aaa}
 @page{margin:1.2cm;size:A4 portrait}
 @media print{body{padding:0}}
 </style></head><body>
 <h2>PACIENTES CON SALDO PENDIENTE — ${new Date().toLocaleDateString("es-ES")}</h2>
 <table>
-<thead><tr><th>#</th><th>Nombre</th><th>HC</th><th>Presup. Nº</th><th class="r">Total presup.</th><th class="r">Pagado</th><th class="p">Pendiente</th><th>Próx. cita</th></tr></thead>
-<tbody>${rows.map((r,i)=>`<tr><td>${i+1}</td><td>${r.name}</td><td>${r.hc}</td><td>${r.budget_no}</td><td class="r">${fmt(r.grand)}</td><td class="r">${fmt(r.paid)}</td><td class="p">${fmt(r.pending)}</td><td>${r.appt}</td></tr>`).join("")}</tbody>
-<tfoot><tr><td colspan="4">Total — ${rows.length} paciente${rows.length!==1?"s":""}</td><td class="r">${fmt(totalGrand)}</td><td class="r">${fmt(totalPaid)}</td><td class="p">${fmt(totalPending)}</td><td></td></tr></tfoot>
+<thead><tr><th>#</th><th>Nombre</th><th>HC</th><th>Presup. Nº</th><th class="r">Total presup.</th><th class="r">Pagado</th><th class="p">Pendiente</th><th>Próx. cita</th><th class="notes-th">Anotaciones</th></tr></thead>
+<tbody>${rows.map((r,i)=>`<tr><td>${i+1}</td><td>${r.name}</td><td>${r.hc}</td><td>${r.budget_no}</td><td class="r">${fmt(r.grand)}</td><td class="r">${fmt(r.paid)}</td><td class="p">${fmt(r.pending)}</td><td>${r.appt}</td><td class="notes-cell"></td></tr>`).join("")}</tbody>
+<tfoot><tr><td colspan="9">Total — ${rows.length} paciente${rows.length!==1?"s":""} &nbsp;&nbsp; Pendiente total: ${fmt(totalPending)}</td></tr></tfoot>
 </table>
-<div class="notes"><div class="notes-title">ANOTACIONES</div>${Array(8).fill('<div class="notes-line"></div>').join("")}</div>
 </body></html>`;
     const w = window.open("","_blank");
     w.document.write(html);
