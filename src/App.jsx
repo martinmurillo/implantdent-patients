@@ -39,7 +39,7 @@ const parsePDF = async (file) => {
     const value = parseFloat((base * 1.1).toFixed(2));
     treatments.push({ id:genId(), name:m[2].trim(), value:String(value), discount:"0" });
   }
-  const phone = get(/Móv\.?\s*[\/]\s*Tel[eé]f\.?\s*:?\s*([\d\s\+\(\)\-]{6,})/i).replace(/\s+/g,"").replace(/\/$/, "");
+  const phone = get(/Móv\.?\s*[\/]\s*Tel[eé]f\.?\s*:?\s*([\d\s\+\(\)\-\.]{6,})/i).replace(/[\s\.]/g,"").replace(/\/$/, "");
   return { hc, name, dni, budgetNo, date, time:"", phone, treatments };
 };
 
@@ -693,7 +693,7 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
               R
             </button>
             {patient.phone && (
-              <a href={`https://wa.me/${patient.phone.replace(/\D/g,"")}`} target="_blank" rel="noreferrer"
+              <a href={`https://wa.me/${(n=>/^[6789]\d{8}$/.test(n)?"34"+n:n)(patient.phone.replace(/\D/g,""))}`} target="_blank" rel="noreferrer"
                 title={`WhatsApp ${patient.phone}`}
                 style={{background:"#25d36622",border:"1px solid #25d36688",borderRadius:6,color:"#25d366",padding:"5px 9px",cursor:"pointer",fontSize:14,fontWeight:700,textDecoration:"none",display:"inline-flex",alignItems:"center",lineHeight:1}}>
                 &#x1F4AC;
