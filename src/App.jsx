@@ -1556,7 +1556,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
 <table>
 <thead><tr><th>#</th><th>Nombre</th><th>HC</th><th>Presup. Nº</th><th class="r">Total presup.</th><th class="r">Pagado</th><th class="p">Pendiente</th><th>Próx. cita</th><th class="notes-th">Anotaciones</th></tr></thead>
 <tbody>${rows.map((r,i)=>`<tr><td>${i+1}</td><td>${r.name}</td><td>${r.hc}</td><td>${r.budget_no}</td><td class="r">${fmt(r.grand)}</td><td class="r">${fmt(r.paid)}</td><td class="p">${fmt(r.pending)}</td><td>${r.appt}</td><td class="notes-cell"></td></tr>`).join("")}</tbody>
-<tfoot><tr><td colspan="9">Total — ${rows.length} paciente${rows.length!==1?"s":""} &nbsp;&nbsp; Pendiente total: ${fmt(totalPending)}</td></tr></tfoot>
+<tfoot><tr><td colspan="4">Total — ${rows.length} paciente${rows.length!==1?"s":""}</td><td class="r">${fmt(totalGrand)}</td><td class="r">${fmt(totalPaid)}</td><td class="p">${fmt(totalPending)}</td><td></td><td></td></tr></tfoot>
 </table>
 </body></html>`;
     const w = window.open("","_blank");
