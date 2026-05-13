@@ -1538,16 +1538,19 @@ export default function App() {
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Saldos pendientes</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:Arial,sans-serif;font-size:12px;padding:14px}
-h2{font-size:12px;font-weight:700;margin-bottom:8px;letter-spacing:1px}
+body{font-family:Arial,sans-serif;font-size:21px;padding:14px}
+h2{font-size:21px;font-weight:700;margin-bottom:10px;letter-spacing:1px}
 table{width:100%;border-collapse:collapse}
-th{background:#ececec;font-weight:700;text-align:left;padding:3px 5px;border-bottom:2px solid #bbb;font-size:11px;text-transform:uppercase;white-space:nowrap}
-td{padding:2px 5px;border-bottom:1px solid #e8e8e8;white-space:nowrap}
+th{background:#ececec;font-weight:700;text-align:left;padding:4px 6px;border-bottom:2px solid #bbb;font-size:19px;text-transform:uppercase;white-space:nowrap}
+td{padding:3px 6px;border-bottom:1px solid #e8e8e8;white-space:nowrap}
 tr:nth-child(even) td{background:#f8f8f8}
 .r{text-align:right}
 .p{text-align:right;font-weight:700;color:#c0392b}
-tfoot td{font-weight:700;border-top:2px solid #bbb;padding:3px 5px}
-@page{margin:1cm;size:A4 portrait}
+tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
+.notes{margin-top:28px;border-top:2px solid #ccc;padding-top:14px}
+.notes-title{font-size:14px;font-weight:700;color:#888;letter-spacing:1px;margin-bottom:10px}
+.notes-line{border-bottom:1px solid #ccc;height:28px;margin-bottom:2px}
+@page{margin:1.2cm;size:A4 portrait}
 @media print{body{padding:0}}
 </style></head><body>
 <h2>PACIENTES CON SALDO PENDIENTE — ${new Date().toLocaleDateString("es-ES")}</h2>
@@ -1555,7 +1558,9 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:3px 5px}
 <thead><tr><th>#</th><th>Nombre</th><th>HC</th><th>Presup. Nº</th><th class="r">Total presup.</th><th class="r">Pagado</th><th class="p">Pendiente</th><th>Próx. cita</th></tr></thead>
 <tbody>${rows.map((r,i)=>`<tr><td>${i+1}</td><td>${r.name}</td><td>${r.hc}</td><td>${r.budget_no}</td><td class="r">${fmt(r.grand)}</td><td class="r">${fmt(r.paid)}</td><td class="p">${fmt(r.pending)}</td><td>${r.appt}</td></tr>`).join("")}</tbody>
 <tfoot><tr><td colspan="4">Total — ${rows.length} paciente${rows.length!==1?"s":""}</td><td class="r">${fmt(totalGrand)}</td><td class="r">${fmt(totalPaid)}</td><td class="p">${fmt(totalPending)}</td><td></td></tr></tfoot>
-</table></body></html>`;
+</table>
+<div class="notes"><div class="notes-title">ANOTACIONES</div>${Array(8).fill('<div class="notes-line"></div>').join("")}</div>
+</body></html>`;
     const w = window.open("","_blank");
     w.document.write(html);
     w.document.close();
