@@ -802,20 +802,18 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
       return `<tr><td>${hc}</td><td>${name}</td><td>${fmtDate(pay.date)}</td><td style="text-align:right">${fmtEur(pay.amount)}${note}</td></tr>`;
     }).join("");
 
-    const implantRows = implantItems.map(item => {
+    const implantRows = implantItems.filter(i=>i.realized_date).map(item => {
       const pat  = findPatient(item.patient_id);
       const hc   = item.hc || pat?.hc || "—";
       const name = item.patient_name || pat?.name || "—";
-      const estado = item.realized_date ? "Realizado" : "Pendiente";
-      return `<tr><td>${hc}</td><td>${name}</td><td>${item.treatment_name}</td><td>${estado}</td></tr>`;
+      return `<tr><td>${hc}</td><td>${name}</td><td>${item.treatment_name}</td><td>${fmtDate(item.realized_date)}</td></tr>`;
     }).join("");
 
-    const orthoRows = orthoItems.map(item => {
+    const orthoRows = orthoItems.filter(i=>i.realized_date).map(item => {
       const pat  = findPatient(item.patient_id);
       const hc   = item.hc || pat?.hc || "—";
       const name = item.patient_name || pat?.name || "—";
-      const estado = item.realized_date ? "Realizado" : "Pendiente";
-      return `<tr><td>${hc}</td><td>${name}</td><td>${item.treatment_name}</td><td>${estado}</td></tr>`;
+      return `<tr><td>${hc}</td><td>${name}</td><td>${item.treatment_name}</td><td>${fmtDate(item.realized_date)}</td><td>${item.notes||"—"}</td></tr>`;
     }).join("");
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
@@ -859,15 +857,15 @@ ${rangePayments.length === 0
   ? '<div class="none">Sin pagos en este período</div>'
   : `<table><thead><tr><th>HC</th><th>Paciente</th><th>Fecha</th><th>Importe</th></tr></thead><tbody>${payRows}</tbody></table>`}
 
-<h2>Implantes</h2>
-${implantItems.length === 0
-  ? '<div class="none">Sin implantes en este período</div>'
-  : `<table><thead><tr><th>HC</th><th>Paciente</th><th>Tratamiento</th><th>Estado</th></tr></thead><tbody>${implantRows}</tbody></table>`}
+<h2>Implantes realizados</h2>
+${implantItems.filter(i=>i.realized_date).length === 0
+  ? '<div class="none">Sin implantes realizados</div>'
+  : `<table><thead><tr><th>HC</th><th>Paciente</th><th>Tratamiento</th><th>Fecha colocación</th></tr></thead><tbody>${implantRows}</tbody></table>`}
 
-<h2>Ortodoncia</h2>
-${orthoItems.length === 0
-  ? '<div class="none">Sin ortodoncia en este período</div>'
-  : `<table><thead><tr><th>HC</th><th>Paciente</th><th>Tratamiento</th><th>Estado</th></tr></thead><tbody>${orthoRows}</tbody></table>`}
+<h2>Ortodoncia realizada</h2>
+${orthoItems.filter(i=>i.realized_date).length === 0
+  ? '<div class="none">Sin ortodoncia realizada</div>'
+  : `<table><thead><tr><th>HC</th><th>Paciente</th><th>Tratamiento</th><th>Fecha inicio</th><th>Notas</th></tr></thead><tbody>${orthoRows}</tbody></table>`}
 
 </body></html>`;
 
@@ -895,29 +893,71 @@ ${orthoItems.length === 0
     );
   };
 
-  const ItemRow = ({ item, qty }) => {
+  const ItemRow = ({ item, qty, type }) => {
+    const [editing,      setEditing]      = useState(false);
+    const [pendingDate,  setPendingDate]  = useState(today());
+    const [pendingNotes, setPendingNotes] = useState("");
     const pat       = findPatient(item.patient_id);
     const name      = item.patient_name || pat?.name || "—";
     const realizado = !!item.realized_date;
     const loading   = busy === item.id;
+
+    const doRealize = async (e) => {
+      e.stopPropagation();
+      setBusy(item.id);
+      const upd = { realized_date: pendingDate || today() };
+      if (type === "ortho") upd.notes = pendingNotes;
+      await supabase.from("treatment_items").update(upd).eq("id", item.id);
+      await onRefreshItems();
+      setBusy(null); setEditing(false);
+    };
+
+    const doUnrealize = async (e) => {
+      e.stopPropagation();
+      setBusy(item.id);
+      const upd = { realized_date: null };
+      if (type === "ortho") upd.notes = null;
+      await supabase.from("treatment_items").update(upd).eq("id", item.id);
+      await onRefreshItems();
+      setBusy(null);
+    };
+
+    const startEditing = (e) => {
+      e.stopPropagation();
+      setPendingDate(today()); setPendingNotes(item.notes || "");
+      setEditing(true);
+    };
+
     return (
       <div style={{...s.card, marginBottom:6, opacity: loading ? 0.5 : 1}}>
         <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
-          <div onClick={() => pat && onOpenPatient(pat)}
-            style={{flex:1, cursor: pat ? "pointer" : "default"}}>
+          <div onClick={() => pat && onOpenPatient(pat)} style={{flex:1, cursor: pat ? "pointer" : "default"}}>
             <div style={{fontWeight:700, color:"#2c3250", fontSize:14}}>{name}</div>
             <div style={{fontSize:12, color:"#777", marginTop:2}}>
               {item.treatment_name}{qty > 1 ? ` · ${qty} uds` : ""} · {fmtEur(item.amount)}
             </div>
+            {realizado && (
+              <div style={{fontSize:11, color:"#2ecc71", marginTop:3}}>
+                {type==="ortho" ? "Inicio" : "Colocado"}: {fmtDate(item.realized_date)}
+                {type==="ortho" && item.notes ? ` · ${item.notes}` : ""}
+              </div>
+            )}
           </div>
           <div style={{display:"flex", gap:6, alignItems:"center", flexShrink:0, marginLeft:12}}>
-            <button onClick={e => toggleRealized(e, item)} disabled={loading}
-              style={{background: realizado ? "#2ecc7122" : "#ffffff",
-                border: `1px solid ${realizado ? "#2ecc71" : "#555"}`,
-                borderRadius:6, color: realizado ? "#2ecc71" : "#888",
-                padding:"4px 10px", cursor:"pointer", fontSize:11, fontWeight:700}}>
-              {realizado ? "Realizado" : "Pendiente"}
-            </button>
+            {!realizado && !editing && (
+              <button onClick={startEditing} disabled={loading}
+                style={{background:"#ffffff", border:"1px solid #555", borderRadius:6,
+                  color:"#888", padding:"4px 10px", cursor:"pointer", fontSize:11, fontWeight:700}}>
+                Pendiente
+              </button>
+            )}
+            {realizado && (
+              <button onClick={doUnrealize} disabled={loading}
+                style={{background:"#2ecc7122", border:"1px solid #2ecc71", borderRadius:6,
+                  color:"#2ecc71", padding:"4px 10px", cursor:"pointer", fontSize:11, fontWeight:700}}>
+                Realizado
+              </button>
+            )}
             {pat && <span onClick={() => onOpenPatient(pat)} style={{color:"#c9a84c",fontSize:20,lineHeight:1,cursor:"pointer"}}>›</span>}
             <button onClick={e => deleteItem(e, item.id)} disabled={loading}
               style={{background:"#fff0f0", border:"1px solid #e74c3c88", borderRadius:6,
@@ -926,6 +966,35 @@ ${orthoItems.length === 0
             </button>
           </div>
         </div>
+        {editing && (
+          <div style={{marginTop:8, display:"flex", gap:8, alignItems:"flex-end", flexWrap:"wrap",
+            borderTop:"1px solid #e2e5ed", paddingTop:8}}>
+            <div>
+              <label style={{...s.label, display:"block"}}>{type==="ortho" ? "Fecha inicio" : "Fecha colocación"}</label>
+              <input type="date" value={pendingDate} onChange={e=>setPendingDate(e.target.value)}
+                style={{...s.smInput, width:160}}/>
+            </div>
+            {type === "ortho" && (
+              <div style={{flex:1, minWidth:180}}>
+                <label style={{...s.label, display:"block"}}>Notas</label>
+                <input type="text" value={pendingNotes} onChange={e=>setPendingNotes(e.target.value)}
+                  placeholder="ej: Invisalign, bracket metálico..." style={s.smInput}/>
+              </div>
+            )}
+            <div style={{display:"flex", gap:6}}>
+              <button onClick={doRealize} disabled={loading}
+                style={{background:"#2ecc71", border:"none", borderRadius:6, color:"#fff",
+                  padding:"7px 14px", cursor:"pointer", fontSize:12, fontWeight:700}}>
+                Confirmar
+              </button>
+              <button onClick={e=>{e.stopPropagation();setEditing(false);}}
+                style={{background:"#eee", border:"1px solid #ccc", borderRadius:6,
+                  color:"#555", padding:"7px 12px", cursor:"pointer", fontSize:12}}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -988,7 +1057,7 @@ ${orthoItems.length === 0
             ? <div style={{color:"#555",padding:20,textAlign:"center"}}>Sin implantes en este período</div>
             : implantItems.map(item => {
                 const m = (item.treatment_name||"").match(/(\d+)\s*implante/i);
-                return <ItemRow key={item.id} item={item} qty={m ? parseInt(m[1]) : 1}/>;
+                return <ItemRow key={item.id} item={item} qty={m ? parseInt(m[1]) : 1} type="implant"/>;
               })
           }
         </div>
@@ -1000,7 +1069,7 @@ ${orthoItems.length === 0
           <div style={{fontSize:12,color:"#555",marginBottom:12}}>Marcá "Realizado" para sumar al contador. Eliminá falsos positivos con ×.</div>
           {orthoItems.length === 0
             ? <div style={{color:"#555",padding:20,textAlign:"center"}}>Sin ortodoncia en este período</div>
-            : orthoItems.map(item => <ItemRow key={item.id} item={item} qty={1}/>)
+            : orthoItems.map(item => <ItemRow key={item.id} item={item} qty={1} type="ortho"/>)
           }
         </div>
       )}
