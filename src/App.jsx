@@ -1329,7 +1329,7 @@ function ClinicaPanel({ doctors, templates, translations, onRefreshDoctors, onRe
 }
 
 // ─── PagosExcelPanel ─────────────────────────────────────────────────────────
-function PagosExcelPanel({ patients }) {
+function PagosExcelPanel({ patients, payments }) {
   const [totalRows, setTotalRows] = useState(null);
   const [matches,   setMatches]   = useState(null);
   const fileRef = useRef();
@@ -1349,7 +1349,17 @@ function PagosExcelPanel({ patients }) {
     return shared.length >= 2 || (wordsA.length === 1 && shared.length === 1) || (wordsB.length === 1 && shared.length === 1);
   };
 
-  const fmtDate = (d) => {
+  const parseDate = (val) => {
+    if (!val) return null;
+    if (val instanceof Date && !isNaN(val)) return val;
+    if (typeof val === "string") {
+      const d = new Date(val);
+      if (!isNaN(d)) return d;
+    }
+    return null;
+  };
+
+  const fmtDateObj = (d) => {
     if (!d) return "—";
     return d.toLocaleDateString("es-ES", { day:"2-digit", month:"2-digit", year:"numeric" });
   };
@@ -1366,13 +1376,11 @@ function PagosExcelPanel({ patients }) {
       const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
       const parsed = [];
       for (let i = 1; i < data.length; i++) {
-        const row  = data[i];
-        const dateVal = row[1];                              // col B (index 1)
+        const row     = data[i];
+        const dateObj = parseDate(row[1]);                   // col B (index 1)
         const name    = (row[5] || "").toString().trim();   // col F (index 5)
         const amount  = (row[10] || "").toString().trim();  // col K (index 10)
         if (!name) continue;
-        let dateObj = null;
-        if (dateVal instanceof Date && !isNaN(dateVal)) dateObj = dateVal;
         parsed.push({ name, amount, dateObj });
       }
       setTotalRows(parsed.length);
@@ -1383,7 +1391,7 @@ function PagosExcelPanel({ patients }) {
         const match = patients.find(p => namesMatch(exRow.name, p.name));
         if (!match) continue;
         if (!groupMap.has(match.name)) {
-          groupMap.set(match.name, { patientName: match.name, totalAmount: 0, count: 0, lastDate: null });
+          groupMap.set(match.name, { patient: match, patientName: match.name, totalAmount: 0, count: 0, lastDate: null });
         }
         const entry = groupMap.get(match.name);
         const amt = parseFloat((exRow.amount || "0").replace(",", ".")) || 0;
@@ -1394,8 +1402,14 @@ function PagosExcelPanel({ patients }) {
         }
       }
 
-      const grouped = Array.from(groupMap.values())
-        .sort((a, b) => a.patientName.localeCompare(b.patientName, "es"));
+      const grouped = Array.from(groupMap.values()).map(entry => {
+        const systemPaid = payments
+          .filter(pay => pay.patient_id === entry.patient.id)
+          .reduce((s, pay) => s + (parseFloat(pay.amount) || 0), 0);
+        const diff = parseFloat((entry.totalAmount - systemPaid).toFixed(2));
+        return { ...entry, systemPaid, diff };
+      }).sort((a, b) => a.patientName.localeCompare(b.patientName, "es"));
+
       setMatches(grouped);
     };
     reader.readAsArrayBuffer(file);
@@ -1405,13 +1419,20 @@ function PagosExcelPanel({ patients }) {
   const print = () => {
     const date = new Date().toLocaleDateString("es-ES");
     const totalSum = matches.reduce((s, m) => s + m.totalAmount, 0);
-    const trs = matches.map(m => `
+    const trs = matches.map(m => {
+      const ok = Math.abs(m.diff) < 0.01;
+      const estado = ok
+        ? `<span style="color:#27ae60;font-weight:700">✓ OK</span>`
+        : `<span style="color:#e74c3c;font-weight:700">${m.diff > 0 ? "+" : ""}${fmtAmt(m.diff)}</span>`;
+      return `
       <tr>
         <td>${m.patientName}</td>
-        <td style="text-align:center">${fmtDate(m.lastDate)}</td>
+        <td style="text-align:center">${fmtDateObj(m.lastDate)}</td>
         <td style="text-align:center">${m.count}</td>
         <td class="amt">${fmtAmt(m.totalAmount)}</td>
-      </tr>`).join("");
+        <td style="text-align:center">${estado}</td>
+      </tr>`;
+    }).join("");
     const win = window.open("", "_blank");
     win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>Cobros — ${date}</title>
@@ -1429,9 +1450,9 @@ function PagosExcelPanel({ patients }) {
 <h1>IMPLANTDENT — Cobros importados</h1>
 <div class="sub">Fecha: ${date} · ${matches.length} paciente(s) · ${totalRows} fila(s) leídas</div>
 <table>
-  <thead><tr><th>Paciente</th><th style="text-align:center">Último pago</th><th style="text-align:center">Nº pagos</th><th style="text-align:right">Total</th></tr></thead>
+  <thead><tr><th>Paciente</th><th style="text-align:center">Último pago</th><th style="text-align:center">Nº pagos</th><th style="text-align:right">Total Excel</th><th style="text-align:center">Estado</th></tr></thead>
   <tbody>${trs}</tbody>
-  <tfoot><tr><td colspan="3">TOTAL</td><td class="amt">${fmtAmt(totalSum)}</td></tr></tfoot>
+  <tfoot><tr><td colspan="3">TOTAL</td><td class="amt">${fmtAmt(totalSum)}</td><td></td></tr></tfoot>
 </table>
 </body></html>`);
     win.document.close();
@@ -1476,22 +1497,32 @@ function PagosExcelPanel({ patients }) {
 
           {matches.length > 0 && (
             <div style={{background:"#ffffff",borderRadius:12,border:"1px solid #e2e5ed",overflow:"hidden"}}>
-              <div style={{display:"grid",gridTemplateColumns:"3fr 1.2fr 0.7fr 1.2fr",gap:0,background:"#f5f7fa",padding:"8px 16px",borderBottom:"1px solid #e2e5ed"}}>
-                {["Paciente","Último pago","Pagos","Total"].map(h=>(
-                  <div key={h} style={{fontSize:11,color:"#888",fontWeight:700,letterSpacing:1,textTransform:"uppercase",textAlign:h==="Total"?"right":h==="Pagos"?"center":"left"}}>{h}</div>
+              <div style={{display:"grid",gridTemplateColumns:"2.5fr 1.2fr 0.6fr 1.2fr 1.1fr",gap:0,background:"#f5f7fa",padding:"8px 16px",borderBottom:"1px solid #e2e5ed"}}>
+                {[["Paciente","left"],["Último pago","left"],["Pagos","center"],["Total Excel","right"],["Estado","center"]].map(([h,align])=>(
+                  <div key={h} style={{fontSize:11,color:"#888",fontWeight:700,letterSpacing:1,textTransform:"uppercase",textAlign:align}}>{h}</div>
                 ))}
               </div>
-              {matches.map((m,i)=>(
-                <div key={i} style={{display:"grid",gridTemplateColumns:"3fr 1.2fr 0.7fr 1.2fr",gap:0,padding:"10px 16px",borderBottom:"1px solid #f0f2f7",alignItems:"center",background:i%2===0?"#ffffff":"#fafbfd"}}>
-                  <div style={{fontWeight:700,color:"#2c3250",fontSize:13}}>{m.patientName}</div>
-                  <div style={{fontSize:12,color:"#555"}}>{fmtDate(m.lastDate)}</div>
-                  <div style={{fontSize:12,color:"#888",textAlign:"center"}}>{m.count}</div>
-                  <div style={{fontSize:13,fontWeight:700,color:"#2ecc71",textAlign:"right"}}>{fmtAmt(m.totalAmount)}</div>
-                </div>
-              ))}
-              <div style={{display:"grid",gridTemplateColumns:"3fr 1.2fr 0.7fr 1.2fr",gap:0,padding:"10px 16px",background:"#f5f7fa",borderTop:"2px solid #e2e5ed"}}>
+              {matches.map((m,i)=>{
+                const ok = Math.abs(m.diff) < 0.01;
+                return (
+                  <div key={i} style={{display:"grid",gridTemplateColumns:"2.5fr 1.2fr 0.6fr 1.2fr 1.1fr",gap:0,padding:"10px 16px",borderBottom:"1px solid #f0f2f7",alignItems:"center",background:i%2===0?"#ffffff":"#fafbfd"}}>
+                    <div style={{fontWeight:700,color:"#2c3250",fontSize:13}}>{m.patientName}</div>
+                    <div style={{fontSize:12,color:"#555"}}>{fmtDateObj(m.lastDate)}</div>
+                    <div style={{fontSize:12,color:"#888",textAlign:"center"}}>{m.count}</div>
+                    <div style={{fontSize:13,fontWeight:700,color:"#2ecc71",textAlign:"right"}}>{fmtAmt(m.totalAmount)}</div>
+                    <div style={{textAlign:"center"}}>
+                      {ok
+                        ? <span style={{color:"#27ae60",fontWeight:700,fontSize:13}}>✓ OK</span>
+                        : <span style={{color:"#e74c3c",fontWeight:700,fontSize:12}}>{m.diff > 0 ? "+" : ""}{fmtAmt(m.diff)}</span>
+                      }
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{display:"grid",gridTemplateColumns:"2.5fr 1.2fr 0.6fr 1.2fr 1.1fr",gap:0,padding:"10px 16px",background:"#f5f7fa",borderTop:"2px solid #e2e5ed"}}>
                 <div style={{fontSize:12,fontWeight:700,color:"#2c3250",gridColumn:"1/4"}}>TOTAL</div>
                 <div style={{fontSize:14,fontWeight:700,color:"#2ecc71",textAlign:"right"}}>{fmtAmt(totalSum)}</div>
+                <div/>
               </div>
             </div>
           )}
@@ -1869,7 +1900,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
         )}
 
         {!dbLoading && view==="pagos" && (
-          <PagosExcelPanel patients={patients}/>
+          <PagosExcelPanel patients={patients} payments={payments}/>
         )}
 
         {!dbLoading && view==="clinica" && (
