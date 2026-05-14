@@ -1532,6 +1532,215 @@ function PagosExcelPanel({ patients, payments }) {
   );
 }
 
+// ─── CitasExcelPanel ──────────────────────────────────────────────────────────
+function CitasExcelPanel({ patients, onRefresh }) {
+  const [totalRows, setTotalRows] = useState(null);
+  const [groups,    setGroups]    = useState(null); // [{patientId, patientName, dates:[isoStr]}]
+  const [added,     setAdded]     = useState(new Set());
+  const [busy,      setBusy]      = useState(null); // "patientId|date" being saved
+  const fileRef = useRef();
+
+  const normalize = (s) =>
+    (s || "").toString().toLowerCase()
+      .normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9\s]/g, "").trim();
+
+  const namesMatch = (a, b) => {
+    const na = normalize(a), nb = normalize(b);
+    if (!na || !nb) return false;
+    if (na === nb) return true;
+    const wordsA = na.split(/\s+/).filter(w => w.length > 2);
+    const wordsB = nb.split(/\s+/).filter(w => w.length > 2);
+    const shared = wordsA.filter(w => wordsB.includes(w));
+    return shared.length >= 2 || (wordsA.length === 1 && shared.length === 1) || (wordsB.length === 1 && shared.length === 1);
+  };
+
+  const toIsoDate = (val) => {
+    if (!val) return null;
+    let d;
+    if (val instanceof Date && !isNaN(val)) d = val;
+    else if (typeof val === "string") { d = new Date(val); if (isNaN(d)) return null; }
+    else return null;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
+  const fmtIso = (iso) => {
+    if (!iso) return "—";
+    const [y, m, d] = iso.split("-");
+    return `${d}/${m}/${y}`;
+  };
+
+  const handleFile = (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    const todayIso = today();
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const wb = XLSX.read(ev.target.result, { type: "array", cellDates: true });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+      const parsed = [];
+      for (let i = 1; i < data.length; i++) {
+        const row  = data[i];
+        const dateIso = toIsoDate(row[3]);    // col D (index 3)
+        const name    = (row[7] || "").toString().trim(); // col H (index 7)
+        if (!name || !dateIso) continue;
+        if (dateIso > todayIso) continue;     // ignorar fechas futuras
+        parsed.push({ name, dateIso });
+      }
+      setTotalRows(parsed.length);
+
+      const groupMap = new Map();
+      for (const row of parsed) {
+        const match = patients.find(p => namesMatch(row.name, p.name));
+        if (!match) continue;
+        if (!groupMap.has(match.id)) {
+          groupMap.set(match.id, { patientId: match.id, patientName: match.name, dates: [] });
+        }
+        const entry = groupMap.get(match.id);
+        if (!entry.dates.includes(row.dateIso)) entry.dates.push(row.dateIso);
+      }
+
+      const grouped = Array.from(groupMap.values()).map(g => ({
+        ...g,
+        dates: [...g.dates].sort(),
+      })).sort((a, b) => a.patientName.localeCompare(b.patientName, "es"));
+
+      setGroups(grouped);
+      setAdded(new Set());
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = "";
+  };
+
+  const existsInSystem = (patientId, dateIso) => {
+    if (added.has(`${patientId}|${dateIso}`)) return true;
+    const p = patients.find(x => x.id === patientId);
+    return (p?.appointments || []).some(a => a.date === dateIso);
+  };
+
+  const addAppointment = async (patientId, dateIso) => {
+    const key = `${patientId}|${dateIso}`;
+    setBusy(key);
+    const p = patients.find(x => x.id === patientId);
+    if (p) {
+      const current = p.appointments || [];
+      const newAppt = { id: genId(), label: "", date: dateIso, time: "", doctors: "", payment: "", treatmentIds: [] };
+      await supabase.from("patients").update({ appointments: [...current, newAppt] }).eq("id", patientId);
+      setAdded(prev => new Set([...prev, key]));
+      onRefresh();
+    }
+    setBusy(null);
+  };
+
+  const print = () => {
+    const date = new Date().toLocaleDateString("es-ES");
+    const trs = groups.flatMap(g =>
+      g.dates.map(d => {
+        const inSys = existsInSystem(g.patientId, d);
+        return `<tr>
+          <td>${g.patientName}</td>
+          <td>${fmtIso(d)}</td>
+          <td>${inSys ? "✓ En sistema" : "—"}</td>
+        </tr>`;
+      })
+    ).join("");
+    const totalAppts = groups.reduce((s, g) => s + g.dates.length, 0);
+    const win = window.open("", "_blank");
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
+<title>Citas — ${date}</title>
+<style>
+  body{font-family:'Segoe UI',sans-serif;color:#111;padding:32px;font-size:13px;}
+  h1{font-size:18px;margin:0 0 4px;}
+  .sub{color:#666;font-size:12px;margin-bottom:24px;}
+  table{width:100%;border-collapse:collapse;}
+  th{text-align:left;font-size:11px;color:#666;text-transform:uppercase;letter-spacing:1px;padding:6px 8px;border-bottom:2px solid #ddd;}
+  td{padding:7px 8px;border-bottom:1px solid #eee;}
+  .ok{color:#27ae60;font-weight:700;}
+  @media print{body{padding:16px;}}
+</style></head><body>
+<h1>IMPLANTDENT — Citas importadas</h1>
+<div class="sub">Fecha: ${date} · ${groups.length} paciente(s) · ${totalAppts} cita(s)</div>
+<table>
+  <thead><tr><th>Paciente</th><th>Fecha cita</th><th>Estado</th></tr></thead>
+  <tbody>${trs}</tbody>
+</table>
+</body></html>`);
+    win.document.close();
+    setTimeout(() => win.print(), 600);
+  };
+
+  const totalAppts = groups ? groups.reduce((s, g) => s + g.dates.length, 0) : 0;
+
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
+        <div style={{fontSize:11,color:"#c9a84c",letterSpacing:2,fontWeight:700}}>📅 IMPORTAR CITAS EXCEL</div>
+        <div style={{flex:1}}/>
+        {groups && groups.length > 0 && (
+          <button onClick={print} style={{background:"#2c3250",border:"none",borderRadius:8,color:"#fff",padding:"6px 16px",cursor:"pointer",fontSize:12,fontWeight:600}}>
+            🖨 Imprimir
+          </button>
+        )}
+      </div>
+
+      <div style={{background:"#ffffff",border:"2px dashed #c9a84c44",borderRadius:12,padding:"28px 24px",marginBottom:20,textAlign:"center"}}>
+        <div style={{fontSize:13,color:"#555",marginBottom:14}}>
+          Seleccioná el archivo Excel con la lista de citas.<br/>
+          <span style={{fontSize:11,color:"#888"}}>Se leen: columna D (fecha), columna H (nombre) · Las citas futuras se ignoran</span>
+        </div>
+        <button onClick={()=>fileRef.current.click()}
+          style={{background:"linear-gradient(135deg,#c9a84c,#a07830)",border:"none",borderRadius:8,color:"#fff",padding:"10px 24px",cursor:"pointer",fontSize:13,fontWeight:700}}>
+          📅 Seleccionar Excel
+        </button>
+        <input ref={fileRef} type="file" accept=".xlsx,.xls,.ods" onChange={handleFile} style={{display:"none"}}/>
+      </div>
+
+      {groups !== null && (
+        <div>
+          <div style={{fontSize:12,color:"#555",marginBottom:12}}>
+            {totalRows} fila(s) leídas · <span style={{color:"#c9a84c",fontWeight:700}}>{groups.length} paciente(s)</span> identificados · {totalAppts} cita(s)
+          </div>
+
+          {groups.length === 0 && (
+            <div style={{textAlign:"center",color:"#888",padding:40,fontSize:13}}>No se encontraron coincidencias</div>
+          )}
+
+          {groups.map((g) => (
+            <div key={g.patientId} style={{background:"#ffffff",borderRadius:12,border:"1px solid #e2e5ed",marginBottom:12,overflow:"hidden"}}>
+              <div style={{display:"flex",alignItems:"center",padding:"10px 16px",background:"#f5f7fa",borderBottom:"1px solid #e2e5ed"}}>
+                <div style={{fontWeight:700,color:"#2c3250",fontSize:13}}>{g.patientName}</div>
+                <div style={{marginLeft:10,fontSize:11,color:"#888"}}>{g.dates.length} cita(s)</div>
+              </div>
+              {g.dates.map((dateIso) => {
+                const inSys = existsInSystem(g.patientId, dateIso);
+                const key = `${g.patientId}|${dateIso}`;
+                return (
+                  <div key={dateIso} style={{display:"flex",alignItems:"center",padding:"9px 16px",borderBottom:"1px solid #f0f2f7",gap:12}}>
+                    <div style={{fontSize:13,color:"#333",fontWeight:500,minWidth:90}}>{fmtIso(dateIso)}</div>
+                    <div style={{flex:1}}/>
+                    {inSys
+                      ? <span style={{fontSize:12,color:"#27ae60",fontWeight:700}}>✓ Ya existe</span>
+                      : <button
+                          onClick={() => addAppointment(g.patientId, dateIso)}
+                          disabled={busy === key}
+                          style={{background:"#2c3250",border:"none",borderRadius:6,color:"#fff",padding:"5px 14px",cursor:"pointer",fontSize:12,fontWeight:600,opacity:busy===key?0.6:1}}>
+                          {busy === key ? "..." : "+ Agregar"}
+                        </button>
+                    }
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [unlocked, setUnlocked] = useState(false);
@@ -1727,6 +1936,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
         <NavBtn id="dashboard" label="Pacientes"     badge={0}/>
         <NavBtn id="debts"     label="Deudas"       badge={pendingDebtPatients.length}/>
         <NavBtn id="pagos"     label="Cobros Excel"/>
+        <NavBtn id="citas"     label="Citas Excel"/>
         <NavBtn id="clinica"   label="Clínica"/>
         <NavBtn id="stats"     label="Estadísticas" badge={0}/>
 
@@ -1901,6 +2111,10 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
 
         {!dbLoading && view==="pagos" && (
           <PagosExcelPanel patients={patients} payments={payments}/>
+        )}
+
+        {!dbLoading && view==="citas" && (
+          <CitasExcelPanel patients={patients} onRefresh={fetchPatients}/>
         )}
 
         {!dbLoading && view==="clinica" && (
