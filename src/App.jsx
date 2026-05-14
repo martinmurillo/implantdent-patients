@@ -2105,80 +2105,106 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
 
       {/* ── Agenda semanal modal ──────────────────────────────────────────── */}
       {showWeekly && (
-        <div style={{position:"fixed",inset:0,zIndex:2000,background:"#f0f2f7",overflowY:"auto"}}>
+        <div style={{position:"fixed",inset:0,zIndex:2000,background:"#1e2230",display:"flex",flexDirection:"column"}}>
           {/* Header */}
-          <div style={{position:"sticky",top:0,zIndex:10,background:"#2c3250",padding:"14px 24px",
-            display:"flex",alignItems:"center",gap:16,boxShadow:"0 2px 12px #0006"}}>
+          <div style={{background:"#2c3250",padding:"12px 20px",display:"flex",alignItems:"center",gap:14,
+            boxShadow:"0 2px 10px #0006",flexShrink:0}}>
             <div style={{fontSize:13,color:"#c9a84c",fontWeight:700,letterSpacing:2}}>
-              📆 AGENDA SEMANAL — {weekDays[0].label} → {weekDays[6].label}
+              📆 AGENDA SEMANAL
+            </div>
+            <div style={{fontSize:12,color:"#aaa",marginLeft:4}}>
+              {weekDays[0].label.split(" ")[1]} → {weekDays[6].label.split(" ")[1]}
             </div>
             <div style={{flex:1}}/>
             <button onClick={printWeekly}
-              style={{background:"#c9a84c",border:"none",borderRadius:8,color:"#fff",padding:"7px 18px",
-                cursor:"pointer",fontSize:13,fontWeight:700}}>
+              style={{background:"#c9a84c",border:"none",borderRadius:8,color:"#fff",padding:"6px 16px",
+                cursor:"pointer",fontSize:12,fontWeight:700}}>
               🖨 Imprimir
             </button>
             <button onClick={()=>setShowWeekly(false)}
-              style={{background:"#ffffff22",border:"none",borderRadius:8,color:"#fff",padding:"7px 14px",
-                cursor:"pointer",fontSize:13,fontWeight:700}}>
+              style={{background:"#ffffff22",border:"none",borderRadius:8,color:"#fff",padding:"6px 12px",
+                cursor:"pointer",fontSize:12,fontWeight:700}}>
               ✕ Cerrar
             </button>
           </div>
 
-          {/* Días */}
-          <div style={{padding:"24px",maxWidth:860,margin:"0 auto"}}>
-            {weekAppts.map(({iso, label, appts})=>(
-              <div key={iso} style={{marginBottom:20}}>
-                <div style={{fontSize:11,fontWeight:700,color: iso===todayStr?"#c9a84c":"#2c3250",
-                  letterSpacing:2,textTransform:"uppercase",marginBottom:8,
-                  display:"flex",alignItems:"center",gap:8}}>
-                  {label}
-                  {iso===todayStr && <span style={{background:"#c9a84c",color:"#fff",fontSize:10,padding:"2px 7px",borderRadius:10}}>HOY</span>}
-                </div>
-
-                {appts.length === 0
-                  ? <div style={{background:"#ffffff",borderRadius:10,padding:"12px 16px",color:"#bbb",fontSize:13}}>Sin citas</div>
-                  : <div style={{background:"#ffffff",borderRadius:10,border:"1px solid #e2e5ed",overflow:"hidden"}}>
-                      {appts.map(({patient:pat, appt},i)=>{
-                        const grand = patientGrand(pat);
-                        const paid  = payments.filter(pay=>pay.patient_id===pat.id).reduce((s,pay)=>s+(parseFloat(pay.amount)||0),0);
-                        const debt  = parseFloat((grand-paid).toFixed(2));
-                        let payBadge = null;
-                        if (grand>0) {
-                          if (paid===0)     payBadge={text:`${fmtEur(grand)} (a pagar)`,color:"#e67e22"};
-                          else if (debt<=0) payBadge={text:"Pagado",color:"#27ae60"};
-                          else              payBadge={text:`Deuda: ${fmtEur(debt)}`,color:"#e74c3c"};
-                        }
-                        return (
-                          <div key={appt.id}
-                            onClick={()=>{ openEdit(pat); setShowWeekly(false); }}
-                            style={{display:"flex",alignItems:"center",gap:14,padding:"12px 16px",
-                              borderBottom:i<appts.length-1?"1px solid #f0f2f7":"none",
-                              cursor:"pointer",transition:"background 0.12s"}}
-                            onMouseEnter={e=>e.currentTarget.style.background="#f5f7fa"}
-                            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                            <div style={{fontSize:13,color:"#888",minWidth:48,fontWeight:500}}>
-                              {appt.time||"—"}
-                            </div>
-                            <div style={{flex:1}}>
-                              <div style={{fontWeight:700,color:"#2c3250",fontSize:14}}>{pat.name||"Sin nombre"}</div>
-                              <div style={{fontSize:12,color:"#888",marginTop:2}}>
-                                HC: {pat.hc||"—"}{appt.label?` · ${appt.label}`:""}{appt.doctors?` · ${appt.doctors}`:""}
-                              </div>
-                            </div>
-                            {payBadge && (
-                              <div style={{fontSize:12,fontWeight:700,color:payBadge.color,textAlign:"right",whiteSpace:"nowrap"}}>
-                                {payBadge.text}
-                              </div>
-                            )}
-                            <span style={{color:"#c9a84c",fontSize:18}}>›</span>
-                          </div>
-                        );
-                      })}
+          {/* Almanaque grid */}
+          <div style={{flex:1,overflowY:"auto",padding:"16px",display:"grid",
+            gridTemplateColumns:"repeat(7,1fr)",gap:10,alignContent:"start"}}>
+            {weekAppts.map(({iso, label, appts}, idx)=>{
+              const isToday = iso === todayStr;
+              const [dayNameFull, dayDate] = label.split(" ");
+              const dayShort = dayNameFull.slice(0,3).toUpperCase();
+              return (
+                <div key={iso} style={{display:"flex",flexDirection:"column",minHeight:160,
+                  borderRadius:12,overflow:"hidden",
+                  border: isToday ? "2px solid #c9a84c" : "1px solid #ffffff18",
+                  boxShadow: isToday ? "0 0 0 1px #c9a84c33" : "none"}}>
+                  {/* Cabecera del día */}
+                  <div style={{background: isToday ? "#c9a84c" : "#2c3250",
+                    padding:"10px 8px",textAlign:"center",flexShrink:0}}>
+                    <div style={{fontSize:10,fontWeight:700,letterSpacing:2,
+                      color: isToday ? "#fff" : "#8899bb",textTransform:"uppercase"}}>
+                      {dayShort}
                     </div>
-                }
-              </div>
-            ))}
+                    <div style={{fontSize:24,fontWeight:900,lineHeight:1.1,
+                      color: isToday ? "#fff" : "#ffffff",marginTop:2}}>
+                      {dayDate?.split("/")[0]}
+                    </div>
+                    {appts.length > 0 && (
+                      <div style={{fontSize:10,color: isToday?"#fff8":"#c9a84c",marginTop:3,fontWeight:600}}>
+                        {appts.length} cita{appts.length>1?"s":""}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Citas del día */}
+                  <div style={{flex:1,background:"#252d45",padding:"6px 0",overflowY:"auto"}}>
+                    {appts.length === 0
+                      ? <div style={{padding:"12px 8px",color:"#ffffff22",fontSize:11,textAlign:"center"}}>—</div>
+                      : appts.map(({patient:pat, appt})=>{
+                          const grand = patientGrand(pat);
+                          const paid  = payments.filter(pay=>pay.patient_id===pat.id).reduce((s,pay)=>s+(parseFloat(pay.amount)||0),0);
+                          const debt  = parseFloat((grand-paid).toFixed(2));
+                          let badgeColor = null;
+                          if (grand>0) {
+                            if (paid===0)     badgeColor="#e67e22";
+                            else if (debt<=0) badgeColor="#27ae60";
+                            else              badgeColor="#e74c3c";
+                          }
+                          return (
+                            <div key={appt.id}
+                              onClick={()=>{ openEdit(pat); setShowWeekly(false); }}
+                              style={{margin:"4px 6px",borderRadius:8,padding:"7px 8px",cursor:"pointer",
+                                background:"#2c3250",borderLeft:`3px solid ${badgeColor||"#445"}`,
+                                transition:"background 0.12s"}}
+                              onMouseEnter={e=>e.currentTarget.style.background="#364060"}
+                              onMouseLeave={e=>e.currentTarget.style.background="#2c3250"}>
+                              {appt.time && (
+                                <div style={{fontSize:10,color:"#c9a84c",fontWeight:700,marginBottom:2}}>
+                                  {appt.time}
+                                </div>
+                              )}
+                              <div style={{fontSize:11,fontWeight:700,color:"#fff",lineHeight:1.3,
+                                whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                                {pat.name||"Sin nombre"}
+                              </div>
+                              <div style={{fontSize:10,color:"#8899bb",marginTop:1}}>
+                                HC {pat.hc||"—"}
+                              </div>
+                              {badgeColor && (
+                                <div style={{fontSize:10,fontWeight:700,color:badgeColor,marginTop:3}}>
+                                  {paid===0 ? `${fmtEur(grand)} a pagar` : debt<=0 ? "Pagado" : `Deuda ${fmtEur(debt)}`}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
+                    }
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
