@@ -1768,6 +1768,7 @@ export default function App() {
   const [filter,     setFilter]    = useState("");
   const [dbLoading,  setDbLoad]    = useState(true);
   const [showAlerts, setShowAlerts] = useState(false);
+  const [showWeekly, setShowWeekly] = useState(false);
 
   const fetchPatients  = async () => { const {data}=await supabase.from("patients").select("*").order("created_at",{ascending:false}); setPatients(data||[]); };
   const fetchDoctors   = async () => { const {data}=await supabase.from("doctors").select("*").order("name"); setDoctors(data||[]); };
@@ -1862,6 +1863,81 @@ export default function App() {
   });
   todayAppts.sort((a,b) => (a.appt.time||"").localeCompare(b.appt.time||""));
 
+  const DIAS_ES = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
+  const weekDays = (() => {
+    const d = new Date();
+    const dow = d.getDay(); // 0=Sun
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
+    monday.setHours(0,0,0,0);
+    return Array.from({length:7}, (_,i) => {
+      const day = new Date(monday);
+      day.setDate(monday.getDate() + i);
+      const y = day.getFullYear(), m = String(day.getMonth()+1).padStart(2,"0"), dd = String(day.getDate()).padStart(2,"0");
+      return { iso:`${y}-${m}-${dd}`, label:`${DIAS_ES[day.getDay()]} ${dd}/${m}` };
+    });
+  })();
+
+  const weekAppts = weekDays.map(({iso, label}) => {
+    const appts = [];
+    patients.forEach(p => {
+      (p.appointments||[]).forEach(appt => {
+        if (appt.date === iso) appts.push({ patient:p, appt });
+      });
+    });
+    appts.sort((a,b)=>(a.appt.time||"").localeCompare(b.appt.time||""));
+    return { iso, label, appts };
+  });
+
+  const printWeekly = () => {
+    const [from, to] = [weekDays[0].label, weekDays[6].label];
+    const sections = weekAppts.map(({label, appts}) => {
+      if (appts.length === 0) return `<tr><td colspan="5" class="dayhead">${label}</td></tr><tr><td colspan="5" class="empty">Sin citas</td></tr>`;
+      const rows = appts.map(({patient:pat, appt}) => {
+        const grand = patientGrand(pat);
+        const paid  = payments.filter(pay=>pay.patient_id===pat.id).reduce((s,pay)=>s+(parseFloat(pay.amount)||0),0);
+        const debt  = parseFloat((grand-paid).toFixed(2));
+        let estado = "";
+        if (grand > 0) {
+          if (paid===0)     estado = `<span style="color:#e67e22">${fmtEur(grand)} (a pagar)</span>`;
+          else if (debt<=0) estado = `<span style="color:#27ae60">Pagado</span>`;
+          else              estado = `<span style="color:#e74c3c">Deuda: ${fmtEur(debt)}</span>`;
+        }
+        return `<tr>
+          <td class="dayhead" style="background:#f9f9f9;font-size:11px;color:#666;font-weight:400">${label}</td>
+          <td>${appt.time||"—"}</td>
+          <td><strong>${pat.name||"Sin nombre"}</strong></td>
+          <td>${pat.hc||"—"}</td>
+          <td>${estado}</td>
+        </tr>`;
+      }).join("");
+      return rows;
+    }).join("");
+    const win = window.open("","_blank");
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
+<title>Agenda semanal</title>
+<style>
+  body{font-family:'Segoe UI',sans-serif;font-size:13px;color:#111;padding:24px;}
+  h1{font-size:17px;margin:0 0 4px;}
+  .sub{color:#666;font-size:12px;margin-bottom:20px;}
+  table{width:100%;border-collapse:collapse;}
+  th{text-align:left;font-size:11px;color:#666;text-transform:uppercase;letter-spacing:1px;padding:6px 8px;border-bottom:2px solid #ddd;}
+  td{padding:7px 8px;border-bottom:1px solid #eee;vertical-align:middle;}
+  .dayhead{font-weight:700;color:#2c3250;background:#f0f2f7;}
+  .empty{color:#aaa;font-style:italic;padding:6px 8px;}
+  @media print{body{padding:12px;}}
+</style></head><body>
+<h1>IMPLANTDENT — Agenda semanal</h1>
+<div class="sub">${from} → ${to}</div>
+<table>
+  <thead><tr><th>Día</th><th>Hora</th><th>Paciente</th><th>HC</th><th>Estado pago</th></tr></thead>
+  <tbody>${sections}</tbody>
+</table>
+</body></html>`);
+    win.document.close();
+    setTimeout(()=>win.print(),600);
+  };
+
   const pendingDebtPatients = patients.filter(p=>{
     const hasPayments = payments.some(pay=>pay.patient_id===p.id);
     if (!hasPayments) return false;
@@ -1952,6 +2028,12 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
         <NavBtn id="clinica"   label="Clínica"/>
         <NavBtn id="stats"     label="Estadísticas" badge={0}/>
 
+        {/* ── Agenda semanal ────────────────────────────────────────── */}
+        <button onClick={()=>setShowWeekly(true)}
+          style={{background:"none",border:"none",cursor:"pointer",fontSize:20,lineHeight:1,padding:"4px 6px",color:"#444"}}>
+          📆
+        </button>
+
         {/* ── Campanita ─────────────────────────────────────────────── */}
         <div style={{position:"relative"}}>
           <button onClick={()=>setShowAlerts(v=>!v)}
@@ -2021,6 +2103,86 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
 
         <button onClick={newPt} style={s.btnGold}>+ Nuevo paciente</button>
       </div>
+
+      {/* ── Agenda semanal modal ──────────────────────────────────────────── */}
+      {showWeekly && (
+        <div style={{position:"fixed",inset:0,zIndex:2000,background:"#f0f2f7",overflowY:"auto"}}>
+          {/* Header */}
+          <div style={{position:"sticky",top:0,zIndex:10,background:"#2c3250",padding:"14px 24px",
+            display:"flex",alignItems:"center",gap:16,boxShadow:"0 2px 12px #0006"}}>
+            <div style={{fontSize:13,color:"#c9a84c",fontWeight:700,letterSpacing:2}}>
+              📆 AGENDA SEMANAL — {weekDays[0].label} → {weekDays[6].label}
+            </div>
+            <div style={{flex:1}}/>
+            <button onClick={printWeekly}
+              style={{background:"#c9a84c",border:"none",borderRadius:8,color:"#fff",padding:"7px 18px",
+                cursor:"pointer",fontSize:13,fontWeight:700}}>
+              🖨 Imprimir
+            </button>
+            <button onClick={()=>setShowWeekly(false)}
+              style={{background:"#ffffff22",border:"none",borderRadius:8,color:"#fff",padding:"7px 14px",
+                cursor:"pointer",fontSize:13,fontWeight:700}}>
+              ✕ Cerrar
+            </button>
+          </div>
+
+          {/* Días */}
+          <div style={{padding:"24px",maxWidth:860,margin:"0 auto"}}>
+            {weekAppts.map(({iso, label, appts})=>(
+              <div key={iso} style={{marginBottom:20}}>
+                <div style={{fontSize:11,fontWeight:700,color: iso===todayStr?"#c9a84c":"#2c3250",
+                  letterSpacing:2,textTransform:"uppercase",marginBottom:8,
+                  display:"flex",alignItems:"center",gap:8}}>
+                  {label}
+                  {iso===todayStr && <span style={{background:"#c9a84c",color:"#fff",fontSize:10,padding:"2px 7px",borderRadius:10}}>HOY</span>}
+                </div>
+
+                {appts.length === 0
+                  ? <div style={{background:"#ffffff",borderRadius:10,padding:"12px 16px",color:"#bbb",fontSize:13}}>Sin citas</div>
+                  : <div style={{background:"#ffffff",borderRadius:10,border:"1px solid #e2e5ed",overflow:"hidden"}}>
+                      {appts.map(({patient:pat, appt},i)=>{
+                        const grand = patientGrand(pat);
+                        const paid  = payments.filter(pay=>pay.patient_id===pat.id).reduce((s,pay)=>s+(parseFloat(pay.amount)||0),0);
+                        const debt  = parseFloat((grand-paid).toFixed(2));
+                        let payBadge = null;
+                        if (grand>0) {
+                          if (paid===0)     payBadge={text:`${fmtEur(grand)} (a pagar)`,color:"#e67e22"};
+                          else if (debt<=0) payBadge={text:"Pagado",color:"#27ae60"};
+                          else              payBadge={text:`Deuda: ${fmtEur(debt)}`,color:"#e74c3c"};
+                        }
+                        return (
+                          <div key={appt.id}
+                            onClick={()=>{ openEdit(pat); setShowWeekly(false); }}
+                            style={{display:"flex",alignItems:"center",gap:14,padding:"12px 16px",
+                              borderBottom:i<appts.length-1?"1px solid #f0f2f7":"none",
+                              cursor:"pointer",transition:"background 0.12s"}}
+                            onMouseEnter={e=>e.currentTarget.style.background="#f5f7fa"}
+                            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                            <div style={{fontSize:13,color:"#888",minWidth:48,fontWeight:500}}>
+                              {appt.time||"—"}
+                            </div>
+                            <div style={{flex:1}}>
+                              <div style={{fontWeight:700,color:"#2c3250",fontSize:14}}>{pat.name||"Sin nombre"}</div>
+                              <div style={{fontSize:12,color:"#888",marginTop:2}}>
+                                HC: {pat.hc||"—"}{appt.label?` · ${appt.label}`:""}{appt.doctors?` · ${appt.doctors}`:""}
+                              </div>
+                            </div>
+                            {payBadge && (
+                              <div style={{fontSize:12,fontWeight:700,color:payBadge.color,textAlign:"right",whiteSpace:"nowrap"}}>
+                                {payBadge.text}
+                              </div>
+                            )}
+                            <span style={{color:"#c9a84c",fontSize:18}}>›</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                }
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div style={{padding:"26px 28px",maxWidth:980,margin:"0 auto"}}>
         {dbLoading && <div style={{textAlign:"center",color:"#444",padding:60,fontSize:14}}>Cargando...</div>}
