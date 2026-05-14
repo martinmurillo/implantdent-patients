@@ -1980,7 +1980,17 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
                 </div>
                 {todayAppts.length === 0
                   ? <div style={{padding:24,color:"#555",textAlign:"center",fontSize:13}}>Sin citas para hoy</div>
-                  : todayAppts.map(({patient:pat, appt}) => (
+                  : todayAppts.map(({patient:pat, appt}) => {
+                      const grand   = patientGrand(pat);
+                      const paid    = payments.filter(pay=>pay.patient_id===pat.id).reduce((s,pay)=>s+(parseFloat(pay.amount)||0),0);
+                      const debt    = parseFloat((grand - paid).toFixed(2));
+                      let payBadge = null;
+                      if (grand > 0) {
+                        if (paid === 0)       payBadge = { text: `${fmtEur(grand)} (a pagar)`, color:"#e67e22" };
+                        else if (debt <= 0)   payBadge = { text: "Pagado", color:"#27ae60" };
+                        else                  payBadge = { text: `Deuda: ${fmtEur(debt)}`, color:"#e74c3c" };
+                      }
+                      return (
                       <div key={appt.id}
                         onClick={()=>{ openEdit(pat); setShowAlerts(false); }}
                         style={{padding:"12px 18px",borderBottom:"1px solid #e2e5ed",cursor:"pointer",
@@ -1993,10 +2003,16 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
                             {appt.time ? `${appt.time} · ` : ""}{appt.label||"Cita"}
                             {appt.doctors ? ` · ${appt.doctors}` : ""}
                           </div>
+                          {payBadge && (
+                            <div style={{fontSize:11,fontWeight:700,color:payBadge.color,marginTop:3}}>
+                              {payBadge.text}
+                            </div>
+                          )}
                         </div>
                         <span style={{color:"#c9a84c",fontSize:20}}>›</span>
                       </div>
-                    ))
+                      );
+                    })
                 }
               </div>
             </>
