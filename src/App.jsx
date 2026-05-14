@@ -755,9 +755,12 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
   const rangePayments = payments.filter(pay => inRange(pay.date));
   const totalPaid     = rangePayments.reduce((a,p) => a + (parseFloat(p.amount)||0), 0);
 
-  // Implantes y ortodoncia: TODOS los items, sin filtro de fecha
+  // Implantes y ortodoncia: realizados solo en el rango, pendientes siempre
   const implantRx    = /implant/i;
-  const implantItems = items.filter(i => implantRx.test(i.treatment_name || ""));
+  const implantItems = items.filter(i => {
+    if (!implantRx.test(i.treatment_name || "")) return false;
+    return i.realized_date ? inRange(i.realized_date) : true;
+  });
   let implantTotal   = 0;
   implantItems.forEach(item => {
     if (!item.realized_date) return;
@@ -766,7 +769,10 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
   });
 
   const orthoRx    = /ortodoncia|orthodontic|invisalign|invisaling|invisible\s|ortod/i;
-  const orthoItems = items.filter(i => orthoRx.test(i.treatment_name || ""));
+  const orthoItems = items.filter(i => {
+    if (!orthoRx.test(i.treatment_name || "")) return false;
+    return i.realized_date ? inRange(i.realized_date) : true;
+  });
   const orthoTotal = orthoItems.filter(i => i.realized_date).length;
 
   const findPatient = (id) => patients.find(p => p.id === id);
