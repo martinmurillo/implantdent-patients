@@ -2007,7 +2007,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
 
   const NavBtn = ({id,label,badge}) => (
     <button onClick={()=>setView(id)}
-      style={{background:"none",border:"none",color:view===id?"#c9a84c":"#666",cursor:"pointer",fontSize:13,fontWeight:view===id?700:400,borderBottom:view===id?"2px solid #c9a84c":"2px solid transparent",padding:"0 4px",height:60,display:"flex",alignItems:"center"}}>
+      style={{background:"none",border:"none",color:view===id?"#c9a84c":"#666",cursor:"pointer",fontSize:13,fontWeight:view===id?700:400,borderBottom:view===id?"2px solid #c9a84c":"2px solid transparent",padding:"0 10px",height:60,display:"flex",alignItems:"center"}}>
       {label}
       {badge>0 && <span style={{background:"#e74c3c",color:"#fff",borderRadius:"50%",width:18,height:18,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,marginLeft:5}}>{badge}</span>}
     </button>
@@ -2017,14 +2017,13 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
 
   return (
     <div style={{minHeight:"100vh",background:"#f0f2f7",color:"#2c3250",fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
-      <div style={{background:"#ffffff",borderBottom:"1px solid #e2e5ed",padding:"0 28px",display:"flex",alignItems:"center",gap:28,height:60}}>
-        <span style={{fontWeight:900,fontSize:15,letterSpacing:3,color:"#c9a84c"}}>IMPLANTDENT</span>
-        <span style={{fontSize:10,color:"#3a3a4a",letterSpacing:2}}>GESTIÓN DE PACIENTES</span>
+      <div style={{background:"#ffffff",borderBottom:"1px solid #e2e5ed",padding:"0 16px",display:"flex",alignItems:"center",gap:4,height:60}}>
+        <span style={{fontWeight:900,fontSize:15,letterSpacing:3,color:"#c9a84c",marginRight:8}}>IMPLANTDENT</span>
         <div style={{flex:1}}/>
-        <NavBtn id="dashboard" label="Pacientes"     badge={0}/>
-        <NavBtn id="debts"     label="Deudas"       badge={pendingDebtPatients.length}/>
-        <NavBtn id="pagos"     label="Cobros Excel"/>
-        <NavBtn id="citas"     label="Citas Excel"/>
+        <NavBtn id="dashboard" label="Pacientes"  badge={0}/>
+        <NavBtn id="debts"     label="Deudas"     badge={pendingDebtPatients.length}/>
+        <NavBtn id="pagos"     label="Cobros"/>
+        <NavBtn id="citas"     label="Citas"/>
         <NavBtn id="clinica"   label="Clínica"/>
         <NavBtn id="stats"     label="Estadísticas" badge={0}/>
 
