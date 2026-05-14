@@ -1558,9 +1558,21 @@ function CitasExcelPanel({ patients, onRefresh }) {
   const toIsoDate = (val) => {
     if (!val) return null;
     let d;
-    if (val instanceof Date && !isNaN(val)) d = val;
-    else if (typeof val === "string") { d = new Date(val); if (isNaN(d)) return null; }
-    else return null;
+    if (val instanceof Date && !isNaN(val)) {
+      d = val;
+    } else if (typeof val === "number") {
+      // Excel serial date fallback
+      d = new Date(Math.round((val - 25569) * 86400 * 1000));
+    } else if (typeof val === "string") {
+      const s = val.trim();
+      // DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
+      const dmy = s.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+      if (dmy) d = new Date(`${dmy[3]}-${dmy[2].padStart(2,"0")}-${dmy[1].padStart(2,"0")}`);
+      else d = new Date(s);
+      if (isNaN(d)) return null;
+    } else {
+      return null;
+    }
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, "0");
     const day = String(d.getDate()).padStart(2, "0");
