@@ -1587,7 +1587,7 @@ function CitasExcelPanel({ patients, onRefresh }) {
         const dateIso = toIsoDate(row[3]);    // col D (index 3)
         const name    = (row[7] || "").toString().trim(); // col H (index 7)
         if (!name || !dateIso) continue;
-        if (dateIso > todayIso) continue;     // ignorar fechas futuras
+        if (dateIso < todayIso) continue;     // ignorar fechas pasadas
         parsed.push({ name, dateIso });
       }
       setTotalRows(parsed.length);
@@ -1689,7 +1689,7 @@ function CitasExcelPanel({ patients, onRefresh }) {
       <div style={{background:"#ffffff",border:"2px dashed #c9a84c44",borderRadius:12,padding:"28px 24px",marginBottom:20,textAlign:"center"}}>
         <div style={{fontSize:13,color:"#555",marginBottom:14}}>
           Seleccioná el archivo Excel con la lista de citas.<br/>
-          <span style={{fontSize:11,color:"#888"}}>Se leen: columna D (fecha), columna H (nombre) · Las citas futuras se ignoran</span>
+          <span style={{fontSize:11,color:"#888"}}>Se leen: columna D (fecha), columna H (nombre) · Solo se muestran citas desde hoy en adelante</span>
         </div>
         <button onClick={()=>fileRef.current.click()}
           style={{background:"linear-gradient(135deg,#c9a84c,#a07830)",border:"none",borderRadius:8,color:"#fff",padding:"10px 24px",cursor:"pointer",fontSize:13,fontWeight:700}}>
