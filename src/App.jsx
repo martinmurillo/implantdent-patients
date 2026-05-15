@@ -1155,7 +1155,7 @@ h1{font-size:20px;margin:0 0 4px;}
 }
 
 // ─── EstadisticasPanel ───────────────────────────────────────────────────────
-function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefreshItems, onSync }) {
+function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefreshItems, onSync, onEnsureArchived, archivedLoaded }) {
   const now = new Date();
   const y = now.getFullYear(), mo = now.getMonth();
   const [from,         setFrom]   = useState(`${y}-${String(mo+1).padStart(2,"0")}-01`);
@@ -1180,6 +1180,7 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
   useEffect(() => {
     setSyncing(true);
     onSync().finally(() => setSyncing(false));
+    if (onEnsureArchived) onEnsureArchived();
   }, []);
 
   const inRange = (d) => {
@@ -2280,15 +2281,20 @@ export default function App() {
   const view = viewHistory[viewHistory.length - 1];
   const navigate = (id) => setViewHistory(prev => prev[prev.length-1]===id ? prev : [...prev, id]);
   const goBack   = ()   => setViewHistory(prev => prev.length>1 ? prev.slice(0,-1) : prev);
-  const [statusTab, setStatusTab] = useState("pendiente");
-  const [editing,    setEditing]   = useState(null);
-  const [filter,     setFilter]    = useState("");
-  const [dbLoading,  setDbLoad]    = useState(true);
+  const [statusTab,        setStatusTab]       = useState("pendiente");
+  const [editing,          setEditing]         = useState(null);
+  const [filter,           setFilter]          = useState("");
+  const [dbLoading,        setDbLoad]          = useState(true);
+  const [archivedPatients, setArchivedPatients] = useState([]);
+  const [archivedLoaded,   setArchivedLoaded]   = useState(false);
+  const [archivedLoading,  setArchivedLoading]  = useState(false);
   const [showAlerts, setShowAlerts] = useState(false);
   const [showWeekly, setShowWeekly] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0);
 
-  const fetchPatients  = async () => { const {data}=await supabase.from("patients").select("*").order("created_at",{ascending:false}); setPatients(data||[]); };
+  const fetchPatients  = async () => { const {data}=await supabase.from("patients").select("*").neq("status","frío").neq("status","cerrado sin deuda").order("created_at",{ascending:false}); setPatients(data||[]); };
+  const fetchArchived  = async () => { const {data}=await supabase.from("patients").select("*").in("status",["frío","cerrado sin deuda"]).order("created_at",{ascending:false}); setArchivedPatients(data||[]); setArchivedLoaded(true); setArchivedLoading(false); };
+  const ensureArchived = () => { if (!archivedLoaded && !archivedLoading) { setArchivedLoading(true); fetchArchived(); } };
   const fetchDoctors   = async () => { const {data}=await supabase.from("doctors").select("*").order("name"); setDoctors(data||[]); };
   const fetchItems     = async () => { const {data}=await supabase.from("treatment_items").select("*").order("created_at",{ascending:false}); setItems(data||[]); };
   const fetchTemplates    = async () => { const {data}=await supabase.from("treatment_templates").select("*").order("keyword"); setTemplates(data||[]); };
@@ -2332,10 +2338,12 @@ export default function App() {
       appointments:p.appointments||[], notes:p.notes,
       status:p.status||"pendiente", last_contact:p.last_contact||today(), closed:isCerrado(p.status),
     };
-    const isNew = !patients.some(x=>x.id===p.id);
+    const isNew = ![...patients, ...archivedPatients].some(x=>x.id===p.id);
     if (isNew) await supabase.from("patients").insert([payload]);
     else       await supabase.from("patients").update(payload).eq("id",p.id);
-    await fetchPatients(); goBack(); setEditing(null);
+    await fetchPatients();
+    if (archivedLoaded) await fetchArchived();
+    goBack(); setEditing(null);
   };
 
   const setPatientStatus = async (patient, newStatus) => {
@@ -2347,6 +2355,7 @@ export default function App() {
       await fetchItems();
     }
     await fetchPatients();
+    if (archivedLoaded) await fetchArchived();
   };
 
   const syncAllItems = async () => {
@@ -2365,12 +2374,14 @@ export default function App() {
     ]);
     await supabase.from("patients").delete().eq("id", patient.id);
     await Promise.all([fetchPatients(), fetchItems(), fetchPayments()]);
+    if (archivedLoaded) await fetchArchived();
   };
 
   const openEdit = (p) => { setEditing(p); navigate("form"); };
   const newPt    = ()  => { setEditing(emptyPatient()); navigate("form"); };
 
   const recent = patients;
+  const allPatients = [...patients, ...archivedPatients];
 
   const todayStr = today();
   const todayAppts = [];
@@ -2398,7 +2409,7 @@ export default function App() {
 
   const weekAppts = weekDays.map(({iso, label}) => {
     const appts = [];
-    patients.forEach(p => {
+    allPatients.forEach(p => {
       (p.appointments||[]).forEach(appt => {
         if (appt.date === iso) appts.push({ patient:p, appt });
       });
@@ -2516,7 +2527,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
   const isSearching = filter.trim() !== "";
 
   const filtered = isSearching
-    ? patients.filter(p =>
+    ? allPatients.filter(p =>
         (p.name||"").toLowerCase().includes(filter.toLowerCase()) ||
         (p.budget_no||"").includes(filter) ||
         (p.hc||"").includes(filter)
@@ -2767,11 +2778,11 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
           <>
             {(() => {
               const tabs = [
-                { id:"frío",               label:"Fríos",            color:"#7f8c8d", list: recent.filter(p=>getStatus(p)==="frío")               },
-                { id:"pendiente",          label:"Pendientes",      color:"#c9a84c", list: recent.filter(p=>getStatus(p)==="pendiente")          },
-                { id:"en curso",           label:"En curso",         color:"#3498db", list: recent.filter(p=>getStatus(p)==="en curso")           },
-                { id:"cerrado con deuda",  label:"Cerrados c/ deuda",color:"#e67e22", list: recent.filter(p=>getStatus(p)==="cerrado con deuda")  },
-                { id:"cerrado sin deuda",  label:"Cerrados sin deuda",color:"#2ecc71",list: recent.filter(p=>getStatus(p)==="cerrado sin deuda")  },
+                { id:"frío",               label:"Fríos",             color:"#7f8c8d", list: archivedPatients.filter(p=>getStatus(p)==="frío"),              archived:true },
+                { id:"pendiente",          label:"Pendientes",        color:"#c9a84c", list: recent.filter(p=>getStatus(p)==="pendiente")                              },
+                { id:"en curso",           label:"En curso",          color:"#3498db", list: recent.filter(p=>getStatus(p)==="en curso")                               },
+                { id:"cerrado con deuda",  label:"Cerrados c/ deuda", color:"#e67e22", list: recent.filter(p=>getStatus(p)==="cerrado con deuda")                      },
+                { id:"cerrado sin deuda",  label:"Cerrados sin deuda",color:"#2ecc71", list: archivedPatients.filter(p=>getStatus(p)==="cerrado sin deuda"), archived:true },
               ];
               const activeTab = tabs.find(t=>t.id===statusTab) || tabs[0];
               const tabList   = isSearching ? filtered : activeTab.list;
@@ -2782,14 +2793,16 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
                     {tabs.map(tab => {
                       const active = !isSearching && statusTab === tab.id;
                       return (
-                        <div key={tab.id} onClick={()=>{setStatusTab(tab.id);setFilter("");}}
+                        <div key={tab.id} onClick={()=>{setStatusTab(tab.id);setFilter("");if(tab.archived)ensureArchived();}}
                           style={{background: active ? tab.color+"1a":"#f5f7fa", borderRadius:10, padding:"14px 18px",
                             borderTop:`3px solid ${tab.color}`,
                             border: active ? `1px solid ${tab.color}55`:"1px solid #e2e5ed",
                             cursor:"pointer", transition:"all 0.15s"}}
                           onMouseEnter={e=>{ if(!active) e.currentTarget.style.background="#e2e5ed"; }}
                           onMouseLeave={e=>{ if(!active) e.currentTarget.style.background="#f5f7fa"; }}>
-                          <div style={{fontSize:28,fontWeight:800,color:tab.color,lineHeight:1}}>{tab.list.length}</div>
+                          <div style={{fontSize:28,fontWeight:800,color:tab.color,lineHeight:1}}>
+                            {tab.archived && !archivedLoaded ? "…" : tab.list.length}
+                          </div>
                           <div style={{fontSize:12,color: active?tab.color:"#555",marginTop:4,fontWeight:active?700:400}}>{tab.label}</div>
                         </div>
                       );
@@ -2876,7 +2889,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
         )}
 
         {!dbLoading && view==="stats" && (
-          <EstadisticasPanel payments={payments} items={items} patients={patients} onOpenPatient={openEdit} onRefreshItems={fetchItems} onSync={syncAllItems}/>
+          <EstadisticasPanel payments={payments} items={items} patients={allPatients} onOpenPatient={openEdit} onRefreshItems={fetchItems} onSync={syncAllItems} onEnsureArchived={ensureArchived} archivedLoaded={archivedLoaded}/>
         )}
       </div>
     </div>
