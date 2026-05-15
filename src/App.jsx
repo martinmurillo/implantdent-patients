@@ -747,44 +747,60 @@ function ProgresoPanel({ payments, items, patients, onClose }) {
     const implantRealized = Array(12).fill(0);
     const implantPending  = Array(12).fill(0);
 
+    // Facturación: pagos reales agrupados por mes
     payments.forEach(pay => {
       const d = pay.date; if (!d) return;
       const y = parseInt(d.slice(0,4)), m = parseInt(d.slice(5,7));
       if (y === year) paid[m-1] += parseFloat(pay.amount)||0;
     });
 
-    patients.forEach(pat => {
-      const d = pat.date; if (!d) return;
-      const y = parseInt(d.slice(0,4)), m = parseInt(d.slice(5,7));
-      if (y === year) budgeted[m-1] += patientGrand(pat);
+    // Lookup rápido: qué tratamientos ya están realizados en treatment_items
+    // Clave: "patient_id|treatment_name_lower"
+    const realizedSet = new Set();
+    items.forEach(item => {
+      if (item.realized_date) {
+        realizedSet.add(`${item.patient_id}|${(item.treatment_name||"").toLowerCase().trim()}`);
+      }
     });
 
+    // Presupuestado + pendientes: leer de TODOS los pacientes del sistema
+    patients.forEach(pat => {
+      const d = pat.date; if (!d) return;
+      const py = parseInt(d.slice(0,4)), pm = parseInt(d.slice(5,7));
+      if (pm < 1 || pm > 12) return;
+
+      // Presupuestado: suma total de presupuestos por mes/año del paciente
+      if (py === year) budgeted[pm-1] += patientGrand(pat);
+
+      // Recorrer cada tratamiento del paciente
+      getTxItems(pat).forEach(tx => {
+        const txName = tx.name || "";
+        const key    = `${pat.id}|${txName.toLowerCase().trim()}`;
+
+        if (orthoRx.test(txName) && !realizedSet.has(key)) {
+          // Pendiente: usar fecha del presupuesto del paciente (sin filtro de año)
+          orthoPending[pm-1]++;
+        }
+
+        if (implantRx.test(txName) && !realizedSet.has(key)) {
+          const mm = txName.match(/(\d+)\s*implante/i);
+          implantPending[pm-1] += mm ? parseInt(mm[1]) : 1;
+        }
+      });
+    });
+
+    // Realizados: leer de treatment_items con realized_date en el año seleccionado
     items.forEach(item => {
       const name = item.treatment_name || "";
-      if (orthoRx.test(name)) {
-        if (item.realized_date) {
-          const d = item.realized_date;
-          const y = parseInt(d.slice(0,4)), m = parseInt(d.slice(5,7));
-          if (y === year) orthoRealized[m-1]++;
-        } else if (item.closed_date) {
-          // Pending items: no year filter — show all open cases by the month they were added
-          const m = parseInt(item.closed_date.slice(5,7));
-          if (m >= 1 && m <= 12) orthoPending[m-1]++;
-        }
-      }
+      if (!item.realized_date) return;
+      const ry = parseInt(item.realized_date.slice(0,4));
+      const rm = parseInt(item.realized_date.slice(5,7));
+      if (ry !== year || rm < 1 || rm > 12) return;
+
+      if (orthoRx.test(name)) orthoRealized[rm-1]++;
       if (implantRx.test(name)) {
-        if (item.realized_date) {
-          const d = item.realized_date;
-          const y = parseInt(d.slice(0,4)), m = parseInt(d.slice(5,7));
-          if (y === year) {
-            const mm = name.match(/(\d+)\s*implante/i);
-            implantRealized[m-1] += mm ? parseInt(mm[1]) : 1;
-          }
-        } else if (item.closed_date) {
-          // Pending items: no year filter
-          const m = parseInt(item.closed_date.slice(5,7));
-          if (m >= 1 && m <= 12) implantPending[m-1]++;
-        }
+        const mm = name.match(/(\d+)\s*implante/i);
+        implantRealized[rm-1] += mm ? parseInt(mm[1]) : 1;
       }
     });
 
