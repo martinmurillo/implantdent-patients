@@ -923,7 +923,9 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
   const fmtInt = (v) => String(Math.round(v));
 
   const makeSVG = (seriesData, formatVal, W=900, H=220) => {
-    const PL=70, PR=20, PT=40, PB=36;
+    const PL=120, PR=20, PT=40, PB=36;
+    const LABEL_ROW=14;
+    const SVG_H = H + seriesData.length * LABEL_ROW + 10;
     const CW = W - PL - PR, CH = H - PT - PB;
     const allVals = seriesData.flatMap(s => s.data);
     const maxVal  = Math.max(...allVals, 1);
@@ -944,27 +946,29 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
       `<text x="${xPos(i)}" y="${H-6}" text-anchor="middle" font-size="10" fill="#777">${m}</text>`
     ).join('');
 
-    const lines = seriesData.map(s => {
-      const linePath = `<path d="${pathD(s.data)}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
-      const dots = s.data.map((v,i) => {
+    // Todos los trazos primero, luego los puntos encima
+    const paths = seriesData.map(s =>
+      `<path d="${pathD(s.data)}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`
+    ).join('');
+
+    const dots = seriesData.map(s =>
+      s.data.map((v,i) => {
         const cx = xPos(i), cy = yPos(v);
-        const circle = `<circle cx="${cx}" cy="${cy}" r="4" fill="${s.color}" stroke="#fff" stroke-width="1.5"/>`;
-        const label  = v > 0
-          ? `<text x="${cx}" y="${(parseFloat(cy)-9).toFixed(1)}" text-anchor="middle" font-size="9" fill="${s.color}" font-weight="700">${formatVal(v)}</text>`
-          : '';
-        return circle + label;
-      }).join('');
-      return linePath + dots;
+        return `<circle cx="${cx}" cy="${cy}" r="4" fill="${s.color}" stroke="#fff" stroke-width="1.5"/>`;
+      }).join('')
+    ).join('');
+
+    // Filas de valores invertidas (total → c/pagos → pagos) con nombre a la izquierda
+    const valueRows = [...seriesData].reverse().map((s, rsi) => {
+      const rowY = (H + 6 + (rsi + 1) * LABEL_ROW).toFixed(1);
+      const nameLabel = `<text x="${PL-6}" y="${rowY}" text-anchor="end" font-size="8" fill="${s.color}" font-weight="700">${s.label}</text>`;
+      const vals = s.data.map((v, mi) =>
+        `<text x="${xPos(mi)}" y="${rowY}" text-anchor="middle" font-size="9" fill="${v>0 ? s.color : '#ccc'}" font-weight="${v>0?'700':'400'}">${v>0 ? formatVal(v) : '—'}</text>`
+      ).join('');
+      return nameLabel + vals;
     }).join('');
 
-    const legend = seriesData.map((s, si) => {
-      const lx = PL + si * 180;
-      return `<line x1="${lx}" y1="14" x2="${lx+20}" y2="14" stroke="${s.color}" stroke-width="2.5"/>` +
-             `<circle cx="${lx+10}" cy="14" r="3.5" fill="${s.color}"/>` +
-             `<text x="${lx+26}" y="18" font-size="10" fill="#555">${s.label}</text>`;
-    }).join('');
-
-    return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block" xmlns="http://www.w3.org/2000/svg">${grid}${xAxis}${xLabels}${lines}${legend}</svg>`;
+    return `<svg viewBox="0 0 ${W} ${SVG_H}" style="width:100%;display:block" xmlns="http://www.w3.org/2000/svg">${grid}${xAxis}${xLabels}${paths}${dots}${valueRows}</svg>`;
   };
 
   const LineChart = ({ title, series, formatVal }) => {
