@@ -1350,21 +1350,30 @@ ${orthoItems.filter(i=>i.realized_date).length === 0
     const pat       = findPatient(item.patient_id);
     const name      = item.patient_name || pat?.name || "—";
     const realizado = !!item.realized_date;
-    const loading   = busy === item.id;
+    const busyKey   = item.id ?? `syn_${item.patient_id}_${(item.treatment_name||"").slice(0,30)}`;
+    const loading   = busy === busyKey;
 
     const doRealize = async (e) => {
       e.stopPropagation();
-      setBusy(item.id);
-      const upd = { realized_date: pendingDate || today() };
-      if (type === "ortho") upd.notes = pendingNotes;
-      await supabase.from("treatment_items").update(upd).eq("id", item.id);
+      setBusy(busyKey);
+      if (item._synthetic) {
+        const rec = { patient_id:item.patient_id, patient_name:item.patient_name, hc:item.hc,
+                      treatment_name:item.treatment_name, amount:item.amount,
+                      realized_date: pendingDate || today() };
+        if (type === "ortho") rec.notes = pendingNotes;
+        await supabase.from("treatment_items").insert([rec]);
+      } else {
+        const upd = { realized_date: pendingDate || today() };
+        if (type === "ortho") upd.notes = pendingNotes;
+        await supabase.from("treatment_items").update(upd).eq("id", item.id);
+      }
       await onRefreshItems();
       setBusy(null); setEditing(false);
     };
 
     const doUnrealize = async (e) => {
       e.stopPropagation();
-      setBusy(item.id);
+      setBusy(busyKey);
       const upd = { realized_date: null };
       if (type === "ortho") upd.notes = null;
       await supabase.from("treatment_items").update(upd).eq("id", item.id);
@@ -1394,17 +1403,14 @@ ${orthoItems.filter(i=>i.realized_date).length === 0
             )}
           </div>
           <div style={{display:"flex", gap:6, alignItems:"center", flexShrink:0, marginLeft:12}}>
-            {item._synthetic
-              ? <span style={{fontSize:11,color:"#aaa",fontStyle:"italic"}}>Sin registro</span>
-              : !realizado && !editing && (
-                  <button onClick={startEditing} disabled={loading}
-                    style={{background:"#ffffff", border:"1px solid #555", borderRadius:6,
-                      color:"#888", padding:"4px 10px", cursor:"pointer", fontSize:11, fontWeight:700}}>
-                    Pendiente
-                  </button>
-                )
-            }
-            {!item._synthetic && realizado && (
+            {!realizado && !editing && (
+              <button onClick={startEditing} disabled={loading}
+                style={{background:"#ffffff", border:"1px solid #555", borderRadius:6,
+                  color:"#888", padding:"4px 10px", cursor:"pointer", fontSize:11, fontWeight:700}}>
+                Pendiente
+              </button>
+            )}
+            {realizado && (
               <button onClick={doUnrealize} disabled={loading}
                 style={{background:"#2ecc7122", border:"1px solid #2ecc71", borderRadius:6,
                   color:"#2ecc71", padding:"4px 10px", cursor:"pointer", fontSize:11, fontWeight:700}}>
