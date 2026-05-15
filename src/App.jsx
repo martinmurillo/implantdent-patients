@@ -970,6 +970,8 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
   const LineChart = ({ title, series, formatVal }) => {
     const W=900, H=220, PL=70, PR=20, PT=40, PB=36;
     const CW=W-PL-PR, CH=H-PT-PB;
+    const LABEL_ROW = 11; // altura por fila de etiqueta bajo el mes
+    const SVG_H = H + series.length * LABEL_ROW;
     const allVals = series.flatMap(s=>s.data);
     const maxVal  = Math.max(...allVals, 1);
     const yMax    = maxVal<=5 ? maxVal+1 : Math.ceil(maxVal*1.15);
@@ -978,35 +980,11 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
     const yPos = v => PT+CH-(v/yMax)*CH;
     const pathD= data=>data.map((v,i)=>`${i===0?'M':'L'}${xPos(i).toFixed(1)},${yPos(v).toFixed(1)}`).join(' ');
 
-    // Collision-aware label Y positions: spread overlapping labels vertically
-    const LSTEP = 11; // label height + gap
-    const labelYMap = new Map();
-    for (let mi = 0; mi < 12; mi++) {
-      const entries = series
-        .map((s, si) => ({ si, v: s.data[mi], rawY: yPos(s.data[mi]) - 9 }))
-        .filter(e => e.v > 0)
-        .sort((a, b) => a.rawY - b.rawY);
-      if (!entries.length) continue;
-      // group consecutive entries that are too close into clusters
-      const clusters = [];
-      let cl = [entries[0]];
-      for (let k = 1; k < entries.length; k++) {
-        if (entries[k].rawY - entries[k-1].rawY < LSTEP) cl.push(entries[k]);
-        else { clusters.push(cl); cl = [entries[k]]; }
-      }
-      clusters.push(cl);
-      clusters.forEach(c => {
-        const avgY = c.reduce((s, e) => s + e.rawY, 0) / c.length;
-        const startY = avgY - ((c.length - 1) * LSTEP) / 2;
-        c.forEach((e, k) => labelYMap.set(`${e.si}_${mi}`, Math.max(PT + 4, startY + k * LSTEP)));
-      });
-    }
-
     return (
       <div style={{marginBottom:24}}>
         <div style={{fontSize:11,color:"#555",letterSpacing:2,fontWeight:700,marginBottom:8,textTransform:"uppercase"}}>{title}</div>
         <div style={{background:"#fff",borderRadius:10,border:"1px solid #e2e5ed",padding:"4px 0",overflow:"hidden"}}>
-          <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",display:"block"}}>
+          <svg viewBox={`0 0 ${W} ${SVG_H}`} style={{width:"100%",display:"block"}}>
             {gridVals.map(v=>(
               <g key={v}>
                 <line x1={PL} y1={yPos(v)} x2={W-PR} y2={yPos(v)} stroke="#e2e5ed" strokeWidth={1} strokeDasharray="4,3"/>
@@ -1017,11 +995,11 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
             {MONTHS_SHORT.map((m,i)=>(
               <text key={i} x={xPos(i)} y={H-6} textAnchor="middle" fontSize={10} fill="#777">{m}</text>
             ))}
-            {/* Primero todos los trazos para que no tapen etiquetas */}
+            {/* Primero todos los trazos */}
             {series.map((s,si)=>(
               <path key={si} d={pathD(s.data)} fill="none" stroke={s.color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round"/>
             ))}
-            {/* Luego todos los puntos y etiquetas encima */}
+            {/* Luego todos los puntos encima */}
             {series.map((s,si)=>(
               <g key={si}>
                 {s.data.map((v,mi)=>{
@@ -1030,7 +1008,6 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
                   return (
                     <g key={mi}>
                       <circle cx={cx} cy={cy} r={4} fill={s.color} stroke="#fff" strokeWidth={1.5}/>
-                      {v>0 && <text x={cx} y={labelYMap.get(`${si}_${mi}`) ?? cy-9} textAnchor="middle" fontSize={9} fill={s.color} fontWeight="700">{formatVal(v)}</text>}
                       {ptList.length>0 && (
                         <circle cx={cx} cy={cy} r={16} fill="transparent" style={{cursor:"pointer"}}
                           onClick={()=>setPointModal({title:`${MONTHS_ES[mi]} — ${s.label}`, list:ptList})}/>
@@ -1039,6 +1016,16 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
                   );
                 })}
               </g>
+            ))}
+            {/* Valores fijos bajo cada mes, uno por serie en su color */}
+            {series.map((s,si)=>(
+              s.data.map((v,mi)=>(
+                <text key={`lbl_${si}_${mi}`}
+                  x={xPos(mi)} y={H + 4 + si * LABEL_ROW + LABEL_ROW}
+                  textAnchor="middle" fontSize={9} fill={v>0 ? s.color : "#ccc"} fontWeight={v>0?"700":"400"}>
+                  {v>0 ? formatVal(v) : "—"}
+                </text>
+              ))
             ))}
             {series.map((s,si)=>(
               <g key={si} transform={`translate(${PL+si*180},0)`}>
