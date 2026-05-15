@@ -1182,21 +1182,36 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
 
   // Implantes y ortodoncia: realizados solo en el rango, pendientes siempre
   const implantRx    = /implant/i;
+  const orthoRx      = /ortodoncia|orthodontic|invisalign|invisaling|invisible\s|ortod/i;
+
+  // Items de treatment_items: realizados solo en rango, pendientes siempre
   const implantItems = items.filter(i => {
     if (!implantRx.test(i.treatment_name || "")) return false;
     return i.realized_date ? inRange(i.realized_date) : true;
   });
-  let implantTotal   = 0;
+  const orthoItems = items.filter(i => {
+    if (!orthoRx.test(i.treatment_name || "")) return false;
+    return i.realized_date ? inRange(i.realized_date) : true;
+  });
+
+  // Suplementar con ítems de pacientes sin registro en treatment_items (pendiente/frío)
+  const inItemsKeys = new Set(items.map(i => `${i.patient_id}|${(i.treatment_name||"").toLowerCase().trim()}`));
+  patients.forEach(pat => {
+    getTxItems(pat).forEach(tx => {
+      const key = `${pat.id}|${(tx.name||"").toLowerCase().trim()}`;
+      if (inItemsKeys.has(key)) return;
+      const syn = { id:null, patient_id:pat.id, patient_name:pat.name, hc:pat.hc,
+                    treatment_name:tx.name, amount:tx.value||0, realized_date:null, _synthetic:true };
+      if (orthoRx.test(tx.name||""))   orthoItems.push(syn);
+      if (implantRx.test(tx.name||"")) implantItems.push(syn);
+    });
+  });
+
+  let implantTotal = 0;
   implantItems.forEach(item => {
     if (!item.realized_date) return;
     const m = (item.treatment_name||"").match(/(\d+)\s*implante/i);
     implantTotal += m ? parseInt(m[1]) : 1;
-  });
-
-  const orthoRx    = /ortodoncia|orthodontic|invisalign|invisaling|invisible\s|ortod/i;
-  const orthoItems = items.filter(i => {
-    if (!orthoRx.test(i.treatment_name || "")) return false;
-    return i.realized_date ? inRange(i.realized_date) : true;
   });
   const orthoTotal = orthoItems.filter(i => i.realized_date).length;
 
@@ -1375,14 +1390,17 @@ ${orthoItems.filter(i=>i.realized_date).length === 0
             )}
           </div>
           <div style={{display:"flex", gap:6, alignItems:"center", flexShrink:0, marginLeft:12}}>
-            {!realizado && !editing && (
-              <button onClick={startEditing} disabled={loading}
-                style={{background:"#ffffff", border:"1px solid #555", borderRadius:6,
-                  color:"#888", padding:"4px 10px", cursor:"pointer", fontSize:11, fontWeight:700}}>
-                Pendiente
-              </button>
-            )}
-            {realizado && (
+            {item._synthetic
+              ? <span style={{fontSize:11,color:"#aaa",fontStyle:"italic"}}>Sin registro</span>
+              : !realizado && !editing && (
+                  <button onClick={startEditing} disabled={loading}
+                    style={{background:"#ffffff", border:"1px solid #555", borderRadius:6,
+                      color:"#888", padding:"4px 10px", cursor:"pointer", fontSize:11, fontWeight:700}}>
+                    Pendiente
+                  </button>
+                )
+            }
+            {!item._synthetic && realizado && (
               <button onClick={doUnrealize} disabled={loading}
                 style={{background:"#2ecc7122", border:"1px solid #2ecc71", borderRadius:6,
                   color:"#2ecc71", padding:"4px 10px", cursor:"pointer", fontSize:11, fontWeight:700}}>
@@ -1390,11 +1408,13 @@ ${orthoItems.filter(i=>i.realized_date).length === 0
               </button>
             )}
             {pat && <span onClick={() => onOpenPatient(pat)} style={{color:"#c9a84c",fontSize:20,lineHeight:1,cursor:"pointer"}}>›</span>}
-            <button onClick={e => deleteItem(e, item.id)} disabled={loading}
-              style={{background:"#fff0f0", border:"1px solid #e74c3c88", borderRadius:6,
-                color:"#e74c3c", padding:"4px 8px", cursor:"pointer", fontSize:12, fontWeight:700}}>
-              ×
-            </button>
+            {!item._synthetic && (
+              <button onClick={e => deleteItem(e, item.id)} disabled={loading}
+                style={{background:"#fff0f0", border:"1px solid #e74c3c88", borderRadius:6,
+                  color:"#e74c3c", padding:"4px 8px", cursor:"pointer", fontSize:12, fontWeight:700}}>
+                ×
+              </button>
+            )}
           </div>
         </div>
         {editing && (
