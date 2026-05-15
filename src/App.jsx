@@ -1194,16 +1194,20 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
     return i.realized_date ? inRange(i.realized_date) : true;
   });
 
-  // Suplementar con ítems de pacientes sin registro en treatment_items (pendiente/frío)
-  const inItemsKeys = new Set(items.map(i => `${i.patient_id}|${(i.treatment_name||"").toLowerCase().trim()}`));
+  // Suplementar con ítems de pacientes sin registro en treatment_items
+  const inItemsKeys   = new Set(items.map(i => `${i.patient_id}|${(i.treatment_name||"").toLowerCase().trim()}`));
+  const patientsWithPayment = new Set(payments.map(p => p.patient_id));
   patients.forEach(pat => {
+    const hasPayment = patientsWithPayment.has(pat.id);
     getTxItems(pat).forEach(tx => {
       const key = `${pat.id}|${(tx.name||"").toLowerCase().trim()}`;
       if (inItemsKeys.has(key)) return;
       const syn = { id:null, patient_id:pat.id, patient_name:pat.name, hc:pat.hc,
                     treatment_name:tx.name, amount:tx.value||0, realized_date:null, _synthetic:true };
-      if (orthoRx.test(tx.name||""))   orthoItems.push(syn);
-      if (implantRx.test(tx.name||"")) implantItems.push(syn);
+      // Ortodoncia: todos los pacientes
+      if (orthoRx.test(tx.name||"")) orthoItems.push(syn);
+      // Implantes: solo si tiene al menos un pago registrado (en curso ya están en treatment_items)
+      if (implantRx.test(tx.name||"") && hasPayment) implantItems.push(syn);
     });
   });
 
