@@ -744,11 +744,15 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
     const l12 = () => Array.from({length:12}, ()=>[]);
 
     const paid = a12(), paidPts = l12();
-    const budgeted = a12(), budgetedPts = l12();
+    const budgeted = a12(), budgetedPts = l12();         // solo pacientes con pagos
+    const totalBudgeted = a12(), totalBudgetedPts = l12(); // todos los pacientes
     const orthoRealized = a12(), orthoRealizedPts = l12();
     const orthoPending  = a12(), orthoPendingPts  = l12();
     const implantRealized = a12(), implantRealizedPts = l12();
     const implantPending  = a12(), implantPendingPts  = l12();
+
+    // Pacientes que tienen al menos un pago registrado
+    const patientsWithPayments = new Set(payments.map(p => p.patient_id));
 
     payments.forEach(pay => {
       const d = pay.date; if (!d) return;
@@ -777,8 +781,15 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
 
       if (py === year) {
         const g = patientGrand(pat);
-        budgeted[pm-1] += g;
-        budgetedPts[pm-1].push({ patientId:pat.id, name:pat.name||"—", hc:pat.hc||"—", detail:fmtEur(g) });
+        const entry = { patientId:pat.id, name:pat.name||"—", hc:pat.hc||"—", detail:fmtEur(g) };
+        // Total presupuestado: TODOS los pacientes
+        totalBudgeted[pm-1] += g;
+        totalBudgetedPts[pm-1].push(entry);
+        // Presupuestado c/pagos: solo los que tienen al menos un pago
+        if (patientsWithPayments.has(pat.id)) {
+          budgeted[pm-1] += g;
+          budgetedPts[pm-1].push(entry);
+        }
       }
 
       getTxItems(pat).forEach(tx => {
@@ -819,8 +830,8 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
     });
 
     return {
-      nums: { paid, budgeted, orthoRealized, orthoPending, implantRealized, implantPending },
-      pts:  { paid:paidPts, budgeted:budgetedPts, orthoRealized:orthoRealizedPts, orthoPending:orthoPendingPts, implantRealized:implantRealizedPts, implantPending:implantPendingPts },
+      nums: { paid, budgeted, totalBudgeted, orthoRealized, orthoPending, implantRealized, implantPending },
+      pts:  { paid:paidPts, budgeted:budgetedPts, totalBudgeted:totalBudgetedPts, orthoRealized:orthoRealizedPts, orthoPending:orthoPendingPts, implantRealized:implantRealizedPts, implantPending:implantPendingPts },
     };
   };
 
@@ -879,8 +890,9 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
       const { nums: d, pts: p } = computeYearFull(years[0]);
       return {
         billing:  [
-          { label:"Facturación real", data: d.paid,            color:"#2ecc71", pts: p.paid },
-          { label:"Presupuestado",    data: d.budgeted,        color:"#c9a84c", pts: p.budgeted },
+          { label:"Pagos cobrados",        data: d.paid,         color:"#2ecc71", pts: p.paid },
+          { label:"Presupuestado c/pagos", data: d.budgeted,     color:"#c9a84c", pts: p.budgeted },
+          { label:"Total presupuestado",   data: d.totalBudgeted, color:"#3498db", pts: p.totalBudgeted },
         ],
         ortho:    [
           { label:"Realizadas",       data: d.orthoRealized,   color:"#9b59b6", pts: p.orthoRealized },
