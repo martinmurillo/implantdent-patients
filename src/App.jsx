@@ -970,8 +970,8 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
   const LineChart = ({ title, series, formatVal }) => {
     const W=900, H=220, PL=70, PR=20, PT=40, PB=36;
     const CW=W-PL-PR, CH=H-PT-PB;
-    const LABEL_ROW = 11; // altura por fila de etiqueta bajo el mes
-    const SVG_H = H + series.length * LABEL_ROW;
+    const LABEL_ROW = 14; // altura por fila de etiqueta bajo el mes
+    const SVG_H = H + series.length * LABEL_ROW + 10;
     const allVals = series.flatMap(s=>s.data);
     const maxVal  = Math.max(...allVals, 1);
     const yMax    = maxVal<=5 ? maxVal+1 : Math.ceil(maxVal*1.15);
@@ -1017,11 +1017,11 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
                 })}
               </g>
             ))}
-            {/* Valores fijos bajo cada mes, uno por serie en su color */}
-            {series.map((s,si)=>(
+            {/* Valores fijos bajo cada mes: orden invertido (total → c/pagos → pagos) */}
+            {[...series].reverse().map((s,rsi)=>(
               s.data.map((v,mi)=>(
-                <text key={`lbl_${si}_${mi}`}
-                  x={xPos(mi)} y={H + 4 + si * LABEL_ROW + LABEL_ROW}
+                <text key={`lbl_${rsi}_${mi}`}
+                  x={xPos(mi)} y={H + 6 + (rsi + 1) * LABEL_ROW}
                   textAnchor="middle" fontSize={9} fill={v>0 ? s.color : "#ccc"} fontWeight={v>0?"700":"400"}>
                   {v>0 ? formatVal(v) : "—"}
                 </text>
