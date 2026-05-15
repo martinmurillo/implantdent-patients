@@ -767,9 +767,9 @@ function ProgresoPanel({ payments, items, patients, onClose }) {
           const y = parseInt(d.slice(0,4)), m = parseInt(d.slice(5,7));
           if (y === year) orthoRealized[m-1]++;
         } else if (item.closed_date) {
-          const d = item.closed_date;
-          const y = parseInt(d.slice(0,4)), m = parseInt(d.slice(5,7));
-          if (y === year) orthoPending[m-1]++;
+          // Pending items: no year filter — show all open cases by the month they were added
+          const m = parseInt(item.closed_date.slice(5,7));
+          if (m >= 1 && m <= 12) orthoPending[m-1]++;
         }
       }
       if (implantRx.test(name)) {
@@ -781,9 +781,9 @@ function ProgresoPanel({ payments, items, patients, onClose }) {
             implantRealized[m-1] += mm ? parseInt(mm[1]) : 1;
           }
         } else if (item.closed_date) {
-          const d = item.closed_date;
-          const y = parseInt(d.slice(0,4)), m = parseInt(d.slice(5,7));
-          if (y === year) implantPending[m-1]++;
+          // Pending items: no year filter
+          const m = parseInt(item.closed_date.slice(5,7));
+          if (m >= 1 && m <= 12) implantPending[m-1]++;
         }
       }
     });
