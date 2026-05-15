@@ -968,7 +968,7 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
   };
 
   const LineChart = ({ title, series, formatVal }) => {
-    const W=900, H=220, PL=70, PR=20, PT=40, PB=36;
+    const W=900, H=220, PL=120, PR=20, PT=40, PB=36;
     const CW=W-PL-PR, CH=H-PT-PB;
     const LABEL_ROW = 14; // altura por fila de etiqueta bajo el mes
     const SVG_H = H + series.length * LABEL_ROW + 10;
@@ -1017,23 +1017,21 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
                 })}
               </g>
             ))}
-            {/* Valores fijos bajo cada mes: orden invertido (total → c/pagos → pagos) */}
-            {[...series].reverse().map((s,rsi)=>(
-              s.data.map((v,mi)=>(
-                <text key={`lbl_${rsi}_${mi}`}
-                  x={xPos(mi)} y={H + 6 + (rsi + 1) * LABEL_ROW}
-                  textAnchor="middle" fontSize={9} fill={v>0 ? s.color : "#ccc"} fontWeight={v>0?"700":"400"}>
-                  {v>0 ? formatVal(v) : "—"}
-                </text>
-              ))
-            ))}
-            {series.map((s,si)=>(
-              <g key={si} transform={`translate(${PL+si*180},0)`}>
-                <line x1={0} y1={14} x2={20} y2={14} stroke={s.color} strokeWidth={2.5}/>
-                <circle cx={10} cy={14} r={3.5} fill={s.color}/>
-                <text x={26} y={18} fontSize={10} fill="#555">{s.label}</text>
-              </g>
-            ))}
+            {/* Filas de valores con nombre de serie a la izquierda: orden total → c/pagos → pagos */}
+            {[...series].reverse().map((s,rsi)=>{
+              const rowY = H + 6 + (rsi + 1) * LABEL_ROW;
+              return (
+                <g key={`row_${rsi}`}>
+                  <text x={PL-6} y={rowY} textAnchor="end" fontSize={8} fill={s.color} fontWeight="700">{s.label}</text>
+                  {s.data.map((v,mi)=>(
+                    <text key={mi} x={xPos(mi)} y={rowY}
+                      textAnchor="middle" fontSize={9} fill={v>0 ? s.color : "#ccc"} fontWeight={v>0?"700":"400"}>
+                      {v>0 ? formatVal(v) : "—"}
+                    </text>
+                  ))}
+                </g>
+              );
+            })}
           </svg>
         </div>
       </div>
