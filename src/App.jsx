@@ -1017,9 +1017,13 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
             {MONTHS_SHORT.map((m,i)=>(
               <text key={i} x={xPos(i)} y={H-6} textAnchor="middle" fontSize={10} fill="#777">{m}</text>
             ))}
+            {/* Primero todos los trazos para que no tapen etiquetas */}
+            {series.map((s,si)=>(
+              <path key={si} d={pathD(s.data)} fill="none" stroke={s.color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round"/>
+            ))}
+            {/* Luego todos los puntos y etiquetas encima */}
             {series.map((s,si)=>(
               <g key={si}>
-                <path d={pathD(s.data)} fill="none" stroke={s.color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round"/>
                 {s.data.map((v,mi)=>{
                   const cx=xPos(mi), cy=yPos(v);
                   const ptList=s.pts?.[mi]||[];
