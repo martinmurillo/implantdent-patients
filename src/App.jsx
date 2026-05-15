@@ -1164,6 +1164,18 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
   const [busy,          setBusy]        = useState(null);
   const [syncing,       setSyncing]     = useState(false);
   const [showProgreso,  setShowProgreso] = useState(false);
+  const [excluded, setExcluded] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("progreso_excluded") || "[]")); }
+    catch { return new Set(); }
+  });
+  const excludeSyn = (patientId, txName) => {
+    const key = `${patientId}|${(txName||"").toLowerCase().trim()}`;
+    setExcluded(prev => {
+      const next = new Set(prev); next.add(key);
+      try { localStorage.setItem("progreso_excluded", JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  };
 
   useEffect(() => {
     setSyncing(true);
@@ -1202,6 +1214,7 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
     getTxItems(pat).forEach(tx => {
       const key = `${pat.id}|${(tx.name||"").toLowerCase().trim()}`;
       if (inItemsKeys.has(key)) return;
+      if (excluded.has(key)) return;
       const syn = { id:null, patient_id:pat.id, patient_name:pat.name, hc:pat.hc,
                     treatment_name:tx.name, amount:tx.value||0, realized_date:null, _synthetic:true };
       // Ortodoncia: todos los pacientes
@@ -1418,13 +1431,19 @@ ${orthoItems.filter(i=>i.realized_date).length === 0
               </button>
             )}
             {pat && <span onClick={() => onOpenPatient(pat)} style={{color:"#c9a84c",fontSize:20,lineHeight:1,cursor:"pointer"}}>›</span>}
-            {!item._synthetic && (
-              <button onClick={e => deleteItem(e, item.id)} disabled={loading}
-                style={{background:"#fff0f0", border:"1px solid #e74c3c88", borderRadius:6,
-                  color:"#e74c3c", padding:"4px 8px", cursor:"pointer", fontSize:12, fontWeight:700}}>
-                ×
-              </button>
-            )}
+            {item._synthetic
+              ? <button onClick={e=>{e.stopPropagation();excludeSyn(item.patient_id,item.treatment_name);}}
+                  disabled={loading}
+                  style={{background:"#fff0f0",border:"1px solid #e74c3c88",borderRadius:6,
+                    color:"#e74c3c",padding:"4px 8px",cursor:"pointer",fontSize:12,fontWeight:700}}>
+                  ×
+                </button>
+              : <button onClick={e => deleteItem(e, item.id)} disabled={loading}
+                  style={{background:"#fff0f0",border:"1px solid #e74c3c88",borderRadius:6,
+                    color:"#e74c3c",padding:"4px 8px",cursor:"pointer",fontSize:12,fontWeight:700}}>
+                  ×
+                </button>
+            }
           </div>
         </div>
         {editing && (
