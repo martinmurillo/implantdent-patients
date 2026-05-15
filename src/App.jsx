@@ -2286,6 +2286,7 @@ export default function App() {
   const [dbLoading,  setDbLoad]    = useState(true);
   const [showAlerts, setShowAlerts] = useState(false);
   const [showWeekly, setShowWeekly] = useState(false);
+  const [weekOffset, setWeekOffset] = useState(0);
 
   const fetchPatients  = async () => { const {data}=await supabase.from("patients").select("*").order("created_at",{ascending:false}); setPatients(data||[]); };
   const fetchDoctors   = async () => { const {data}=await supabase.from("doctors").select("*").order("name"); setDoctors(data||[]); };
@@ -2383,9 +2384,9 @@ export default function App() {
   const DIAS_ES = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
   const weekDays = (() => {
     const d = new Date();
-    const dow = d.getDay(); // 0=Sun
+    const dow = d.getDay();
     const monday = new Date(d);
-    monday.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
+    monday.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1) + weekOffset * 7);
     monday.setHours(0,0,0,0);
     return Array.from({length:7}, (_,i) => {
       const day = new Date(monday);
@@ -2629,9 +2630,29 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
             <div style={{fontSize:13,color:"#c9a84c",fontWeight:700,letterSpacing:2}}>
               📆 AGENDA SEMANAL
             </div>
-            <div style={{fontSize:12,color:"#aaa",marginLeft:4}}>
-              {weekDays[0].label.split(" ")[1]} → {weekDays[6].label.split(" ")[1]}
+            <button onClick={()=>setWeekOffset(w=>w-1)}
+              style={{background:"#ffffff18",border:"none",borderRadius:6,color:"#fff",
+                padding:"4px 10px",cursor:"pointer",fontSize:14,fontWeight:700}}>
+              ‹
+            </button>
+            <div style={{fontSize:12,color:"#fff",minWidth:160,textAlign:"center"}}>
+              {weekOffset===0 ? "Esta semana" : weekOffset===1 ? "Próxima semana" : weekOffset===-1 ? "Semana anterior" : `Semana ${weekOffset>0?"+":""}${weekOffset}`}
+              <div style={{fontSize:10,color:"#aaa"}}>
+                {weekDays[0].label.split(" ")[1]} → {weekDays[6].label.split(" ")[1]}
+              </div>
             </div>
+            <button onClick={()=>setWeekOffset(w=>w+1)}
+              style={{background:"#ffffff18",border:"none",borderRadius:6,color:"#fff",
+                padding:"4px 10px",cursor:"pointer",fontSize:14,fontWeight:700}}>
+              ›
+            </button>
+            {weekOffset!==0 && (
+              <button onClick={()=>setWeekOffset(0)}
+                style={{background:"#c9a84c33",border:"1px solid #c9a84c66",borderRadius:6,color:"#c9a84c",
+                  padding:"4px 10px",cursor:"pointer",fontSize:11,fontWeight:700}}>
+                Hoy
+              </button>
+            )}
             <div style={{flex:1}}/>
             <button onClick={printWeekly}
               style={{background:"#c9a84c",border:"none",borderRadius:8,color:"#fff",padding:"6px 16px",
