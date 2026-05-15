@@ -784,7 +784,8 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
       getTxItems(pat).forEach(tx => {
         const txName = tx.name || "";
         const key    = `${pat.id}|${txName.toLowerCase().trim()}`;
-        const entry  = { patientId:pat.id, name:pat.name||"—", hc:pat.hc||"—", detail:txName+(tx.value?` · ${fmtEur(tx.value)}`:"") };
+        if (excluded.has(key)) return;
+        const entry  = { patientId:pat.id, name:pat.name||"—", hc:pat.hc||"—", detail:txName+(tx.value?` · ${fmtEur(tx.value)}`:""), txName };
 
         if (orthoRx.test(txName) && !realizedSet.has(key) && pm >= 1 && pm <= 12) {
           orthoPending[pm-1]++;
@@ -804,8 +805,10 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
       const ry = parseInt(item.realized_date.slice(0,4));
       const rm = parseInt(item.realized_date.slice(5,7));
       if (ry !== year || rm < 1 || rm > 12) return;
+      const exKey = `${item.patient_id}|${name.toLowerCase().trim()}`;
+      if (excluded.has(exKey)) return;
       const pat   = patients.find(p => p.id === item.patient_id);
-      const entry = { patientId:item.patient_id, name:item.patient_name||pat?.name||"—", hc:item.hc||pat?.hc||"—", detail:name+" · "+fmtDate(item.realized_date) };
+      const entry = { patientId:item.patient_id, name:item.patient_name||pat?.name||"—", hc:item.hc||pat?.hc||"—", detail:name+" · "+fmtDate(item.realized_date), txName:name };
 
       if (orthoRx.test(name)) { orthoRealized[rm-1]++; orthoRealizedPts[rm-1].push(entry); }
       if (implantRx.test(name)) {
@@ -837,6 +840,24 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
   const [selectedYears, setSelectedYears] = useState([currentYear]);
   const [compareMode,   setCompareMode]   = useState(false);
   const [pointModal,    setPointModal]    = useState(null);
+  const [excluded, setExcluded] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("progreso_excluded") || "[]")); }
+    catch { return new Set(); }
+  });
+
+  const excludeItem = (patientId, txName) => {
+    const key = `${patientId}|${(txName||"").toLowerCase().trim()}`;
+    setExcluded(prev => {
+      const next = new Set(prev);
+      next.add(key);
+      try { localStorage.setItem("progreso_excluded", JSON.stringify([...next])); } catch {}
+      return next;
+    });
+    setPointModal(prev => prev
+      ? {...prev, list: prev.list.filter(i => `${i.patientId}|${(i.txName||"").toLowerCase().trim()}` !== key)}
+      : null
+    );
+  };
 
   const YEAR_COLORS = ["#c9a84c","#3498db","#e74c3c","#2ecc71","#9b59b6"];
 
@@ -1073,15 +1094,25 @@ h1{font-size:20px;margin:0 0 4px;}
                 const pat=patients.find(p=>p.id===item.patientId);
                 const clickable=pat&&onOpenPatient;
                 return (
-                  <div key={i} onClick={()=>{if(clickable){onOpenPatient(pat);setPointModal(null);}}}
-                    style={{...s.card,cursor:clickable?"pointer":"default",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}
-                    onMouseEnter={e=>{if(clickable)e.currentTarget.style.background="#e2e5ed";}}
-                    onMouseLeave={e=>{e.currentTarget.style.background="#f5f7fa";}}>
-                    <div>
-                      <div style={{fontWeight:700,color:"#2c3250",fontSize:14}}>{item.name}</div>
+                  <div key={i} style={{...s.card,marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+                    <div onClick={()=>{if(clickable){onOpenPatient(pat);setPointModal(null);}}}
+                      style={{flex:1,cursor:clickable?"pointer":"default",minWidth:0}}
+                      onMouseEnter={e=>{if(clickable)e.currentTarget.style.opacity="0.75";}}
+                      onMouseLeave={e=>{e.currentTarget.style.opacity="1";}}>
+                      <div style={{fontWeight:700,color:"#2c3250",fontSize:14,display:"flex",alignItems:"center",gap:6}}>
+                        {item.name}
+                        {clickable && <span style={{color:"#c9a84c",fontSize:16,lineHeight:1}}>›</span>}
+                      </div>
                       <div style={{fontSize:12,color:"#777",marginTop:2}}>{item.hc!=="—"?`HC ${item.hc} · `:""}{item.detail}</div>
                     </div>
-                    {clickable && <span style={{color:"#c9a84c",fontSize:20,lineHeight:1,marginLeft:12}}>›</span>}
+                    {item.txName && (
+                      <button onClick={()=>excludeItem(item.patientId, item.txName)}
+                        title="Excluir de Progreso"
+                        style={{background:"#fff0f0",border:"1px solid #e74c3c55",borderRadius:6,color:"#e74c3c",
+                          padding:"4px 8px",cursor:"pointer",fontSize:12,fontWeight:700,flexShrink:0}}>
+                        ✕
+                      </button>
+                    )}
                   </div>
                 );
               })}
