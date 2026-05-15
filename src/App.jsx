@@ -144,7 +144,8 @@ const ordinal  = (n, lang) => {
   return `${n}${n===1?"st":n===2?"nd":n===3?"rd":"th"} Visit`;
 };
 
-const MONTHS_ES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const MONTHS_ES    = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const MONTHS_SHORT = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 const fmtMonthLabel = (y, m) => `${MONTHS_ES[m]} ${y}`;
 
 // ─── TRANSLATIONS ─────────────────────────────────────────────────────────────
@@ -730,15 +731,263 @@ function MonthNav({ year, month, onChange }) {
   );
 }
 
+// ─── ProgresoPanel ───────────────────────────────────────────────────────────
+function ProgresoPanel({ payments, items, patients, onClose }) {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
+  const implantRx = /implant/i;
+  const orthoRx   = /ortodoncia|orthodontic|invisalign|invisaling|invisible\s|ortod/i;
+
+  const computeYearData = (year) => {
+    const paid            = Array(12).fill(0);
+    const budgeted        = Array(12).fill(0);
+    const orthoRealized   = Array(12).fill(0);
+    const orthoPending    = Array(12).fill(0);
+    const implantRealized = Array(12).fill(0);
+    const implantPending  = Array(12).fill(0);
+
+    payments.forEach(pay => {
+      const d = pay.date; if (!d) return;
+      const y = parseInt(d.slice(0,4)), m = parseInt(d.slice(5,7));
+      if (y === year) paid[m-1] += parseFloat(pay.amount)||0;
+    });
+
+    patients.forEach(pat => {
+      const d = pat.date; if (!d) return;
+      const y = parseInt(d.slice(0,4)), m = parseInt(d.slice(5,7));
+      if (y === year) budgeted[m-1] += patientGrand(pat);
+    });
+
+    items.forEach(item => {
+      const name = item.treatment_name || "";
+      if (orthoRx.test(name)) {
+        if (item.realized_date) {
+          const d = item.realized_date;
+          const y = parseInt(d.slice(0,4)), m = parseInt(d.slice(5,7));
+          if (y === year) orthoRealized[m-1]++;
+        } else if (item.closed_date) {
+          const d = item.closed_date;
+          const y = parseInt(d.slice(0,4)), m = parseInt(d.slice(5,7));
+          if (y === year) orthoPending[m-1]++;
+        }
+      }
+      if (implantRx.test(name)) {
+        if (item.realized_date) {
+          const d = item.realized_date;
+          const y = parseInt(d.slice(0,4)), m = parseInt(d.slice(5,7));
+          if (y === year) {
+            const mm = name.match(/(\d+)\s*implante/i);
+            implantRealized[m-1] += mm ? parseInt(mm[1]) : 1;
+          }
+        } else if (item.closed_date) {
+          const d = item.closed_date;
+          const y = parseInt(d.slice(0,4)), m = parseInt(d.slice(5,7));
+          if (y === year) implantPending[m-1]++;
+        }
+      }
+    });
+
+    return { paid, budgeted, orthoRealized, orthoPending, implantRealized, implantPending };
+  };
+
+  const allYears = [...new Set([
+    currentYear,
+    ...payments.map(p => p.date ? parseInt(p.date.slice(0,4)) : 0).filter(y => y > 2000),
+    ...patients.map(p => p.date ? parseInt(p.date.slice(0,4)) : 0).filter(y => y > 2000),
+    ...items.map(i => {
+      const d = i.realized_date || i.closed_date || "";
+      return d ? parseInt(d.slice(0,4)) : 0;
+    }).filter(y => y > 2000),
+  ])].sort((a, b) => b - a);
+
+  const [selectedYears, setSelectedYears] = useState([currentYear]);
+  const [compareMode,   setCompareMode]   = useState(false);
+
+  const YEAR_COLORS = ["#c9a84c","#3498db","#e74c3c","#2ecc71","#9b59b6"];
+
+  const toggleYear = (y) => {
+    if (compareMode) {
+      setSelectedYears(prev =>
+        prev.includes(y)
+          ? prev.length > 1 ? prev.filter(x => x !== y) : prev
+          : [...prev, y].slice(0, 4)
+      );
+    } else {
+      setSelectedYears([y]);
+    }
+  };
+
+  const buildAllSeries = () => {
+    const years = compareMode ? [...selectedYears].sort() : [selectedYears[0] || currentYear];
+    if (!compareMode) {
+      const d = computeYearData(years[0]);
+      return {
+        billing:  [
+          { label:"Facturación real", data: d.paid,            color:"#2ecc71" },
+          { label:"Presupuestado",    data: d.budgeted,        color:"#c9a84c" },
+        ],
+        ortho:    [
+          { label:"Realizadas",       data: d.orthoRealized,   color:"#9b59b6" },
+          { label:"Pendientes",       data: d.orthoPending,    color:"#e74c3c" },
+        ],
+        implants: [
+          { label:"Realizados",       data: d.implantRealized, color:"#3498db" },
+          { label:"Pendientes",       data: d.implantPending,  color:"#e67e22" },
+        ],
+      };
+    }
+    const yds = years.map((y, i) => ({ y, c: YEAR_COLORS[i % YEAR_COLORS.length], d: computeYearData(y) }));
+    return {
+      billing:  yds.map(({y,c,d}) => ({ label:`Facturación ${y}`, data: d.paid,            color: c })),
+      ortho:    yds.map(({y,c,d}) => ({ label:`Realizadas ${y}`,  data: d.orthoRealized,   color: c })),
+      implants: yds.map(({y,c,d}) => ({ label:`Realizados ${y}`,  data: d.implantRealized, color: c })),
+    };
+  };
+
+  const allSeries = buildAllSeries();
+
+  const fmtEurK = (v) => {
+    if (v === 0) return "0€";
+    if (v >= 10000) return `${Math.round(v/1000)}k€`;
+    if (v >= 1000)  return `${(v/1000).toFixed(1)}k€`;
+    return `${Math.round(v)}€`;
+  };
+  const fmtInt = (v) => String(Math.round(v));
+
+  const makeSVG = (seriesData, formatVal, W=900, H=220) => {
+    const PL=70, PR=20, PT=40, PB=36;
+    const CW = W - PL - PR, CH = H - PT - PB;
+    const allVals = seriesData.flatMap(s => s.data);
+    const maxVal  = Math.max(...allVals, 1);
+    const yMax    = maxVal <= 5 ? maxVal + 1 : Math.ceil(maxVal * 1.15);
+    const gridVals = [0,1,2,3,4].map(i => Math.round(yMax * i / 4));
+    const xPos = i => (PL + (i/11) * CW).toFixed(1);
+    const yPos = v => (PT + CH - (v/yMax) * CH).toFixed(1);
+    const pathD = data => data.map((v,i) => `${i===0?'M':'L'}${xPos(i)},${yPos(v)}`).join(' ');
+
+    const grid = gridVals.map(v =>
+      `<line x1="${PL}" y1="${yPos(v)}" x2="${W-PR}" y2="${yPos(v)}" stroke="#e2e5ed" stroke-width="1" stroke-dasharray="4,3"/>` +
+      `<text x="${PL-6}" y="${(parseFloat(yPos(v))+4).toFixed(1)}" text-anchor="end" font-size="10" fill="#888">${formatVal(v)}</text>`
+    ).join('');
+
+    const xAxis = `<line x1="${PL}" y1="${yPos(0)}" x2="${W-PR}" y2="${yPos(0)}" stroke="#ddd" stroke-width="1"/>`;
+
+    const xLabels = MONTHS_SHORT.map((m,i) =>
+      `<text x="${xPos(i)}" y="${H-6}" text-anchor="middle" font-size="10" fill="#777">${m}</text>`
+    ).join('');
+
+    const lines = seriesData.map(s => {
+      const linePath = `<path d="${pathD(s.data)}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+      const dots = s.data.map((v,i) => {
+        const cx = xPos(i), cy = yPos(v);
+        const circle = `<circle cx="${cx}" cy="${cy}" r="4" fill="${s.color}" stroke="#fff" stroke-width="1.5"/>`;
+        const label  = v > 0
+          ? `<text x="${cx}" y="${(parseFloat(cy)-9).toFixed(1)}" text-anchor="middle" font-size="9" fill="${s.color}" font-weight="700">${formatVal(v)}</text>`
+          : '';
+        return circle + label;
+      }).join('');
+      return linePath + dots;
+    }).join('');
+
+    const legend = seriesData.map((s, si) => {
+      const lx = PL + si * 180;
+      return `<line x1="${lx}" y1="14" x2="${lx+20}" y2="14" stroke="${s.color}" stroke-width="2.5"/>` +
+             `<circle cx="${lx+10}" cy="14" r="3.5" fill="${s.color}"/>` +
+             `<text x="${lx+26}" y="18" font-size="10" fill="#555">${s.label}</text>`;
+    }).join('');
+
+    return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block" xmlns="http://www.w3.org/2000/svg">${grid}${xAxis}${xLabels}${lines}${legend}</svg>`;
+  };
+
+  const LineChart = ({ title, series, formatVal }) => (
+    <div style={{marginBottom:24}}>
+      <div style={{fontSize:11,color:"#555",letterSpacing:2,fontWeight:700,marginBottom:8,textTransform:"uppercase"}}>{title}</div>
+      <div style={{background:"#fff",borderRadius:10,border:"1px solid #e2e5ed",padding:"4px 0",overflow:"hidden"}}
+        dangerouslySetInnerHTML={{__html: makeSVG(series, formatVal)}}/>
+    </div>
+  );
+
+  const printProgreso = () => {
+    const yearLabel = compareMode ? selectedYears.join(", ") : String(selectedYears[0] || currentYear);
+    const cs = "background:#fff;border-radius:10px;border:1px solid #e2e5ed;padding:4px 0;margin-bottom:24px;overflow:hidden;page-break-inside:avoid;";
+    const ts = "font-size:11px;color:#555;letter-spacing:2px;font-weight:700;margin:0 0 6px;text-transform:uppercase;";
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
+<title>Progreso Anual — ${yearLabel}</title>
+<style>
+body{font-family:'Segoe UI',sans-serif;color:#111;padding:32px;font-size:13px;}
+h1{font-size:20px;margin:0 0 4px;}
+.sub{color:#666;margin-bottom:28px;font-size:13px;}
+@media print{body{padding:16px;} @page{size:A4 landscape;margin:1.5cm;}}
+</style></head><body>
+<h1>IMPLANTDENT — Progreso Anual</h1>
+<div class="sub">Año: ${yearLabel}</div>
+<p style="${ts}">Facturación mensual vs Presupuestado</p>
+<div style="${cs}">${makeSVG(allSeries.billing, fmtEurK)}</div>
+<p style="${ts}">Ortodoncias realizadas vs pendientes</p>
+<div style="${cs}">${makeSVG(allSeries.ortho, fmtInt)}</div>
+<p style="${ts}">Implantes realizados vs pendientes</p>
+<div style="${cs}">${makeSVG(allSeries.implants, fmtInt)}</div>
+</body></html>`;
+    const w = window.open("","_blank");
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    w.print();
+  };
+
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
+        <button onClick={onClose}
+          style={{background:"none",border:"1px solid #e2e5ed",borderRadius:8,color:"#555",cursor:"pointer",fontSize:13,padding:"5px 14px"}}>
+          ← Volver
+        </button>
+        <div style={{fontSize:11,color:"#c9a84c",letterSpacing:2,fontWeight:700}}>📈 PROGRESO ANUAL</div>
+        <div style={{flex:1}}/>
+        <button
+          onClick={() => { setCompareMode(m => !m); if (compareMode) setSelectedYears([selectedYears[0]||currentYear]); }}
+          style={{...s.btnDark, fontSize:11, padding:"5px 14px",
+            ...(compareMode ? {background:"#c9a84c22",color:"#c9a84c",border:"1px solid #c9a84c"} : {})}}>
+          {compareMode ? "✓ Comparando años" : "Comparar años"}
+        </button>
+        <button onClick={printProgreso} style={{...s.btnDark,fontSize:11,padding:"5px 14px"}}>🖨 Imprimir PDF</button>
+      </div>
+
+      <div style={{display:"flex",gap:8,marginBottom:24,flexWrap:"wrap",alignItems:"center"}}>
+        <span style={{fontSize:11,color:"#888",letterSpacing:1,marginRight:4}}>AÑO:</span>
+        {allYears.map((y) => {
+          const sel = selectedYears.includes(y);
+          const col = compareMode && sel ? YEAR_COLORS[selectedYears.indexOf(y)] : "#c9a84c";
+          return (
+            <button key={y} onClick={() => toggleYear(y)}
+              style={{background: sel ? col+"22" : "#f5f7fa", color: sel ? col : "#555",
+                border: `2px solid ${sel ? col : "#e2e5ed"}`, borderRadius:8,
+                padding:"5px 16px", cursor:"pointer", fontSize:13, fontWeight:700, transition:"all 0.15s"}}>
+              {y}{y === currentYear ? " ★" : ""}
+            </button>
+          );
+        })}
+        {compareMode && <span style={{fontSize:11,color:"#aaa",marginLeft:4}}>Hasta 4 años</span>}
+      </div>
+
+      <LineChart title="Facturación mensual vs Presupuestado" series={allSeries.billing}  formatVal={fmtEurK}/>
+      <LineChart title="Ortodoncias realizadas vs pendientes" series={allSeries.ortho}    formatVal={fmtInt}/>
+      <LineChart title="Implantes realizados vs pendientes"   series={allSeries.implants} formatVal={fmtInt}/>
+    </div>
+  );
+}
+
 // ─── EstadisticasPanel ───────────────────────────────────────────────────────
 function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefreshItems, onSync }) {
   const now = new Date();
   const y = now.getFullYear(), mo = now.getMonth();
   const [from,         setFrom]   = useState(`${y}-${String(mo+1).padStart(2,"0")}-01`);
   const [to,           setTo]     = useState(now.toISOString().split("T")[0]);
-  const [activeDetail, setDetail] = useState(null);
-  const [busy,         setBusy]   = useState(null);
-  const [syncing,      setSyncing] = useState(false);
+  const [activeDetail,  setDetail]      = useState(null);
+  const [busy,          setBusy]        = useState(null);
+  const [syncing,       setSyncing]     = useState(false);
+  const [showProgreso,  setShowProgreso] = useState(false);
 
   useEffect(() => {
     setSyncing(true);
@@ -1005,6 +1254,17 @@ ${orthoItems.filter(i=>i.realized_date).length === 0
     );
   };
 
+  if (showProgreso) {
+    return (
+      <ProgresoPanel
+        payments={payments}
+        items={items}
+        patients={patients}
+        onClose={() => setShowProgreso(false)}
+      />
+    );
+  }
+
   return (
     <div>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
@@ -1021,6 +1281,12 @@ ${orthoItems.filter(i=>i.realized_date).length === 0
         <div>
           <label style={s.label}>Hasta</label>
           <input type="date" value={to} onChange={e=>{setTo(e.target.value);setDetail(null);}} style={{...s.input,width:160}}/>
+        </div>
+        <div style={{display:"flex",alignItems:"flex-end"}}>
+          <button onClick={() => setShowProgreso(true)}
+            style={{...s.btnGold, fontSize:12, padding:"9px 18px", display:"flex", alignItems:"center", gap:6}}>
+            📈 Progreso
+          </button>
         </div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:20}}>
