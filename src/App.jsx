@@ -977,6 +977,31 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
     const xPos = i => PL+(i/11)*CW;
     const yPos = v => PT+CH-(v/yMax)*CH;
     const pathD= data=>data.map((v,i)=>`${i===0?'M':'L'}${xPos(i).toFixed(1)},${yPos(v).toFixed(1)}`).join(' ');
+
+    // Collision-aware label Y positions: spread overlapping labels vertically
+    const LSTEP = 11; // label height + gap
+    const labelYMap = new Map();
+    for (let mi = 0; mi < 12; mi++) {
+      const entries = series
+        .map((s, si) => ({ si, v: s.data[mi], rawY: yPos(s.data[mi]) - 9 }))
+        .filter(e => e.v > 0)
+        .sort((a, b) => a.rawY - b.rawY);
+      if (!entries.length) continue;
+      // group consecutive entries that are too close into clusters
+      const clusters = [];
+      let cl = [entries[0]];
+      for (let k = 1; k < entries.length; k++) {
+        if (entries[k].rawY - entries[k-1].rawY < LSTEP) cl.push(entries[k]);
+        else { clusters.push(cl); cl = [entries[k]]; }
+      }
+      clusters.push(cl);
+      clusters.forEach(c => {
+        const avgY = c.reduce((s, e) => s + e.rawY, 0) / c.length;
+        const startY = avgY - ((c.length - 1) * LSTEP) / 2;
+        c.forEach((e, k) => labelYMap.set(`${e.si}_${mi}`, Math.max(PT + 4, startY + k * LSTEP)));
+      });
+    }
+
     return (
       <div style={{marginBottom:24}}>
         <div style={{fontSize:11,color:"#555",letterSpacing:2,fontWeight:700,marginBottom:8,textTransform:"uppercase"}}>{title}</div>
@@ -1001,7 +1026,7 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
                   return (
                     <g key={mi}>
                       <circle cx={cx} cy={cy} r={4} fill={s.color} stroke="#fff" strokeWidth={1.5}/>
-                      {v>0 && <text x={cx} y={cy-9} textAnchor="middle" fontSize={9} fill={s.color} fontWeight="700">{formatVal(v)}</text>}
+                      {v>0 && <text x={cx} y={labelYMap.get(`${si}_${mi}`) ?? cy-9} textAnchor="middle" fontSize={9} fill={s.color} fontWeight="700">{formatVal(v)}</text>}
                       {ptList.length>0 && (
                         <circle cx={cx} cy={cy} r={16} fill="transparent" style={{cursor:"pointer"}}
                           onClick={()=>setPointModal({title:`${MONTHS_ES[mi]} — ${s.label}`, list:ptList})}/>
