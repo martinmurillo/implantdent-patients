@@ -1414,6 +1414,22 @@ ${orthoItems.filter(i=>i.realized_date).length === 0
                 {type==="ortho" && item.notes ? ` · ${item.notes}` : ""}
               </div>
             )}
+            {(() => {
+              const todayStr = today();
+              const future = (pat?.appointments||[])
+                .filter(a => a.date && a.date >= todayStr)
+                .sort((a,b) => a.date.localeCompare(b.date));
+              if (!future.length) return null;
+              return (
+                <div style={{fontSize:11, color:"#3498db", marginTop:4}}>
+                  {future.map((a,i) => (
+                    <span key={i} style={{marginRight:10}}>
+                      📅 {fmtDate(a.date)}{a.time ? ` ${a.time}` : ""}{a.doctors ? ` · ${a.doctors}` : ""}
+                    </span>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
           <div style={{display:"flex", gap:6, alignItems:"center", flexShrink:0, marginLeft:12}}>
             {!realizado && !editing && (
