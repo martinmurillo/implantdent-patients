@@ -2428,7 +2428,7 @@ export default function App() {
   const printWeekly = () => {
     const [from, to] = [weekDays[0].label, weekDays[6].label];
     const sections = weekAppts.map(({label, appts}) => {
-      if (appts.length === 0) return `<tr><td colspan="5" class="dayhead">${label}</td></tr><tr><td colspan="5" class="empty">Sin citas</td></tr>`;
+      if (appts.length === 0) return `<tr><td colspan="7" class="dayhead">${label}</td></tr><tr><td colspan="7" class="empty">Sin citas</td></tr>`;
       const rows = appts.map(({patient:pat, appt}) => {
         const grand = patientGrand(pat);
         const paid  = payments.filter(pay=>pay.patient_id===pat.id).reduce((s,pay)=>s+(parseFloat(pay.amount)||0),0);
@@ -2439,12 +2439,12 @@ export default function App() {
           else if (debt<=0) estado = `<span style="color:#27ae60">Pagado</span>`;
           else              estado = `<span style="color:#e74c3c">Deuda: ${fmtEur(debt)}</span>`;
         }
-        const subInfo = [appt.label, appt.doctors].filter(Boolean).join(" · ");
         return `<tr>
           <td class="dayhead" style="background:#f9f9f9;font-size:11px;color:#666;font-weight:400">${label}</td>
           <td>${appt.time||"—"}</td>
-          <td><strong>${pat.name||"Sin nombre"}</strong>${subInfo ? `<br><span style="font-size:11px;color:#555">${subInfo}</span>` : ""}</td>
+          <td><strong>${pat.name||"Sin nombre"}</strong></td>
           <td>${pat.hc||"—"}</td>
+          <td>${appt.doctors||""}</td>
           <td>${estado}</td>
           <td class="notes"><div class="notes-line"></div><div class="notes-line"></div></td>
         </tr>`;
@@ -2471,7 +2471,7 @@ export default function App() {
 <h1>IMPLANTDENT — Agenda semanal</h1>
 <div class="sub">${from} → ${to}</div>
 <table>
-  <thead><tr><th>Día</th><th>Hora</th><th>Paciente</th><th>HC</th><th>Estado pago</th><th>Notas</th></tr></thead>
+  <thead><tr><th>Día</th><th>Hora</th><th>Paciente</th><th>HC</th><th>Doctor / Comentario</th><th>Estado pago</th><th>Notas</th></tr></thead>
   <tbody>${sections}</tbody>
 </table>
 </body></html>`);
