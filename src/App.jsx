@@ -478,8 +478,8 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
             <button key={id} onClick={()=>setTab(id)}
               style={{background:tab===id?"#dce8fa":"none",border:"none",borderRadius:8,color:tab===id?"#c9a84c":"#555",padding:"8px 20px",cursor:"pointer",fontSize:13,fontWeight:tab===id?700:400,transition:"all 0.15s"}}>
               {label}
-              {id==="appointments" && p.appointments.length>0 &&
-                <span style={{background:"#c9a84c",color:"#f0f2f7",borderRadius:"50%",width:16,height:16,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,marginLeft:6}}>{p.appointments.length}</span>}
+              {id==="appointments" && p.appointments.filter(a=>a.date&&a.date>=today()).length>0 &&
+                <span style={{background:"#c9a84c",color:"#f0f2f7",borderRadius:"50%",width:16,height:16,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,marginLeft:6}}>{p.appointments.filter(a=>a.date&&a.date>=today()).length}</span>}
               {id==="payments" && patPayments.length>0 &&
                 <span style={{background:"#e74c3c",color:"#fff",borderRadius:"50%",width:16,height:16,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,marginLeft:6}}>{patPayments.length}</span>}
             </button>
