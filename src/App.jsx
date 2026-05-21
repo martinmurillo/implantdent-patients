@@ -744,7 +744,7 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
   const currentYear = now.getFullYear();
 
   const implantRx = /implant/i;
-  const orthoRx   = /ortodoncia|orthodontic|invisalign|invisaling|invisible\s|ortod/i;
+  const orthoRx   = /ortodoncia|orthodontic|invisalign|invisaling|invisible\s|ortod|placa expansiva|hass/i;
 
   const computeYearFull = (year) => {
     const a12 = () => Array(12).fill(0);
@@ -1202,7 +1202,7 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
 
   // Implantes y ortodoncia: realizados solo en el rango, pendientes siempre
   const implantRx    = /implant/i;
-  const orthoRx      = /ortodoncia|orthodontic|invisalign|invisaling|invisible\s|ortod/i;
+  const orthoRx      = /ortodoncia|orthodontic|invisalign|invisaling|invisible\s|ortod|placa expansiva|hass/i;
 
   // Items de treatment_items: realizados solo en rango, pendientes siempre
   const implantItems = items.filter(i => {
