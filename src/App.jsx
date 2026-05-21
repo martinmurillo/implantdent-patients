@@ -659,12 +659,19 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
   else if (status === "frío") bc = "#7f8c8d";
   else if (status === "en curso") bc = "#3498db";
   else { if(days>=30) bc="#8e44ad"; else if(days>=15) bc="#e74c3c"; else if(days>=7) bc="#f39c12"; else bc="#c9a84c44"; }
+  const txNames = getTxItems(patient).map(t=>(t.name||"").toLowerCase());
+  const hasOrtho   = txNames.some(n=>n.includes("ortodoncia"));
+  const hasImplant = txNames.some(n=>n.includes("implante"));
   return (
     <div style={{...s.card, borderLeft:`4px solid ${bc}`}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
         <div onClick={onOpen?()=>onOpen(patient):undefined}
           style={{flex:1, cursor:onOpen?"pointer":"default"}}>
-          <div style={{fontWeight:700,color:"#2c3250",fontSize:15}}>{patient.name||"Sin nombre"}</div>
+          <div style={{fontWeight:700,color:"#2c3250",fontSize:15,display:"flex",alignItems:"center",gap:6}}>
+            {patient.name||"Sin nombre"}
+            {hasOrtho   && <span title="Ortodoncia" style={{fontSize:13}}>⭐</span>}
+            {hasImplant && <span title="Implante"   style={{fontSize:13}}>🦷</span>}
+          </div>
           <div style={{fontSize:12,color:"#555",marginTop:2}}>HC: {patient.hc||"—"} · #{patient.budget_no||"—"} · {fmtDate(patient.date)}</div>
           <div style={{fontSize:12,color:"#777",marginTop:4}}>
             {getTxItems(patient).length} tratamiento(s) · {(patient.appointments||[]).filter(a=>a.date&&a.date>=new Date().toISOString().slice(0,10)).length} cita(s) · <span style={{color:"#c9a84c",fontWeight:600}}>{fmtEur(grand)}</span>
