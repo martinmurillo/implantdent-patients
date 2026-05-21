@@ -2445,6 +2445,7 @@ export default function App() {
           <td><strong>${pat.name||"Sin nombre"}</strong></td>
           <td>${pat.hc||"—"}</td>
           <td>${estado}</td>
+          <td class="notes"></td>
         </tr>`;
       }).join("");
       return rows;
@@ -2453,20 +2454,22 @@ export default function App() {
     win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>Agenda semanal</title>
 <style>
-  body{font-family:'Segoe UI',sans-serif;font-size:13px;color:#111;padding:24px;}
+  @page{size:A4 landscape;margin:1.2cm;}
+  body{font-family:'Segoe UI',sans-serif;font-size:13px;color:#111;padding:16px;}
   h1{font-size:17px;margin:0 0 4px;}
-  .sub{color:#666;font-size:12px;margin-bottom:20px;}
+  .sub{color:#666;font-size:12px;margin-bottom:16px;}
   table{width:100%;border-collapse:collapse;}
   th{text-align:left;font-size:11px;color:#666;text-transform:uppercase;letter-spacing:1px;padding:6px 8px;border-bottom:2px solid #ddd;}
   td{padding:7px 8px;border-bottom:1px solid #eee;vertical-align:middle;}
   .dayhead{font-weight:700;color:#2c3250;background:#f0f2f7;}
   .empty{color:#aaa;font-style:italic;padding:6px 8px;}
-  @media print{body{padding:12px;}}
+  .notes{width:35%;border-bottom:2px solid #999;background:repeating-linear-gradient(transparent,transparent 24px,#ddd 24px,#ddd 25px);min-height:36px;}
+  @media print{body{padding:0;}}
 </style></head><body>
 <h1>IMPLANTDENT — Agenda semanal</h1>
 <div class="sub">${from} → ${to}</div>
 <table>
-  <thead><tr><th>Día</th><th>Hora</th><th>Paciente</th><th>HC</th><th>Estado pago</th></tr></thead>
+  <thead><tr><th>Día</th><th>Hora</th><th>Paciente</th><th>HC</th><th>Estado pago</th><th>Notas</th></tr></thead>
   <tbody>${sections}</tbody>
 </table>
 </body></html>`);
