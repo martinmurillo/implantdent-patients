@@ -2439,10 +2439,11 @@ export default function App() {
           else if (debt<=0) estado = `<span style="color:#27ae60">Pagado</span>`;
           else              estado = `<span style="color:#e74c3c">Deuda: ${fmtEur(debt)}</span>`;
         }
+        const subInfo = [appt.label, appt.doctors].filter(Boolean).join(" · ");
         return `<tr>
           <td class="dayhead" style="background:#f9f9f9;font-size:11px;color:#666;font-weight:400">${label}</td>
           <td>${appt.time||"—"}</td>
-          <td><strong>${pat.name||"Sin nombre"}</strong></td>
+          <td><strong>${pat.name||"Sin nombre"}</strong>${subInfo ? `<br><span style="font-size:11px;color:#555">${subInfo}</span>` : ""}</td>
           <td>${pat.hc||"—"}</td>
           <td>${estado}</td>
           <td class="notes"><div class="notes-line"></div><div class="notes-line"></div></td>
