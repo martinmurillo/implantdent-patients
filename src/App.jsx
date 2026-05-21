@@ -1183,6 +1183,14 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
       return next;
     });
   };
+  const restoreSyn = (patientId, txName) => {
+    const key = `${patientId}|${(txName||"").toLowerCase().trim()}`;
+    setExcluded(prev => {
+      const next = new Set(prev); next.delete(key);
+      try { localStorage.setItem("progreso_excluded", JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  };
 
   useEffect(() => {
     setSyncing(true);
@@ -1229,6 +1237,19 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
       if (orthoRx.test(tx.name||"")) orthoItems.push(syn);
       // Implantes: solo si tiene al menos un pago registrado (en curso ya están en treatment_items)
       if (implantRx.test(tx.name||"") && hasPayment) implantItems.push(syn);
+    });
+  });
+
+  // Ítems excluidos manualmente (falsos positivos) para poder restaurarlos
+  const excludedOrthoItems = [];
+  const excludedImplantItems = [];
+  patients.forEach(pat => {
+    getTxItems(pat).forEach(tx => {
+      const key = `${pat.id}|${(tx.name||"").toLowerCase().trim()}`;
+      if (!excluded.has(key)) return;
+      const syn = { patient_id:pat.id, patient_name:pat.name, hc:pat.hc, treatment_name:tx.name };
+      if (orthoRx.test(tx.name||"")) excludedOrthoItems.push(syn);
+      if (implantRx.test(tx.name||"")) excludedImplantItems.push(syn);
     });
   });
 
@@ -1582,6 +1603,25 @@ ${orthoItems.filter(i=>i.realized_date).length === 0
                 return <ItemRow key={item.id} item={item} qty={m ? parseInt(m[1]) : 1} type="implant"/>;
               })
           }
+          {excludedImplantItems.length > 0 && (
+            <div style={{marginTop:16,borderTop:"1px dashed #ccc",paddingTop:12}}>
+              <div style={{fontSize:11,color:"#999",letterSpacing:1,marginBottom:8,fontWeight:700}}>EXCLUIDOS ({excludedImplantItems.length}) — click Restaurar para recuperar</div>
+              {excludedImplantItems.map((item,i) => (
+                <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",background:"#f9f9f9",borderRadius:6,marginBottom:4,opacity:0.7}}>
+                  <div style={{flex:1,fontSize:13}}>
+                    <span style={{fontWeight:600,color:"#555"}}>{item.patient_name}</span>
+                    {item.hc && <span style={{color:"#999",fontSize:11}}> · HC {item.hc}</span>}
+                    <div style={{fontSize:11,color:"#aaa"}}>{item.treatment_name}</div>
+                  </div>
+                  <button onClick={()=>restoreSyn(item.patient_id,item.treatment_name)}
+                    style={{background:"#e8f5e9",border:"1px solid #4caf5088",borderRadius:6,
+                      color:"#2e7d32",padding:"4px 10px",cursor:"pointer",fontSize:12,fontWeight:700}}>
+                    Restaurar
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -1593,6 +1633,25 @@ ${orthoItems.filter(i=>i.realized_date).length === 0
             ? <div style={{color:"#555",padding:20,textAlign:"center"}}>Sin ortodoncia en este período</div>
             : orthoItems.map(item => <ItemRow key={item.id} item={item} qty={1} type="ortho"/>)
           }
+          {excludedOrthoItems.length > 0 && (
+            <div style={{marginTop:16,borderTop:"1px dashed #ccc",paddingTop:12}}>
+              <div style={{fontSize:11,color:"#999",letterSpacing:1,marginBottom:8,fontWeight:700}}>EXCLUIDOS ({excludedOrthoItems.length}) — click Restaurar para recuperar</div>
+              {excludedOrthoItems.map((item,i) => (
+                <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",background:"#f9f9f9",borderRadius:6,marginBottom:4,opacity:0.7}}>
+                  <div style={{flex:1,fontSize:13}}>
+                    <span style={{fontWeight:600,color:"#555"}}>{item.patient_name}</span>
+                    {item.hc && <span style={{color:"#999",fontSize:11}}> · HC {item.hc}</span>}
+                    <div style={{fontSize:11,color:"#aaa"}}>{item.treatment_name}</div>
+                  </div>
+                  <button onClick={()=>restoreSyn(item.patient_id,item.treatment_name)}
+                    style={{background:"#e8f5e9",border:"1px solid #4caf5088",borderRadius:6,
+                      color:"#2e7d32",padding:"4px 10px",cursor:"pointer",fontSize:12,fontWeight:700}}>
+                    Restaurar
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
