@@ -2445,7 +2445,7 @@ export default function App() {
           <td><strong>${pat.name||"Sin nombre"}</strong></td>
           <td>${pat.hc||"—"}</td>
           <td>${estado}</td>
-          <td class="notes"></td>
+          <td class="notes"><div class="notes-line"></div><div class="notes-line"></div></td>
         </tr>`;
       }).join("");
       return rows;
@@ -2463,7 +2463,8 @@ export default function App() {
   td{padding:7px 8px;border-bottom:1px solid #eee;vertical-align:middle;}
   .dayhead{font-weight:700;color:#2c3250;background:#f0f2f7;}
   .empty{color:#aaa;font-style:italic;padding:6px 8px;}
-  .notes{width:35%;border-bottom:2px solid #999;background:repeating-linear-gradient(transparent,transparent 24px,#ddd 24px,#ddd 25px);min-height:36px;}
+  .notes{width:35%;padding:4px 8px;}
+  .notes-line{border-bottom:1px solid #aaa;height:20px;margin-bottom:4px;}
   @media print{body{padding:0;}}
 </style></head><body>
 <h1>IMPLANTDENT — Agenda semanal</h1>
