@@ -746,7 +746,11 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
 
   const firstName  = ((patient.name||"").trim().split(/\s+/)[0] || "paciente").replace(/^./, c => c.toUpperCase()).replace(/(?<=^.).*/, s => s.toLowerCase());
   const waPhone    = patient.phone ? (n => /^[6789]\d{8}$/.test(n) ? "34"+n : n)(patient.phone.replace(/\D/g,"")) : null;
-  const getWaCount = (key) => (waClicks.find(c=>c.button_key===key)?.count)||0;
+  const getWaCount = (key) => {
+    const fromDb = (waClicks.find(c=>c.button_key===key)?.count)||0;
+    if (fromDb > 0) return fromDb;
+    return parseInt(localStorage.getItem(`wa_${patient.id}_${key}`)||"0");
+  };
   const grandOffer = fmtEur(Math.round(grand * 0.85 * 100) / 100);
 
   const waLink = (msg) => waPhone ? `https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}` : null;
@@ -2501,8 +2505,11 @@ export default function App() {
   const fetchWaClicks     = async () => { const {data}=await supabase.from("wa_clicks").select("*"); setWaClicks(data||[]); };
   const incWaClick = async (patientId, key) => {
     const existing = waClicks.find(c=>c.patient_id===patientId&&c.button_key===key);
-    const newCount = (existing?.count||0)+1;
+    const lsKey = `wa_${patientId}_${key}`;
+    const lsVal = parseInt(localStorage.getItem(lsKey)||"0");
+    const newCount = Math.max((existing?.count||0), lsVal) + 1;
     setWaClicks(prev=>[...prev.filter(c=>!(c.patient_id===patientId&&c.button_key===key)), {patient_id:patientId,button_key:key,count:newCount}]);
+    try { localStorage.setItem(lsKey, String(newCount)); } catch {}
     await supabase.from("wa_clicks").upsert({patient_id:patientId,button_key:key,count:newCount},{onConflict:"patient_id,button_key"});
   };
 
@@ -2995,7 +3002,8 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
                                 const fn = ((pat.name||"").trim().split(/\s+/)[0]||"paciente").replace(/^./,c=>c.toUpperCase()).replace(/(?<=^.).*/,s=>s.toLowerCase());
                                 const wp = (n=>/^[6789]\d{8}$/.test(n)?"34"+n:n)(pat.phone.replace(/\D/g,""));
                                 const msg = `Hola ${fn}! Como estás?.\n\nTe envío este mensaje para recordarte que el día ${fmtDate(appt.date)} tienes cita en la clínica.\n\nCualquier cambio que quieras hacer, me lo dices y vemos si nos podemos ajustar o bien cambiamos la cita.\n\nSaludos ${fn}, nos vemos el ${fmtDate(appt.date)}`;
-                                const count = (waClicks.find(c=>c.patient_id===pat.id&&c.button_key==="cita")?.count)||0;
+                                const dbCount = (waClicks.find(c=>c.patient_id===pat.id&&c.button_key==="cita")?.count)||0;
+                                const count = dbCount > 0 ? dbCount : parseInt(localStorage.getItem(`wa_${pat.id}_cita`)||"0");
                                 return (
                                   <div style={{marginTop:5,display:"flex"}} onClick={e=>e.stopPropagation()}>
                                     <div style={{position:"relative",display:"inline-flex"}}>
