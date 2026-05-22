@@ -699,8 +699,6 @@ function AlertCard({ patient, onOpen }) {
 
 // ─── PatientCard ──────────────────────────────────────────────────────────────
 function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[], onOpen=null, templates=[] }) {
-  const [exporting, setExp] = useState(null);
-  const [recalled, setRecalled] = useState(() => localStorage.getItem(`recalled_${patient.id}`) === "1");
   const grand = patientGrand(patient);
   const totalPaid = patientPayments.reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
   const hasPending = patientPayments.length > 0 && totalPaid < grand;
@@ -732,6 +730,13 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
               {patient.name||"Sin nombre"}
               {hasOrtho   && <span title="Ortodoncia" style={{fontSize:13}}>⭐</span>}
               {hasImplant && <span title="Implante"   style={{fontSize:13}}>🦷</span>}
+              {patient.phone && (
+                <a href={`https://wa.me/${(n=>/^[6789]\d{8}$/.test(n)?"34"+n:n)(patient.phone.replace(/\D/g,""))}`} target="_blank" rel="noreferrer"
+                  title={`WhatsApp ${patient.phone}`}
+                  style={{background:"#25d36622",border:"1px solid #25d36688",borderRadius:6,color:"#25d366",padding:"3px 7px",fontSize:13,fontWeight:700,textDecoration:"none",display:"inline-flex",alignItems:"center",lineHeight:1}}>
+                  &#x1F4AC;
+                </a>
+              )}
             </div>
             <div style={{fontSize:12,color:"#555",marginTop:2}}>HC: {patient.hc||"—"} · #{patient.budget_no||"—"} · {fmtDate(patient.date)}</div>
             <div style={{fontSize:12,color:"#777",marginTop:4,display:"flex",flexWrap:"wrap",gap:"0 6px"}}>
@@ -752,23 +757,6 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
             ))}
           </div>
           <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-            {["es","en","fr"].map(lang=>(
-              <button key={lang} onClick={()=>exportToPDF(patient,lang,setExp,patientPayments,templates)} disabled={!!exporting} title={`PDF ${lang.toUpperCase()}`}
-                style={{...s.btnSm, opacity:exporting?0.6:1, cursor:exporting?"not-allowed":"pointer"}}>
-                {exporting===lang?"⏳":lang.toUpperCase()}
-              </button>
-            ))}
-            <button onClick={()=>setRecalled(r=>{ const next=!r; next ? localStorage.setItem(`recalled_${patient.id}`,"1") : localStorage.removeItem(`recalled_${patient.id}`); return next; })} title="Recordatorio de rellamada"
-              style={{background:recalled?"#c9a84c22":"#ffffff",border:`1px solid ${recalled?"#c9a84c":"#bbb"}`,borderRadius:6,color:recalled?"#c9a84c":"#bbb",padding:"5px 9px",cursor:"pointer",fontSize:12,fontWeight:700,transition:"all 0.15s"}}>
-              R
-            </button>
-            {patient.phone && (
-              <a href={`https://wa.me/${(n=>/^[6789]\d{8}$/.test(n)?"34"+n:n)(patient.phone.replace(/\D/g,""))}`} target="_blank" rel="noreferrer"
-                title={`WhatsApp ${patient.phone}`}
-                style={{background:"#25d36622",border:"1px solid #25d36688",borderRadius:6,color:"#25d366",padding:"5px 9px",cursor:"pointer",fontSize:14,fontWeight:700,textDecoration:"none",display:"inline-flex",alignItems:"center",lineHeight:1}}>
-                &#x1F4AC;
-              </a>
-            )}
             <button onClick={()=>onEdit(patient)} style={{...s.btnDark,padding:"5px 12px",fontSize:12}}>Editar</button>
             <button onClick={()=>onDelete(patient)}
               style={{...s.btnSm,background:"#fff0f0",border:"1px solid #e74c3c88",color:"#e74c3c",padding:"5px 12px",fontSize:12}}>
