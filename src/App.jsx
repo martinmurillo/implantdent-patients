@@ -698,7 +698,7 @@ function AlertCard({ patient, onOpen }) {
 }
 
 // ─── PatientCard ──────────────────────────────────────────────────────────────
-function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[], onOpen=null, templates=[], waClicks=[] }) {
+function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[], onOpen=null, templates=[], waClicks=[], onWaClick=()=>{} }) {
   const grand = patientGrand(patient);
   const totalPaid = patientPayments.reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
   const hasPending = patientPayments.length > 0 && totalPaid < grand;
@@ -721,16 +721,7 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
 
   const firstName  = ((patient.name||"").trim().split(/\s+/)[0] || "paciente").replace(/^./, c => c.toUpperCase()).replace(/(?<=^.).*/, s => s.toLowerCase());
   const waPhone    = patient.phone ? (n => /^[6789]\d{8}$/.test(n) ? "34"+n : n)(patient.phone.replace(/\D/g,"")) : null;
-  const [waCounts, setWaCounts] = useState(() => {
-    const get = (key) => (waClicks.find(c=>c.button_key===key)?.count)||0;
-    return { saludo: get("saludo"), oferta: get("oferta"), cita: get("cita") };
-  });
-  const incWa = async (key) => {
-    const newCount = (waCounts[key]||0) + 1;
-    setWaCounts(prev => ({...prev, [key]: newCount}));
-    await supabase.from("wa_clicks")
-      .upsert({patient_id: patient.id, button_key: key, count: newCount}, {onConflict: "patient_id,button_key"});
-  };
+  const getWaCount = (key) => (waClicks.find(c=>c.button_key===key)?.count)||0;
   const grandOffer = fmtEur(Math.round(grand * 0.85 * 100) / 100);
 
   const waLink = (msg) => waPhone ? `https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}` : null;
@@ -814,13 +805,13 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
                 ? <span key={key} style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:"#f0f0f0",color:"#bbb",fontStyle:"italic"}}>{label}</span>
                 : (
                   <div key={key} style={{position:"relative",display:"inline-flex"}}>
-                    <a href={waLink(msg)} target="_blank" rel="noreferrer" onClick={()=>incWa(key)}
+                    <a href={waLink(msg)} target="_blank" rel="noreferrer" onClick={()=>onWaClick(key)}
                       style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:color+"18",border:`1px solid ${color}55`,color,fontWeight:600,textDecoration:"none",whiteSpace:"nowrap"}}>
                       {label}
                     </a>
-                    {waCounts[key] > 0 && (
+                    {getWaCount(key) > 0 && (
                       <span style={{position:"absolute",top:-7,right:-7,background:color,color:"#fff",borderRadius:"50%",minWidth:16,height:16,fontSize:10,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px",lineHeight:1,pointerEvents:"none"}}>
-                        {waCounts[key]}
+                        {getWaCount(key)}
                       </span>
                     )}
                   </div>
@@ -2482,6 +2473,12 @@ export default function App() {
   const fetchTranslations = async () => { const {data,error}=await supabase.from("treatment_translations").select("*").order("name_es"); if(!error){setTranslations(data||[]);setTranslationDict(data||[]);} };
   const fetchPayments     = async () => { const {data}=await supabase.from("payments").select("*").order("date",{ascending:false}); setPayments(data||[]); };
   const fetchWaClicks     = async () => { const {data}=await supabase.from("wa_clicks").select("*"); setWaClicks(data||[]); };
+  const incWaClick = async (patientId, key) => {
+    const existing = waClicks.find(c=>c.patient_id===patientId&&c.button_key===key);
+    const newCount = (existing?.count||0)+1;
+    setWaClicks(prev=>[...prev.filter(c=>!(c.patient_id===patientId&&c.button_key===key)), {patient_id:patientId,button_key:key,count:newCount}]);
+    await supabase.from("wa_clicks").upsert({patient_id:patientId,button_key:key,count:newCount},{onConflict:"patient_id,button_key"});
+  };
 
   // Cerrar sesión de Supabase solo al expirar el token o hacer sign out explícito
   useEffect(()=>{
@@ -2918,29 +2915,53 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
                           }
                           return (
                             <div key={appt.id}
-                              onClick={()=>{ openEdit(pat); setShowWeekly(false); }}
-                              style={{margin:"4px 6px",borderRadius:8,padding:"7px 8px",cursor:"pointer",
+                              style={{margin:"4px 6px",borderRadius:8,padding:"7px 8px",
                                 background:"#2c3250",borderLeft:`3px solid ${badgeColor||"#445"}`,
                                 transition:"background 0.12s"}}
                               onMouseEnter={e=>e.currentTarget.style.background="#364060"}
                               onMouseLeave={e=>e.currentTarget.style.background="#2c3250"}>
-                              {appt.time && (
-                                <div style={{fontSize:10,color:"#c9a84c",fontWeight:700,marginBottom:2}}>
-                                  {appt.time}
+                              <div onClick={()=>{ openEdit(pat); setShowWeekly(false); }} style={{cursor:"pointer"}}>
+                                {appt.time && (
+                                  <div style={{fontSize:10,color:"#c9a84c",fontWeight:700,marginBottom:2}}>
+                                    {appt.time}
+                                  </div>
+                                )}
+                                <div style={{fontSize:11,fontWeight:700,color:"#fff",lineHeight:1.3,
+                                  whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                                  {pat.name||"Sin nombre"}
                                 </div>
-                              )}
-                              <div style={{fontSize:11,fontWeight:700,color:"#fff",lineHeight:1.3,
-                                whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                                {pat.name||"Sin nombre"}
-                              </div>
-                              <div style={{fontSize:10,color:"#8899bb",marginTop:1}}>
-                                HC {pat.hc||"—"}
-                              </div>
-                              {badgeColor && (
-                                <div style={{fontSize:10,fontWeight:700,color:badgeColor,marginTop:3}}>
-                                  {paid===0 ? `${fmtEur(grand)} a pagar` : debt<=0 ? "Pagado" : `Deuda ${fmtEur(debt)}`}
+                                <div style={{fontSize:10,color:"#8899bb",marginTop:1}}>
+                                  HC {pat.hc||"—"}
                                 </div>
-                              )}
+                                {badgeColor && (
+                                  <div style={{fontSize:10,fontWeight:700,color:badgeColor,marginTop:3}}>
+                                    {paid===0 ? `${fmtEur(grand)} a pagar` : debt<=0 ? "Pagado" : `Deuda ${fmtEur(debt)}`}
+                                  </div>
+                                )}
+                              </div>
+                              {pat.phone && (()=>{
+                                const fn = ((pat.name||"").trim().split(/\s+/)[0]||"paciente").replace(/^./,c=>c.toUpperCase()).replace(/(?<=^.).*/,s=>s.toLowerCase());
+                                const wp = (n=>/^[6789]\d{8}$/.test(n)?"34"+n:n)(pat.phone.replace(/\D/g,""));
+                                const msg = `Hola ${fn}! Como estás?.\n\nTe envío este mensaje para recordarte que el día ${fmtDate(appt.date)} tienes cita en la clínica.\n\nCualquier cambio que quieras hacer, me lo dices y vemos si nos podemos ajustar o bien cambiamos la cita.\n\nSaludos ${fn}, nos vemos el ${fmtDate(appt.date)}`;
+                                const count = (waClicks.find(c=>c.patient_id===pat.id&&c.button_key==="cita")?.count)||0;
+                                return (
+                                  <div style={{marginTop:5,display:"flex"}} onClick={e=>e.stopPropagation()}>
+                                    <div style={{position:"relative",display:"inline-flex"}}>
+                                      <a href={`https://wa.me/${wp}?text=${encodeURIComponent(msg)}`}
+                                        target="_blank" rel="noreferrer"
+                                        onClick={()=>incWaClick(pat.id,"cita")}
+                                        style={{fontSize:10,padding:"3px 8px",borderRadius:5,background:"#3498db18",border:"1px solid #3498db55",color:"#3498db",fontWeight:600,textDecoration:"none",whiteSpace:"nowrap"}}>
+                                        aviso de cita
+                                      </a>
+                                      {count > 0 && (
+                                        <span style={{position:"absolute",top:-5,right:-5,background:"#3498db",color:"#fff",borderRadius:"50%",minWidth:14,height:14,fontSize:9,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 2px",lineHeight:1,pointerEvents:"none"}}>
+                                          {count}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })()}
                             </div>
                           );
                         })
@@ -3035,6 +3056,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
                     onOpen={isSearching ? openEdit : null}
                     templates={templates}
                     waClicks={waClicks.filter(c=>c.patient_id===p.id)}
+                    onWaClick={(key)=>incWaClick(p.id,key)}
                   />)}
                 </>
               );
