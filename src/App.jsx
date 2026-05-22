@@ -83,7 +83,7 @@ function PinLock({ onUnlock }) {
         <form onSubmit={submit}>
           <input
             ref={pinRef}
-            type="password" inputMode="numeric" maxLength={8} autoFocus
+            type="password" inputMode="numeric" maxLength={8} autoFocus autoComplete="new-password"
             defaultValue=""
             onChange={()=>setError(false)}
             placeholder="PIN"
