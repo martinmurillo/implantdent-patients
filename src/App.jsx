@@ -374,6 +374,9 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
   const [payNote, setPayNote]     = useState("");
   const [payLoading, setPayL]     = useState(false);
   const fileRef             = useRef();
+  const [newHistDate, setNewHistDate] = useState(today());
+  const [newHistText, setNewHistText] = useState("");
+  const [showNewHist, setShowNewHist] = useState(false);
 
   const treatmentsKey = p.treatments.map(t => t.name).join("|");
   useEffect(() => {
@@ -397,6 +400,14 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
   const addAppt = () => setP(prev=>({...prev, appointments:[...prev.appointments, emptyAppt()]}));
   const updAppt = (id,f,v) => setP(prev=>({...prev, appointments:prev.appointments.map(a=>a.id===id?{...a,[f]:v}:a)}));
   const remAppt = (id) => setP(prev=>({...prev, appointments:prev.appointments.filter(a=>a.id!==id)}));
+
+  const sortedHistory = [...(p.history || [])].sort((a,b) => b.date.localeCompare(a.date));
+  const addHistEntry = () => {
+    if (!newHistText.trim()) return;
+    setP(prev => ({ ...prev, history: [...(prev.history || []), { id: genId(), date: newHistDate || today(), text: newHistText.trim() }] }));
+    setNewHistText(""); setNewHistDate(today()); setShowNewHist(false);
+  };
+  const removeHistEntry = (id) => setP(prev => ({ ...prev, history: (prev.history || []).filter(e => e.id !== id) }));
 
   const subtotal   = p.treatments.reduce((a,t)=>a+(parseFloat(t.value)||0),0);
   const discPct    = parseInt(p.discountPct)||0;
@@ -472,6 +483,47 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
           <Field label="Teléfono" field="phone" type="tel"/>
         </div>
       </div>
+      <div style={{...s.card, marginBottom:16}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom: sortedHistory.length > 0 || showNewHist ? 10 : 0}}>
+          <span style={{fontSize:11,color:"#c9a84c",letterSpacing:2,fontWeight:700}}>HISTORIAL CLÍNICO</span>
+          {!showNewHist && (
+            <button onClick={()=>setShowNewHist(true)} style={{...s.btnDark,padding:"4px 12px",fontSize:12}}>+ Nueva nota</button>
+          )}
+        </div>
+        {showNewHist && (
+          <div style={{background:"#f0f2f7",borderRadius:8,padding:12,marginBottom:10}}>
+            <div style={{display:"flex",gap:10,alignItems:"flex-start",marginBottom:8}}>
+              <div>
+                <label style={s.label}>Fecha</label>
+                <input type="date" value={newHistDate} onChange={e=>setNewHistDate(e.target.value)} style={{...s.smInput,width:140}}/>
+              </div>
+              <div style={{flex:1}}>
+                <label style={s.label}>Nota</label>
+                <textarea value={newHistText} onChange={e=>setNewHistText(e.target.value)}
+                  placeholder="Descripción, observación clínica..."
+                  rows={2} autoFocus style={{...s.input,resize:"vertical"}}/>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button onClick={()=>{setShowNewHist(false);setNewHistText("");}} style={s.btnGhost}>Cancelar</button>
+              <button onClick={addHistEntry} disabled={!newHistText.trim()} style={{...s.btnGold,opacity:!newHistText.trim()?0.5:1}}>Guardar nota</button>
+            </div>
+          </div>
+        )}
+        {sortedHistory.length === 0 && !showNewHist && (
+          <div style={{color:"#bbb",fontSize:12,padding:"2px 0"}}>Sin entradas — usá "+ Nueva nota" para agregar</div>
+        )}
+        {sortedHistory.map(entry => (
+          <div key={entry.id} style={{display:"flex",gap:10,padding:"8px 0",borderBottom:"1px solid #e2e5ed"}}>
+            <div style={{minWidth:88,color:"#c9a84c",fontWeight:700,fontSize:12,paddingTop:2,flexShrink:0}}>{fmtDate(entry.date)}</div>
+            <div style={{flex:1,fontSize:13,color:"#333",whiteSpace:"pre-wrap"}}>{entry.text}</div>
+            <button onClick={()=>removeHistEntry(entry.id)}
+              style={{background:"none",border:"none",color:"#ccc",cursor:"pointer",fontSize:18,padding:"0 4px",lineHeight:1,flexShrink:0}}
+              title="Eliminar">×</button>
+          </div>
+        ))}
+      </div>
+
       <div style={{display:"flex",gap:12,marginBottom:16,alignItems:"center",flexWrap:"wrap"}}>
         <div style={{display:"flex",gap:0,background:"#ffffff",borderRadius:10,padding:4}}>
           {[["treatments","Tratamientos"],["appointments","Citas"],["payments","Pagos"]].map(([id,label])=>(
@@ -2401,7 +2453,7 @@ export default function App() {
       name:p.name, hc:p.hc, dni:p.dni||"", budget_no:p.budgetNo||p.budget_no, date:p.date, time:p.time,
       phone:p.phone||"",
       treatments:{ items: p.treatments, discountPct: p.discountPct||"0" },
-      appointments:p.appointments||[], notes:p.notes,
+      appointments:p.appointments||[], notes:p.notes, history:p.history||[],
       status:p.status||"pendiente", last_contact:p.last_contact||today(), closed:isCerrado(p.status),
     };
     const isNew = ![...patients, ...archivedPatients].some(x=>x.id===p.id);
@@ -2839,6 +2891,12 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
               <h2 style={{margin:0,color:"#2c3250",fontSize:18,fontWeight:700}}>
                 {editing.name?`Editando: ${editing.name}`:"Nuevo paciente"}
               </h2>
+              {editing.name && editing.phone && (
+                <a href={`https://wa.me/${(editing.phone||"").replace(/\D/g,"")}`} target="_blank" rel="noopener noreferrer"
+                  style={{background:"#25D366",borderRadius:8,color:"#fff",padding:"7px 14px",cursor:"pointer",fontSize:13,fontWeight:700,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:6,flexShrink:0}}>
+                  💬 WhatsApp
+                </a>
+              )}
             </div>
             <PatientForm patient={editing} onSave={savePatient} onCancel={()=>{goBack();setEditing(null);}} templates={templates}
               payments={payments} onPaymentsChange={fetchPayments} isNew={!patients.some(x=>x.id===editing.id)}/>
