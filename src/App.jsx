@@ -719,13 +719,13 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
     .sort((a,b)=>a.date.localeCompare(b.date))[0];
   const upcomingCount = (patient.appointments||[]).filter(a=>a.date&&a.date>=todayStr).length;
 
-  const firstName  = (patient.name||"").trim().split(/\s+/)[0] || "paciente";
+  const firstName  = ((patient.name||"").trim().split(/\s+/)[0] || "paciente").replace(/^./, c => c.toUpperCase()).replace(/(?<=^.).*/, s => s.toLowerCase());
   const waPhone    = patient.phone ? (n => /^[6789]\d{8}$/.test(n) ? "34"+n : n)(patient.phone.replace(/\D/g,"")) : null;
   const grandOffer = fmtEur(Math.round(grand * 0.85 * 100) / 100);
 
   const waLink = (msg) => waPhone ? `https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}` : null;
 
-  const msgSaludo = `hola ${firstName}, soy Martín Murillo de la clínica implandent de donde acabas de hacer la valoración odontológica.\n\nGracias por elegirnos para el cuidado de su salud. Cualquier duda o comentarios que quiera hacernos, estaré encantado de responderle por aquí mismo.\n\nSaludos y que tenga un buen día!\n\nMurillo Martín.\nClínica implandent Girona.`;
+  const msgSaludo = `Hola ${firstName}. Soy Martín Murillo de la clínica implandent. Donde acabas de hacer la valoración odontológica.\n\nGracias por elegirnos para el cuidado de su salud ${firstName}. Cualquier duda o comentarios que quiera hacernos, estaré encantado de responderle por aquí mismo.\n\nSaludos y que tenga un buen día!\n\nMurillo Martín.\nClínica implandent Girona.`;
 
   const msgOferta = `Buenas ${firstName}. Como estás?\n\nSoy Martín Murillo de la clínica implandent Girona (por si no haz guardado mi número).\n\nTe escribo en relación a la visita de valoración que realizaste el día ${fmtDate(patient.date)}.\n\nVeo que aún no te haz decidido a comenzar o no haz podido ${firstName}. Si no haz tomado la decisión por motivos financieros, quiero ofrecerte un descuento importante y la posibilidad de financiar el tratamiento.\n\nEl costo total de tu tratamiento es de ${fmtEur(grand)}, pero puedo pedir autorización para dejarlo en ${grandOffer} y también hacerlo en cuotas.\n\nSi te interesa comenzar con estas opciones, me dices algo y coordinamos las citas.\n\nSaludos y que tengas un buen día ${firstName}`;
 
