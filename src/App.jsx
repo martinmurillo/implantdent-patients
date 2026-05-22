@@ -753,7 +753,7 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
   };
   const grandOffer = fmtEur(Math.round(grand * 0.85 * 100) / 100);
 
-  const waLink = (msg) => waPhone ? `https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}` : null;
+  const waLink = (msg) => waPhone ? `whatsapp://send?phone=${waPhone}&text=${encodeURIComponent(msg)}` : null;
 
   const msgSaludo = `Hola ${firstName}. Soy Martín Murillo de la clínica implandent. Donde acabas de hacer la valoración odontológica.\n\nGracias por elegirnos para el cuidado de su salud ${firstName}. Cualquier duda o comentarios que quiera hacernos, estaré encantado de responderle por aquí mismo.\n\nSaludos y que tenga un buen día!\n\nMurillo Martín.\nClínica implandent Girona.`;
 
@@ -774,7 +774,7 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
             {hasOrtho   && <span title="Ortodoncia" style={{fontSize:13}}>⭐</span>}
             {hasImplant && <span title="Implante"   style={{fontSize:13}}>🦷</span>}
             {patient.phone && (
-              <a href={`https://wa.me/${(n=>/^[6789]\d{8}$/.test(n)?"34"+n:n)(patient.phone.replace(/\D/g,""))}`} target="_blank" rel="noreferrer"
+              <a href={`whatsapp://send?phone=${(n=>/^[6789]\d{8}$/.test(n)?"34"+n:n)(patient.phone.replace(/\D/g,""))}`}
                 title={`WhatsApp ${patient.phone}`}
                 style={{background:"#25d36622",border:"1px solid #25d36688",borderRadius:6,color:"#25d366",padding:"3px 7px",fontSize:13,fontWeight:700,textDecoration:"none",display:"inline-flex",alignItems:"center",lineHeight:1}}>
                 &#x1F4AC;
@@ -816,7 +816,7 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
                 ? <span key={key} style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:"#f0f0f0",color:"#bbb",fontStyle:"italic"}}>{label}</span>
                 : (
                   <div key={key} style={{position:"relative",display:"inline-flex"}}>
-                    <a href={waLink(msg)} target="_blank" rel="noreferrer" onClick={()=>onWaClick(key)}
+                    <a href={waLink(msg)} onClick={()=>onWaClick(key)}
                       style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:color+"18",border:`1px solid ${color}55`,color,fontWeight:600,textDecoration:"none",whiteSpace:"nowrap"}}>
                       {label}
                     </a>
@@ -3018,8 +3018,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
                                 return (
                                   <div style={{marginTop:5,display:"flex"}} onClick={e=>e.stopPropagation()}>
                                     <div style={{position:"relative",display:"inline-flex"}}>
-                                      <a href={`https://wa.me/${wp}?text=${encodeURIComponent(msg)}`}
-                                        target="_blank" rel="noreferrer"
+                                      <a href={`whatsapp://send?phone=${wp}&text=${encodeURIComponent(msg)}`}
                                         onClick={()=>incWaClick(pat.id,"cita")}
                                         style={{fontSize:10,padding:"3px 8px",borderRadius:5,background:"#3498db18",border:"1px solid #3498db55",color:"#3498db",fontWeight:600,textDecoration:"none",whiteSpace:"nowrap"}}>
                                         aviso de cita
@@ -3077,7 +3076,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
                 {editing.name?`Editando: ${editing.name}`:"Nuevo paciente"}
               </h2>
               {editing.name && editing.phone && (
-                <a href={`https://wa.me/${(editing.phone||"").replace(/\D/g,"")}`} target="_blank" rel="noopener noreferrer"
+                <a href={`whatsapp://send?phone=${(editing.phone||"").replace(/\D/g,"")}`}
                   style={{background:"#25D366",borderRadius:8,color:"#fff",padding:"7px 14px",cursor:"pointer",fontSize:13,fontWeight:700,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:6,flexShrink:0}}>
                   💬 WhatsApp
                 </a>
