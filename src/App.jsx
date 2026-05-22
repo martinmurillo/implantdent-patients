@@ -721,6 +721,16 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
 
   const firstName  = ((patient.name||"").trim().split(/\s+/)[0] || "paciente").replace(/^./, c => c.toUpperCase()).replace(/(?<=^.).*/, s => s.toLowerCase());
   const waPhone    = patient.phone ? (n => /^[6789]\d{8}$/.test(n) ? "34"+n : n)(patient.phone.replace(/\D/g,"")) : null;
+  const [waCounts, setWaCounts] = useState(() => ({
+    saludo: parseInt(localStorage.getItem(`wa_${patient.id}_saludo`)||"0"),
+    oferta: parseInt(localStorage.getItem(`wa_${patient.id}_oferta`)||"0"),
+    cita:   parseInt(localStorage.getItem(`wa_${patient.id}_cita`)||"0"),
+  }));
+  const incWa = (key) => setWaCounts(prev => {
+    const next = {...prev, [key]: prev[key]+1};
+    localStorage.setItem(`wa_${patient.id}_${key}`, String(next[key]));
+    return next;
+  });
   const grandOffer = fmtEur(Math.round(grand * 0.85 * 100) / 100);
 
   const waLink = (msg) => waPhone ? `https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}` : null;
@@ -796,16 +806,25 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
         {waPhone && (
           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:"auto",paddingTop:10,borderTop:"1px solid #e2e5ed"}}>
             {[
-              {label:"saludo post visita", msg:msgSaludo, color:"#25a244"},
-              {label:"envío de oferta",    msg:msgOferta, color:"#c9a84c"},
-              {label:"aviso de cita",      msg:msgCita,   color:"#3498db", disabled:!msgCita},
-            ].map(({label,msg,color,disabled})=>(
+              {label:"saludo post visita", msg:msgSaludo, color:"#25a244", key:"saludo"},
+              {label:"envío de oferta",    msg:msgOferta, color:"#c9a84c", key:"oferta"},
+              {label:"aviso de cita",      msg:msgCita,   color:"#3498db", key:"cita", disabled:!msgCita},
+            ].map(({label,msg,color,key,disabled})=>(
               disabled
-                ? <span key={label} style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:"#f0f0f0",color:"#bbb",fontStyle:"italic"}}>{label}</span>
-                : <a key={label} href={waLink(msg)} target="_blank" rel="noreferrer"
-                    style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:color+"18",border:`1px solid ${color}55`,color,fontWeight:600,textDecoration:"none",whiteSpace:"nowrap"}}>
-                    {label}
-                  </a>
+                ? <span key={key} style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:"#f0f0f0",color:"#bbb",fontStyle:"italic"}}>{label}</span>
+                : (
+                  <div key={key} style={{position:"relative",display:"inline-flex"}}>
+                    <a href={waLink(msg)} target="_blank" rel="noreferrer" onClick={()=>incWa(key)}
+                      style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:color+"18",border:`1px solid ${color}55`,color,fontWeight:600,textDecoration:"none",whiteSpace:"nowrap"}}>
+                      {label}
+                    </a>
+                    {waCounts[key] > 0 && (
+                      <span style={{position:"absolute",top:-7,right:-7,background:color,color:"#fff",borderRadius:"50%",minWidth:16,height:16,fontSize:10,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px",lineHeight:1,pointerEvents:"none"}}>
+                        {waCounts[key]}
+                      </span>
+                    )}
+                  </div>
+                )
             ))}
           </div>
         )}
