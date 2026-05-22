@@ -698,7 +698,7 @@ function AlertCard({ patient, onOpen }) {
 }
 
 // ─── PatientCard ──────────────────────────────────────────────────────────────
-function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[], onOpen=null, templates=[] }) {
+function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[], onOpen=null, templates=[], waClicks=[] }) {
   const grand = patientGrand(patient);
   const totalPaid = patientPayments.reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
   const hasPending = patientPayments.length > 0 && totalPaid < grand;
@@ -721,16 +721,16 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
 
   const firstName  = ((patient.name||"").trim().split(/\s+/)[0] || "paciente").replace(/^./, c => c.toUpperCase()).replace(/(?<=^.).*/, s => s.toLowerCase());
   const waPhone    = patient.phone ? (n => /^[6789]\d{8}$/.test(n) ? "34"+n : n)(patient.phone.replace(/\D/g,"")) : null;
-  const [waCounts, setWaCounts] = useState(() => ({
-    saludo: parseInt(localStorage.getItem(`wa_${patient.id}_saludo`)||"0"),
-    oferta: parseInt(localStorage.getItem(`wa_${patient.id}_oferta`)||"0"),
-    cita:   parseInt(localStorage.getItem(`wa_${patient.id}_cita`)||"0"),
-  }));
-  const incWa = (key) => setWaCounts(prev => {
-    const next = {...prev, [key]: prev[key]+1};
-    localStorage.setItem(`wa_${patient.id}_${key}`, String(next[key]));
-    return next;
+  const [waCounts, setWaCounts] = useState(() => {
+    const get = (key) => (waClicks.find(c=>c.button_key===key)?.count)||0;
+    return { saludo: get("saludo"), oferta: get("oferta"), cita: get("cita") };
   });
+  const incWa = async (key) => {
+    const newCount = (waCounts[key]||0) + 1;
+    setWaCounts(prev => ({...prev, [key]: newCount}));
+    await supabase.from("wa_clicks")
+      .upsert({patient_id: patient.id, button_key: key, count: newCount}, {onConflict: "patient_id,button_key"});
+  };
   const grandOffer = fmtEur(Math.round(grand * 0.85 * 100) / 100);
 
   const waLink = (msg) => waPhone ? `https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}` : null;
@@ -2457,6 +2457,7 @@ export default function App() {
   const [templates,     setTemplates]     = useState([]);
   const [translations,  setTranslations]  = useState([]);
   const [payments,      setPayments]      = useState([]);
+  const [waClicks,      setWaClicks]      = useState([]);
   const [viewHistory, setViewHistory] = useState(["dashboard"]);
   const view = viewHistory[viewHistory.length - 1];
   const navigate = (id) => setViewHistory(prev => prev[prev.length-1]===id ? prev : [...prev, id]);
@@ -2480,6 +2481,7 @@ export default function App() {
   const fetchTemplates    = async () => { const {data}=await supabase.from("treatment_templates").select("*").order("keyword"); setTemplates(data||[]); };
   const fetchTranslations = async () => { const {data,error}=await supabase.from("treatment_translations").select("*").order("name_es"); if(!error){setTranslations(data||[]);setTranslationDict(data||[]);} };
   const fetchPayments     = async () => { const {data}=await supabase.from("payments").select("*").order("date",{ascending:false}); setPayments(data||[]); };
+  const fetchWaClicks     = async () => { const {data}=await supabase.from("wa_clicks").select("*"); setWaClicks(data||[]); };
 
   // Cerrar sesión de Supabase solo al expirar el token o hacer sign out explícito
   useEffect(()=>{
@@ -2489,12 +2491,12 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  useEffect(()=>{ Promise.all([fetchPatients(),fetchDoctors(),fetchItems(),fetchTemplates(),fetchTranslations(),fetchPayments()]).finally(()=>setDbLoad(false)); },[]);
+  useEffect(()=>{ Promise.all([fetchPatients(),fetchDoctors(),fetchItems(),fetchTemplates(),fetchTranslations(),fetchPayments(),fetchWaClicks()]).finally(()=>setDbLoad(false)); },[]);
 
   useEffect(()=>{
     if (!unlocked) return;
     setDbLoad(true);
-    Promise.all([fetchPatients(),fetchDoctors(),fetchItems(),fetchTemplates(),fetchTranslations(),fetchPayments()])
+    Promise.all([fetchPatients(),fetchDoctors(),fetchItems(),fetchTemplates(),fetchTranslations(),fetchPayments(),fetchWaClicks()])
       .finally(()=>setDbLoad(false));
   },[unlocked]);
 
@@ -3032,6 +3034,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
                     patientPayments={payments.filter(pay=>pay.patient_id===p.id)}
                     onOpen={isSearching ? openEdit : null}
                     templates={templates}
+                    waClicks={waClicks.filter(c=>c.patient_id===p.id)}
                   />)}
                 </>
               );
