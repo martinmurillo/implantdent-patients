@@ -786,10 +786,16 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
             <div style={{fontSize:12,color:"#777",marginTop:4,display:"flex",flexWrap:"wrap",gap:"0 6px"}}>
               <span>{upcomingCount} cita(s)</span>
               {nextAppt && <span style={{color:"#3498db",fontWeight:600}}>· 🗓 Próx: {fmtDate(nextAppt.date)}{nextAppt.label?` — ${nextAppt.label}`:""}</span>}
-              {nextReminder && <span style={{color:"#c9a84c",fontWeight:600}}>· 📌 Recordatorio: {fmtDate(nextReminder.date)}{nextReminder.text?` — ${nextReminder.text.length>35?nextReminder.text.slice(0,35)+"…":nextReminder.text}`:""}</span>}
               <span>· <span style={{color:"#c9a84c",fontWeight:600}}>{fmtEur(grand)}</span></span>
               {hasPending && <span style={{color:"#e74c3c",fontWeight:600}}>· Deuda: {fmtEur(grand-totalPaid)}</span>}
             </div>
+          </div>
+          <div style={{display:"flex",gap:5,flexShrink:0,marginLeft:10}}>
+            <button onClick={()=>onEdit(patient)} style={{...s.btnDark,padding:"5px 12px",fontSize:12}}>Editar</button>
+            <button onClick={()=>onDelete(patient)}
+              style={{...s.btnSm,background:"#fff0f0",border:"1px solid #e74c3c88",color:"#e74c3c",padding:"5px 12px",fontSize:12}}>
+              Eliminar
+            </button>
           </div>
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-start",marginTop:8}}>
@@ -801,13 +807,9 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
               </button>
             ))}
           </div>
+          {waPhone && (
           <div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center"}}>
-            <button onClick={()=>onEdit(patient)} style={{...s.btnDark,padding:"5px 12px",fontSize:12}}>Editar</button>
-            <button onClick={()=>onDelete(patient)}
-              style={{...s.btnSm,background:"#fff0f0",border:"1px solid #e74c3c88",color:"#e74c3c",padding:"5px 12px",fontSize:12}}>
-              Eliminar
-            </button>
-            {waPhone && [
+            {[
               {label:"saludo post visita", msg:msgSaludo, color:"#25a244", key:"saludo"},
               {label:"envío de oferta",    msg:msgOferta, color:"#c9a84c", key:"oferta"},
               {label:"aviso de cita",      msg:msgCita,   color:"#3498db", key:"cita", disabled:!msgCita},
@@ -829,6 +831,7 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
                 )
             ))}
           </div>
+          )}
         </div>
       </div>
       {/* ── History sidebar ── */}
@@ -853,7 +856,7 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
               {upcoming.map(r=>(
                 <div key={r.id} style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:4}}>
                   <span style={{fontSize:11,color:"#c9a84c",fontWeight:700,whiteSpace:"nowrap",flexShrink:0}}>📌 {fmtDate(r.date)}</span>
-                  <span style={{fontSize:12,color:"#555",lineHeight:1.4}}>{r.text}</span>
+                  <span style={{fontSize:12,color:"#c9a84c",fontWeight:700,lineHeight:1.4}}>{r.text}</span>
                 </div>
               ))}
             </div>
