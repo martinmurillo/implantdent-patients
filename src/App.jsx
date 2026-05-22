@@ -180,13 +180,14 @@ const CONSENT = {
 const SIG_LABEL = { es:"Firma Paciente", en:"Patient Signature", fr:"Signature du Patient" };
 
 // ─── DATA SHAPES ──────────────────────────────────────────────────────────────
-const emptyPatient = () => ({
+const emptyPatient  = () => ({
   id:genId(), name:"", hc:"", dni:"", budgetNo:"", date:today(), time:"",
-  treatments:[], appointments:[], notes:"",
+  treatments:[], appointments:[], reminders:[], notes:"",
   status:"pendiente", last_contact:today(), closed:false,
 });
-const emptyTx   = () => ({ id:genId(), name:"", value:"", discount:"0" });
-const emptyAppt = () => ({ id:genId(), label:"", date:"", time:"", doctors:"", payment:"", treatmentIds:[] });
+const emptyTx       = () => ({ id:genId(), name:"", value:"", discount:"0" });
+const emptyAppt     = () => ({ id:genId(), label:"", date:"", time:"", doctors:"", payment:"", treatmentIds:[] });
+const emptyReminder = () => ({ id:genId(), date:today(), text:"" });
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const s = {
@@ -399,7 +400,10 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
   const remTx   = (id) => setP(prev=>({...prev, treatments:prev.treatments.filter(t=>t.id!==id)}));
   const addAppt = () => setP(prev=>({...prev, appointments:[...prev.appointments, emptyAppt()]}));
   const updAppt = (id,f,v) => setP(prev=>({...prev, appointments:prev.appointments.map(a=>a.id===id?{...a,[f]:v}:a)}));
-  const remAppt = (id) => setP(prev=>({...prev, appointments:prev.appointments.filter(a=>a.id!==id)}));
+  const remAppt      = (id) => setP(prev=>({...prev, appointments:prev.appointments.filter(a=>a.id!==id)}));
+  const addReminder  = () => setP(prev=>({...prev, reminders:[...(prev.reminders||[]), emptyReminder()]}));
+  const updReminder  = (id,f,v) => setP(prev=>({...prev, reminders:(prev.reminders||[]).map(r=>r.id===id?{...r,[f]:v}:r)}));
+  const remReminder  = (id) => setP(prev=>({...prev, reminders:(prev.reminders||[]).filter(r=>r.id!==id)}));
 
   const sortedHistory = [...(p.history || [])].sort((a,b) => b.date.localeCompare(a.date));
   const addHistEntry = () => {
@@ -588,6 +592,24 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
             <AppointmentRow key={appt.id} appt={appt} idx={idx} treatments={p.treatments}
               allAppointments={p.appointments} onChange={(f,v)=>updAppt(appt.id,f,v)} onRemove={()=>remAppt(appt.id)}/>
           ))}
+
+          {/* ── Recordatorios ── */}
+          <div style={{marginTop:18,paddingTop:14,borderTop:"1px dashed #e2e5ed"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+              <span style={{...s.label,color:"#c9a84c"}}>📌 Recordatorios</span>
+              <button onClick={addReminder} style={{...s.btnDark,background:"#c9a84c22",border:"1px solid #c9a84c88",color:"#c9a84c"}}>+ Agregar recordatorio</button>
+            </div>
+            {(p.reminders||[]).length===0 && (
+              <div style={{textAlign:"center",color:"#bbb",padding:"12px 0",fontSize:13}}>Sin recordatorios</div>
+            )}
+            {[...(p.reminders||[])].sort((a,b)=>a.date.localeCompare(b.date)).map(rem=>(
+              <div key={rem.id} style={{display:"flex",gap:8,alignItems:"center",marginBottom:6,background:"#fffdf5",border:"1px solid #c9a84c44",borderLeft:"3px solid #c9a84c",borderRadius:8,padding:"8px 10px"}}>
+                <input type="date" value={rem.date} onChange={e=>updReminder(rem.id,"date",e.target.value)} style={{...s.smInput,width:140,flexShrink:0}}/>
+                <input type="text" value={rem.text} onChange={e=>updReminder(rem.id,"text",e.target.value)} placeholder="Descripción del recordatorio..." style={{...s.smInput,flex:1}}/>
+                <button onClick={()=>remReminder(rem.id)} style={{...s.btnSm,background:"#fff0f0",border:"1px solid #e74c3c88",color:"#e74c3c",flexShrink:0}}>×</button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
       {tab==="payments" && (
@@ -718,6 +740,9 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
     .filter(a=>a.date&&a.date>=todayStr)
     .sort((a,b)=>a.date.localeCompare(b.date))[0];
   const upcomingCount = (patient.appointments||[]).filter(a=>a.date&&a.date>=todayStr).length;
+  const nextReminder = [...(patient.reminders||[])]
+    .filter(r=>r.date&&r.date>=todayStr)
+    .sort((a,b)=>a.date.localeCompare(b.date))[0];
 
   const firstName  = ((patient.name||"").trim().split(/\s+/)[0] || "paciente").replace(/^./, c => c.toUpperCase()).replace(/(?<=^.).*/, s => s.toLowerCase());
   const waPhone    = patient.phone ? (n => /^[6789]\d{8}$/.test(n) ? "34"+n : n)(patient.phone.replace(/\D/g,"")) : null;
@@ -756,7 +781,8 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
             <div style={{fontSize:12,color:"#555",marginTop:2}}>HC: {patient.hc||"—"} · #{patient.budget_no||"—"} · {fmtDate(patient.date)}</div>
             <div style={{fontSize:12,color:"#777",marginTop:4,display:"flex",flexWrap:"wrap",gap:"0 6px"}}>
               <span>{upcomingCount} cita(s)</span>
-              {nextAppt && <span style={{color:"#3498db",fontWeight:600}}>· Próx: {fmtDate(nextAppt.date)}{nextAppt.label?` — ${nextAppt.label}`:""}</span>}
+              {nextAppt && <span style={{color:"#3498db",fontWeight:600}}>· 🗓 Próx: {fmtDate(nextAppt.date)}{nextAppt.label?` — ${nextAppt.label}`:""}</span>}
+              {nextReminder && <span style={{color:"#c9a84c",fontWeight:600}}>· 📌 Recordatorio: {fmtDate(nextReminder.date)}{nextReminder.text?` — ${nextReminder.text.length>35?nextReminder.text.slice(0,35)+"…":nextReminder.text}`:""}</span>}
               <span>· <span style={{color:"#c9a84c",fontWeight:600}}>{fmtEur(grand)}</span></span>
               {hasPending && <span style={{color:"#e74c3c",fontWeight:600}}>· Deuda: {fmtEur(grand-totalPaid)}</span>}
             </div>
@@ -2514,7 +2540,7 @@ export default function App() {
       name:p.name, hc:p.hc, dni:p.dni||"", budget_no:p.budgetNo||p.budget_no, date:p.date, time:p.time,
       phone:p.phone||"",
       treatments:{ items: p.treatments, discountPct: p.discountPct||"0" },
-      appointments:p.appointments||[], notes:p.notes, history:p.history||[],
+      appointments:p.appointments||[], reminders:p.reminders||[], notes:p.notes, history:p.history||[],
       status:p.status||"pendiente", last_contact:p.last_contact||today(), closed:isCerrado(p.status),
     };
     const isNew = ![...patients, ...archivedPatients].some(x=>x.id===p.id);
@@ -2572,9 +2598,13 @@ export default function App() {
 
   const todayStr = today();
   const todayAppts = [];
+  const todayReminders = [];
   patients.forEach(p => {
     (p.appointments || []).forEach(appt => {
       if (appt.date === todayStr) todayAppts.push({ patient: p, appt });
+    });
+    (p.reminders || []).forEach(rem => {
+      if (rem.date === todayStr) todayReminders.push({ patient: p, reminder: rem });
     });
   });
   todayAppts.sort((a,b) => (a.appt.time||"").localeCompare(b.appt.time||""));
@@ -2596,13 +2626,17 @@ export default function App() {
 
   const weekAppts = weekDays.map(({iso, label}) => {
     const appts = [];
+    const reminders = [];
     allPatients.forEach(p => {
       (p.appointments||[]).forEach(appt => {
         if (appt.date === iso) appts.push({ patient:p, appt });
       });
+      (p.reminders||[]).forEach(rem => {
+        if (rem.date === iso) reminders.push({ patient:p, reminder:rem });
+      });
     });
     appts.sort((a,b)=>(a.appt.time||"").localeCompare(b.appt.time||""));
-    return { iso, label, appts };
+    return { iso, label, appts, reminders };
   });
 
   const printWeekly = () => {
@@ -2758,13 +2792,13 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
         <div style={{position:"relative"}}>
           <button onClick={()=>setShowAlerts(v=>!v)}
             style={{background:"none",border:"none",cursor:"pointer",fontSize:22,lineHeight:1,padding:"4px 6px",
-              color: todayAppts.length>0 ? "#c9a84c" : "#444", position:"relative"}}>
+              color: (todayAppts.length+todayReminders.length)>0 ? "#c9a84c" : "#444", position:"relative"}}>
             🔔
-            {todayAppts.length > 0 && (
+            {(todayAppts.length+todayReminders.length) > 0 && (
               <span style={{position:"absolute",top:-4,right:-4,background:"#e74c3c",color:"#fff",
                 borderRadius:"50%",minWidth:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",
                 fontSize:10,fontWeight:800,lineHeight:1,padding:"0 3px",boxSizing:"border-box"}}>
-                {todayAppts.length}
+                {todayAppts.length+todayReminders.length}
               </span>
             )}
           </button>
@@ -2780,8 +2814,24 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
                   fontSize:11,color:"#c9a84c",fontWeight:700,letterSpacing:2}}>
                   🔔 CITAS DE HOY — {fmtDate(todayStr)}
                 </div>
-                {todayAppts.length === 0
-                  ? <div style={{padding:24,color:"#555",textAlign:"center",fontSize:13}}>Sin citas para hoy</div>
+                {todayReminders.map(({patient:pat, reminder:rem})=>(
+                  <div key={rem.id}
+                    onClick={()=>{ openEdit(pat); setShowAlerts(false); }}
+                    style={{padding:"12px 18px",borderBottom:"1px solid #e2e5ed",cursor:"pointer",
+                      background:"#fffdf5",borderLeft:"3px solid #c9a84c",
+                      display:"flex",justifyContent:"space-between",alignItems:"center"}}
+                    onMouseEnter={e=>e.currentTarget.style.background="#fff3d0"}
+                    onMouseLeave={e=>e.currentTarget.style.background="#fffdf5"}>
+                    <div>
+                      <div style={{fontSize:10,color:"#c9a84c",fontWeight:700,letterSpacing:1,marginBottom:2}}>📌 RECORDATORIO</div>
+                      <div style={{fontWeight:700,color:"#2c3250",fontSize:14}}>{pat.name||"Sin nombre"}</div>
+                      {rem.text && <div style={{fontSize:12,color:"#777",marginTop:2}}>{rem.text}</div>}
+                    </div>
+                    <span style={{color:"#c9a84c",fontSize:20}}>›</span>
+                  </div>
+                ))}
+                {todayAppts.length === 0 && todayReminders.length === 0
+                  ? <div style={{padding:24,color:"#555",textAlign:"center",fontSize:13}}>Sin citas ni recordatorios para hoy</div>
                   : todayAppts.map(({patient:pat, appt}) => {
                       const grand   = patientGrand(pat);
                       const paid    = payments.filter(pay=>pay.patient_id===pat.id).reduce((s,pay)=>s+(parseFloat(pay.amount)||0),0);
@@ -2872,7 +2922,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
           {/* Almanaque grid */}
           <div style={{flex:1,overflowY:"auto",padding:"16px",display:"grid",
             gridTemplateColumns:"repeat(7,1fr)",gap:10,alignContent:"start"}}>
-            {weekAppts.map(({iso, label, appts}, idx)=>{
+            {weekAppts.map(({iso, label, appts, reminders}, idx)=>{
               const isToday = iso === todayStr;
               const [dayNameFull, dayDate] = label.split(" ");
               const dayShort = dayNameFull.slice(0,3).toUpperCase();
@@ -2892,16 +2942,18 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
                       color: isToday ? "#fff" : "#ffffff",marginTop:2}}>
                       {dayDate?.split("/")[0]}
                     </div>
-                    {appts.length > 0 && (
+                    {(appts.length > 0 || reminders.length > 0) && (
                       <div style={{fontSize:10,color: isToday?"#fff8":"#c9a84c",marginTop:3,fontWeight:600}}>
-                        {appts.length} cita{appts.length>1?"s":""}
+                        {appts.length > 0 && `${appts.length} cita${appts.length>1?"s":""}`}
+                        {appts.length > 0 && reminders.length > 0 && " · "}
+                        {reminders.length > 0 && `${reminders.length} 📌`}
                       </div>
                     )}
                   </div>
 
-                  {/* Citas del día */}
+                  {/* Citas y recordatorios del día */}
                   <div style={{flex:1,background:"#252d45",padding:"6px 0",overflowY:"auto"}}>
-                    {appts.length === 0
+                    {appts.length === 0 && reminders.length === 0
                       ? <div style={{padding:"12px 8px",color:"#ffffff22",fontSize:11,textAlign:"center"}}>—</div>
                       : appts.map(({patient:pat, appt})=>{
                           const grand = patientGrand(pat);
@@ -2966,6 +3018,27 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
                           );
                         })
                     }
+                    {reminders.map(({patient:pat, reminder:rem})=>(
+                      <div key={rem.id}
+                        onClick={()=>{ openEdit(pat); setShowWeekly(false); }}
+                        style={{margin:"4px 6px",borderRadius:8,padding:"7px 8px",cursor:"pointer",
+                          background:"#c9a84c18",border:"1px solid #c9a84c44",borderLeft:"3px solid #c9a84c",
+                          transition:"background 0.12s"}}
+                        onMouseEnter={e=>e.currentTarget.style.background="#c9a84c30"}
+                        onMouseLeave={e=>e.currentTarget.style.background="#c9a84c18"}>
+                        <div style={{fontSize:10,color:"#c9a84c",fontWeight:700,marginBottom:2}}>📌 Recordatorio</div>
+                        <div style={{fontSize:11,fontWeight:700,color:"#fff",lineHeight:1.3,
+                          whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                          {pat.name||"Sin nombre"}
+                        </div>
+                        {rem.text && (
+                          <div style={{fontSize:10,color:"#c9a84ccc",marginTop:2,lineHeight:1.3,
+                            overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>
+                            {rem.text}
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
               );
