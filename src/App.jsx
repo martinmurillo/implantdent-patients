@@ -801,32 +801,13 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
               </button>
             ))}
           </div>
-          <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center"}}>
             <button onClick={()=>onEdit(patient)} style={{...s.btnDark,padding:"5px 12px",fontSize:12}}>Editar</button>
             <button onClick={()=>onDelete(patient)}
               style={{...s.btnSm,background:"#fff0f0",border:"1px solid #e74c3c88",color:"#e74c3c",padding:"5px 12px",fontSize:12}}>
               Eliminar
             </button>
-          </div>
-        </div>
-      </div>
-      {/* ── History sidebar ── */}
-      <div style={{flex:1,minWidth:0,borderLeft:"1px solid #e2e5ed",marginLeft:18,paddingLeft:16,display:"flex",flexDirection:"column",justifyContent:"flex-start",gap:6}}>
-        {historyEntries.length === 0
-          ? <span style={{fontSize:12,color:"#ccc",fontStyle:"italic",marginTop:4}}>Sin historial</span>
-          : historyEntries.map(e => (
-            <div key={e.id} style={{display:"flex",gap:8,alignItems:"flex-start"}}>
-              <span style={{fontSize:11,color:"#c9a84c",fontWeight:700,whiteSpace:"nowrap",paddingTop:1,flexShrink:0}}>{fmtDate(e.date)}</span>
-              <span style={{fontSize:12,color:"#333",lineHeight:1.4}}>{e.text}</span>
-            </div>
-          ))
-        }
-        {(patient.history||[]).length > 3 && (
-          <span style={{fontSize:11,color:"#aaa"}}>+{(patient.history||[]).length - 3} entrada(s) más</span>
-        )}
-        {waPhone && (
-          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:"auto",paddingTop:10,borderTop:"1px solid #e2e5ed"}}>
-            {[
+            {waPhone && [
               {label:"saludo post visita", msg:msgSaludo, color:"#25a244", key:"saludo"},
               {label:"envío de oferta",    msg:msgOferta, color:"#c9a84c", key:"oferta"},
               {label:"aviso de cita",      msg:msgCita,   color:"#3498db", key:"cita", disabled:!msgCita},
@@ -848,7 +829,36 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
                 )
             ))}
           </div>
+        </div>
+      </div>
+      {/* ── History sidebar ── */}
+      <div style={{flex:1,minWidth:0,borderLeft:"1px solid #e2e5ed",marginLeft:18,paddingLeft:16,display:"flex",flexDirection:"column",justifyContent:"flex-start",gap:6}}>
+        {historyEntries.length === 0
+          ? <span style={{fontSize:12,color:"#ccc",fontStyle:"italic",marginTop:4}}>Sin historial</span>
+          : historyEntries.map(e => (
+            <div key={e.id} style={{display:"flex",gap:8,alignItems:"flex-start"}}>
+              <span style={{fontSize:11,color:"#c9a84c",fontWeight:700,whiteSpace:"nowrap",paddingTop:1,flexShrink:0}}>{fmtDate(e.date)}</span>
+              <span style={{fontSize:12,color:"#333",lineHeight:1.4}}>{e.text}</span>
+            </div>
+          ))
+        }
+        {(patient.history||[]).length > 3 && (
+          <span style={{fontSize:11,color:"#aaa"}}>+{(patient.history||[]).length - 3} entrada(s) más</span>
         )}
+        {(()=>{
+          const upcoming = [...(patient.reminders||[])].filter(r=>r.date&&r.date>=todayStr).sort((a,b)=>a.date.localeCompare(b.date));
+          if (!upcoming.length) return null;
+          return (
+            <div style={{marginTop:"auto",paddingTop:10,borderTop:"1px solid #e2e5ed"}}>
+              {upcoming.map(r=>(
+                <div key={r.id} style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:4}}>
+                  <span style={{fontSize:11,color:"#c9a84c",fontWeight:700,whiteSpace:"nowrap",flexShrink:0}}>📌 {fmtDate(r.date)}</span>
+                  <span style={{fontSize:12,color:"#555",lineHeight:1.4}}>{r.text}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
