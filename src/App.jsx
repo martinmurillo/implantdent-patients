@@ -714,12 +714,17 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
   const txNames = getTxItems(patient).map(t=>(t.name||"").toLowerCase());
   const hasOrtho   = txNames.some(n=>n.includes("ortodoncia"));
   const hasImplant = txNames.some(n=>n.includes("implante"));
-  const historyEntries = [...(patient.history||[])].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,4);
+  const historyEntries = [...(patient.history||[])].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,3);
+  const todayStr = new Date().toISOString().slice(0,10);
+  const nextAppt = (patient.appointments||[])
+    .filter(a=>a.date&&a.date>=todayStr)
+    .sort((a,b)=>a.date.localeCompare(b.date))[0];
+  const upcomingCount = (patient.appointments||[]).filter(a=>a.date&&a.date>=todayStr).length;
 
   return (
     <div style={{...s.card, borderLeft:`4px solid ${bc}`, display:"flex", gap:0, alignItems:"stretch"}}>
       {/* ── Main content ── */}
-      <div style={{flex:1, minWidth:0}}>
+      <div style={{flex:"0 0 auto", minWidth:320, maxWidth:420}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div onClick={onOpen?()=>onOpen(patient):undefined}
             style={{flex:1, cursor:onOpen?"pointer":"default"}}>
@@ -729,62 +734,62 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
               {hasImplant && <span title="Implante"   style={{fontSize:13}}>🦷</span>}
             </div>
             <div style={{fontSize:12,color:"#555",marginTop:2}}>HC: {patient.hc||"—"} · #{patient.budget_no||"—"} · {fmtDate(patient.date)}</div>
-            <div style={{fontSize:12,color:"#777",marginTop:4}}>
-              {getTxItems(patient).length} tratamiento(s) · {(patient.appointments||[]).filter(a=>a.date&&a.date>=new Date().toISOString().slice(0,10)).length} cita(s) · <span style={{color:"#c9a84c",fontWeight:600}}>{fmtEur(grand)}</span>
-              {hasPending && <span style={{color:"#e74c3c",marginLeft:8,fontWeight:600}}>· Deuda: {fmtEur(grand-totalPaid)}</span>}
+            <div style={{fontSize:12,color:"#777",marginTop:4,display:"flex",flexWrap:"wrap",gap:"0 6px"}}>
+              <span>{upcomingCount} cita(s)</span>
+              {nextAppt && <span style={{color:"#3498db",fontWeight:600}}>· Próx: {fmtDate(nextAppt.date)}{nextAppt.label?` — ${nextAppt.label}`:""}</span>}
+              <span>· <span style={{color:"#c9a84c",fontWeight:600}}>{fmtEur(grand)}</span></span>
+              {hasPending && <span style={{color:"#e74c3c",fontWeight:600}}>· Deuda: {fmtEur(grand-totalPaid)}</span>}
             </div>
           </div>
-          <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}>
-            <div style={{display:"flex",gap:5}}>
-              {["es","en","fr"].map(lang=>(
-                <button key={lang} onClick={()=>exportToPDF(patient,lang,setExp,patientPayments,templates)} disabled={!!exporting} title={`PDF ${lang.toUpperCase()}`}
-                  style={{...s.btnSm, opacity:exporting?0.6:1, cursor:exporting?"not-allowed":"pointer"}}>
-                  {exporting===lang?"⏳":lang.toUpperCase()}
-                </button>
-              ))}
-            </div>
-            <div style={{display:"flex",gap:4}}>
-              {STATUSES.map(st=>(
-                <button key={st} onClick={()=>onSetStatus(patient,st)}
-                  style={{background:status===st?STATUS_COLOR[st]+"22":"#ffffff",border:`1px solid ${status===st?STATUS_COLOR[st]:"#333"}`,borderRadius:6,color:status===st?STATUS_COLOR[st]:"#555",padding:"4px 9px",cursor:"pointer",fontSize:11,fontWeight:status===st?700:400}}>
-                  {STATUS_LABEL[st]}
-                </button>
-              ))}
-            </div>
-            <div style={{display:"flex",gap:6}}>
-              <button onClick={()=>setRecalled(r=>{ const next=!r; next ? localStorage.setItem(`recalled_${patient.id}`,"1") : localStorage.removeItem(`recalled_${patient.id}`); return next; })} title="Recordatorio de rellamada"
-                style={{background:recalled?"#c9a84c22":"#ffffff",border:`1px solid ${recalled?"#c9a84c":"#bbb"}`,borderRadius:6,color:recalled?"#c9a84c":"#bbb",padding:"5px 9px",cursor:"pointer",fontSize:12,fontWeight:700,transition:"all 0.15s"}}>
-                R
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-start",marginTop:8}}>
+          <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+            {STATUSES.map(st=>(
+              <button key={st} onClick={()=>onSetStatus(patient,st)}
+                style={{background:status===st?STATUS_COLOR[st]+"22":"#ffffff",border:`1px solid ${status===st?STATUS_COLOR[st]:"#333"}`,borderRadius:6,color:status===st?STATUS_COLOR[st]:"#555",padding:"4px 9px",cursor:"pointer",fontSize:11,fontWeight:status===st?700:400}}>
+                {STATUS_LABEL[st]}
               </button>
-              {patient.phone && (
-                <a href={`https://wa.me/${(n=>/^[6789]\d{8}$/.test(n)?"34"+n:n)(patient.phone.replace(/\D/g,""))}`} target="_blank" rel="noreferrer"
-                  title={`WhatsApp ${patient.phone}`}
-                  style={{background:"#25d36622",border:"1px solid #25d36688",borderRadius:6,color:"#25d366",padding:"5px 9px",cursor:"pointer",fontSize:14,fontWeight:700,textDecoration:"none",display:"inline-flex",alignItems:"center",lineHeight:1}}>
-                  &#x1F4AC;
-                </a>
-              )}
-              <button onClick={()=>onEdit(patient)} style={{...s.btnDark,padding:"5px 12px",fontSize:12}}>Editar</button>
-              <button onClick={()=>onDelete(patient)}
-                style={{...s.btnSm,background:"#fff0f0",border:"1px solid #e74c3c88",color:"#e74c3c",padding:"5px 12px",fontSize:12}}>
-                Eliminar
+            ))}
+          </div>
+          <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+            {["es","en","fr"].map(lang=>(
+              <button key={lang} onClick={()=>exportToPDF(patient,lang,setExp,patientPayments,templates)} disabled={!!exporting} title={`PDF ${lang.toUpperCase()}`}
+                style={{...s.btnSm, opacity:exporting?0.6:1, cursor:exporting?"not-allowed":"pointer"}}>
+                {exporting===lang?"⏳":lang.toUpperCase()}
               </button>
-            </div>
+            ))}
+            <button onClick={()=>setRecalled(r=>{ const next=!r; next ? localStorage.setItem(`recalled_${patient.id}`,"1") : localStorage.removeItem(`recalled_${patient.id}`); return next; })} title="Recordatorio de rellamada"
+              style={{background:recalled?"#c9a84c22":"#ffffff",border:`1px solid ${recalled?"#c9a84c":"#bbb"}`,borderRadius:6,color:recalled?"#c9a84c":"#bbb",padding:"5px 9px",cursor:"pointer",fontSize:12,fontWeight:700,transition:"all 0.15s"}}>
+              R
+            </button>
+            {patient.phone && (
+              <a href={`https://wa.me/${(n=>/^[6789]\d{8}$/.test(n)?"34"+n:n)(patient.phone.replace(/\D/g,""))}`} target="_blank" rel="noreferrer"
+                title={`WhatsApp ${patient.phone}`}
+                style={{background:"#25d36622",border:"1px solid #25d36688",borderRadius:6,color:"#25d366",padding:"5px 9px",cursor:"pointer",fontSize:14,fontWeight:700,textDecoration:"none",display:"inline-flex",alignItems:"center",lineHeight:1}}>
+                &#x1F4AC;
+              </a>
+            )}
+            <button onClick={()=>onEdit(patient)} style={{...s.btnDark,padding:"5px 12px",fontSize:12}}>Editar</button>
+            <button onClick={()=>onDelete(patient)}
+              style={{...s.btnSm,background:"#fff0f0",border:"1px solid #e74c3c88",color:"#e74c3c",padding:"5px 12px",fontSize:12}}>
+              Eliminar
+            </button>
           </div>
         </div>
       </div>
       {/* ── History sidebar ── */}
-      <div style={{width:260,flexShrink:0,borderLeft:"1px solid #e2e5ed",marginLeft:16,paddingLeft:14,display:"flex",flexDirection:"column",justifyContent:"center",gap:3}}>
+      <div style={{flex:1,minWidth:0,borderLeft:"1px solid #e2e5ed",marginLeft:18,paddingLeft:16,display:"flex",flexDirection:"column",justifyContent:"flex-start",gap:6}}>
         {historyEntries.length === 0
-          ? <span style={{fontSize:11,color:"#ccc",fontStyle:"italic"}}>Sin historial</span>
+          ? <span style={{fontSize:12,color:"#ccc",fontStyle:"italic",marginTop:4}}>Sin historial</span>
           : historyEntries.map(e => (
-            <div key={e.id} style={{display:"flex",gap:6,alignItems:"flex-start"}}>
-              <span style={{fontSize:10,color:"#c9a84c",fontWeight:700,whiteSpace:"nowrap",paddingTop:1,flexShrink:0}}>{fmtDate(e.date)}</span>
-              <span style={{fontSize:11,color:"#444",lineHeight:1.35,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{e.text}</span>
+            <div key={e.id} style={{display:"flex",gap:8,alignItems:"flex-start"}}>
+              <span style={{fontSize:11,color:"#c9a84c",fontWeight:700,whiteSpace:"nowrap",paddingTop:1,flexShrink:0}}>{fmtDate(e.date)}</span>
+              <span style={{fontSize:12,color:"#333",lineHeight:1.4}}>{e.text}</span>
             </div>
           ))
         }
-        {(patient.history||[]).length > 4 && (
-          <span style={{fontSize:10,color:"#aaa",marginTop:2}}>+{(patient.history||[]).length - 4} más…</span>
+        {(patient.history||[]).length > 3 && (
+          <span style={{fontSize:11,color:"#aaa"}}>+{(patient.history||[]).length - 3} entrada(s) más</span>
         )}
       </div>
     </div>
@@ -2909,7 +2914,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
         </div>
       )}
 
-      <div style={{padding:"26px 28px",maxWidth:1440,margin:"0 auto"}}>
+      <div style={{padding:"26px 32px"}}>
         {dbLoading && <div style={{textAlign:"center",color:"#444",padding:60,fontSize:14}}>Cargando...</div>}
 
         {!dbLoading && view==="form" && editing && (
