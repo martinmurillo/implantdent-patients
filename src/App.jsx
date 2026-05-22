@@ -767,28 +767,19 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
     <div style={{...s.card, borderLeft:`4px solid ${bc}`, display:"flex", gap:0, alignItems:"stretch"}}>
       {/* ── Main content ── */}
       <div style={{flex:"0 0 auto", minWidth:320, maxWidth:420}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div onClick={onOpen?()=>onOpen(patient):undefined}
-            style={{flex:1, cursor:onOpen?"pointer":"default"}}>
-            <div style={{fontWeight:700,color:"#2c3250",fontSize:15,display:"flex",alignItems:"center",gap:6}}>
-              {patient.name||"Sin nombre"}
-              {hasOrtho   && <span title="Ortodoncia" style={{fontSize:13}}>⭐</span>}
-              {hasImplant && <span title="Implante"   style={{fontSize:13}}>🦷</span>}
-              {patient.phone && (
-                <a href={`https://wa.me/${(n=>/^[6789]\d{8}$/.test(n)?"34"+n:n)(patient.phone.replace(/\D/g,""))}`} target="_blank" rel="noreferrer"
-                  title={`WhatsApp ${patient.phone}`}
-                  style={{background:"#25d36622",border:"1px solid #25d36688",borderRadius:6,color:"#25d366",padding:"3px 7px",fontSize:13,fontWeight:700,textDecoration:"none",display:"inline-flex",alignItems:"center",lineHeight:1}}>
-                  &#x1F4AC;
-                </a>
-              )}
-            </div>
-            <div style={{fontSize:12,color:"#555",marginTop:2}}>HC: {patient.hc||"—"} · #{patient.budget_no||"—"} · {fmtDate(patient.date)}</div>
-            <div style={{fontSize:12,color:"#777",marginTop:4,display:"flex",flexWrap:"wrap",gap:"0 6px"}}>
-              <span>{upcomingCount} cita(s)</span>
-              {nextAppt && <span style={{color:"#3498db",fontWeight:600}}>· 🗓 Próx: {fmtDate(nextAppt.date)}{nextAppt.label?` — ${nextAppt.label}`:""}</span>}
-              <span>· <span style={{color:"#c9a84c",fontWeight:600}}>{fmtEur(grand)}</span></span>
-              {hasPending && <span style={{color:"#e74c3c",fontWeight:600}}>· Deuda: {fmtEur(grand-totalPaid)}</span>}
-            </div>
+            style={{flex:1, cursor:onOpen?"pointer":"default", fontWeight:700, color:"#2c3250", fontSize:15, display:"flex", alignItems:"center", gap:6}}>
+            {patient.name||"Sin nombre"}
+            {hasOrtho   && <span title="Ortodoncia" style={{fontSize:13}}>⭐</span>}
+            {hasImplant && <span title="Implante"   style={{fontSize:13}}>🦷</span>}
+            {patient.phone && (
+              <a href={`https://wa.me/${(n=>/^[6789]\d{8}$/.test(n)?"34"+n:n)(patient.phone.replace(/\D/g,""))}`} target="_blank" rel="noreferrer"
+                title={`WhatsApp ${patient.phone}`}
+                style={{background:"#25d36622",border:"1px solid #25d36688",borderRadius:6,color:"#25d366",padding:"3px 7px",fontSize:13,fontWeight:700,textDecoration:"none",display:"inline-flex",alignItems:"center",lineHeight:1}}>
+                &#x1F4AC;
+              </a>
+            )}
           </div>
           <div style={{display:"flex",gap:5,flexShrink:0,marginLeft:10}}>
             <button onClick={()=>onEdit(patient)} style={{...s.btnDark,padding:"5px 12px",fontSize:12}}>Editar</button>
@@ -797,6 +788,13 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
               Eliminar
             </button>
           </div>
+        </div>
+        <div style={{fontSize:12,color:"#555",marginTop:4}}>HC: {patient.hc||"—"} · #{patient.budget_no||"—"} · {fmtDate(patient.date)}</div>
+        <div style={{fontSize:12,color:"#777",marginTop:3,display:"flex",flexWrap:"wrap",gap:"0 6px"}}>
+          <span>{upcomingCount} cita(s)</span>
+          {nextAppt && <span style={{color:"#3498db",fontWeight:600}}>· 🗓 Próx: {fmtDate(nextAppt.date)}{nextAppt.label?` — ${nextAppt.label}`:""}</span>}
+          <span>· <span style={{color:"#c9a84c",fontWeight:600}}>{fmtEur(grand)}</span></span>
+          {hasPending && <span style={{color:"#e74c3c",fontWeight:600}}>· Deuda: {fmtEur(grand-totalPaid)}</span>}
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-start",marginTop:8}}>
           <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
