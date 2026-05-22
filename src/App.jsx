@@ -719,6 +719,20 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
     .sort((a,b)=>a.date.localeCompare(b.date))[0];
   const upcomingCount = (patient.appointments||[]).filter(a=>a.date&&a.date>=todayStr).length;
 
+  const firstName  = (patient.name||"").trim().split(/\s+/)[0] || "paciente";
+  const waPhone    = patient.phone ? (n => /^[6789]\d{8}$/.test(n) ? "34"+n : n)(patient.phone.replace(/\D/g,"")) : null;
+  const grandOffer = fmtEur(Math.round(grand * 0.85 * 100) / 100);
+
+  const waLink = (msg) => waPhone ? `https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}` : null;
+
+  const msgSaludo = `hola ${firstName}, soy Martín Murillo de la clínica implandent de donde acabas de hacer la valoración odontológica.\n\nGracias por elegirnos para el cuidado de su salud. Cualquier duda o comentarios que quiera hacernos, estaré encantado de responderle por aquí mismo.\n\nSaludos y que tenga un buen día!\n\nMurillo Martín.\nClínica implandent Girona.`;
+
+  const msgOferta = `Buenas ${firstName}. Como estás?\n\nSoy Martín Murillo de la clínica implandent Girona (por si no haz guardado mi número).\n\nTe escribo en relación a la visita de valoración que realizaste el día ${fmtDate(patient.date)}.\n\nVeo que aún no te haz decidido a comenzar o no haz podido ${firstName}. Si no haz tomado la decisión por motivos financieros, quiero ofrecerte un descuento importante y la posibilidad de financiar el tratamiento.\n\nEl costo total de tu tratamiento es de ${fmtEur(grand)}, pero puedo pedir autorización para dejarlo en ${grandOffer} y también hacerlo en cuotas.\n\nSi te interesa comenzar con estas opciones, me dices algo y coordinamos las citas.\n\nSaludos y que tengas un buen día ${firstName}`;
+
+  const msgCita = nextAppt
+    ? `Hola ${firstName}! Como estás?.\n\nTe envío este mensaje para recordarte que el día ${fmtDate(nextAppt.date)} tienes cita en la clínica.\n\nCualquier cambio que quieras hacer, me lo dices y vemos si nos podemos ajustar o bien cambiamos la cita.\n\nSaludos ${firstName}, nos vemos el ${fmtDate(nextAppt.date)}`
+    : null;
+
   return (
     <div style={{...s.card, borderLeft:`4px solid ${bc}`, display:"flex", gap:0, alignItems:"stretch"}}>
       {/* ── Main content ── */}
@@ -778,6 +792,22 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
         }
         {(patient.history||[]).length > 3 && (
           <span style={{fontSize:11,color:"#aaa"}}>+{(patient.history||[]).length - 3} entrada(s) más</span>
+        )}
+        {waPhone && (
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:"auto",paddingTop:10,borderTop:"1px solid #e2e5ed"}}>
+            {[
+              {label:"saludo post visita", msg:msgSaludo, color:"#25a244"},
+              {label:"envío de oferta",    msg:msgOferta, color:"#c9a84c"},
+              {label:"aviso de cita",      msg:msgCita,   color:"#3498db", disabled:!msgCita},
+            ].map(({label,msg,color,disabled})=>(
+              disabled
+                ? <span key={label} style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:"#f0f0f0",color:"#bbb",fontStyle:"italic"}}>{label}</span>
+                : <a key={label} href={waLink(msg)} target="_blank" rel="noreferrer"
+                    style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:color+"18",border:`1px solid ${color}55`,color,fontWeight:600,textDecoration:"none",whiteSpace:"nowrap"}}>
+                    {label}
+                  </a>
+            ))}
+          </div>
         )}
       </div>
     </div>
