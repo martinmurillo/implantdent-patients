@@ -9,7 +9,15 @@
       "Bash(find /c -maxdepth 4 -name \"*.jsx\")",
       "Bash(xargs grep *)",
       "Bash(awk '/^function PatientForm/,/^function [A-Z]/ {print NR\": \"$0}' /c/implantdent-patients/src/App.jsx)",
-      "Bash(grep -E \"\\\\.\\(json|js|ts\\)$\")"
+      "Bash(grep -E \"\\\\.\\(json|js|ts\\)$\")",
+      "Bash(vercel --version)",
+      "Bash(git add *)",
+      "PowerShell(Select-String -Path \"C:\\\\implantdent-patients\\\\src\\\\App.jsx\" -Pattern '\"#[0-3][0-9a-f]{5}\"' | Select-Object -First 20 | ForEach-Object { $_.Line.Trim\\(\\) })",
+      "PowerShell(Select-String -Path \"C:\\\\implantdent-patients\\\\src\\\\App.jsx\" -Pattern 'background:\"#[01]' | ForEach-Object { $_.Line.Trim\\(\\) } | Select-Object -Unique)",
+      "Bash(npm install *)",
+      "Bash(Get-ChildItem -Recurse -Filter \"*App*\" -Include \"*.jsx\", \"*.js\", \"*.tsx\", \"*.ts\")",
+      "Bash(Select-Object -First 20)",
+      "Bash(git *)"
     ]
   }
 }
