@@ -1073,6 +1073,30 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
 
   const allSeries = buildAllSeries();
 
+  // ── Efectividad ───────────────────────────────────────────────────────────
+  const yearFull = !compareMode ? computeYearFull(selectedYears[0] || currentYear) : null;
+  const sum12    = arr => arr.reduce((a, b) => a + b, 0);
+  const safePct  = (n, d) => d > 0 ? Math.round(n / d * 100) : null;
+
+  let globalEfect = null, billStatsRows = [], orthoStatsRows = [], implStatsRows = [];
+  if (yearFull && !compareMode) {
+    const d = yearFull.nums;
+    const tp = sum12(d.paid), tb = sum12(d.totalBudgeted), bwp = sum12(d.budgeted);
+    const oR = sum12(d.orthoRealized),   oP = sum12(d.orthoPending);
+    const iR = sum12(d.implantRealized), iP = sum12(d.implantPending);
+    globalEfect = {
+      billAll: safePct(tp, tb), billPay: safePct(tp, bwp),
+      ortho: safePct(oR, oR + oP), impl: safePct(iR, iR + iP),
+      tp, tb, bwp, oR, oP, iR, iP,
+    };
+    billStatsRows = [
+      { label: "Efect. s/Total", data: d.paid.map((v, i) => safePct(v, d.totalBudgeted[i])), color: "#3498db" },
+      { label: "Efect. c/Pagos", data: d.paid.map((v, i) => safePct(v, d.budgeted[i])),      color: "#2ecc71" },
+    ];
+    orthoStatsRows = [{ label: "Efectividad", data: d.orthoRealized.map((v, i)  => safePct(v, v + d.orthoPending[i])),   color: "#9b59b6" }];
+    implStatsRows  = [{ label: "Efectividad", data: d.implantRealized.map((v, i) => safePct(v, v + d.implantPending[i])), color: "#3498db" }];
+  }
+
   const fmtEurK = (v) => {
     if (v === 0) return "0€";
     if (v >= 10000) return `${Math.round(v/1000)}k€`;
@@ -1130,11 +1154,11 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
     return `<svg viewBox="0 0 ${W} ${SVG_H}" style="width:100%;display:block" xmlns="http://www.w3.org/2000/svg">${grid}${xAxis}${xLabels}${paths}${dots}${valueRows}</svg>`;
   };
 
-  const LineChart = ({ title, series, formatVal }) => {
+  const LineChart = ({ title, series, formatVal, statsRows = [] }) => {
     const W=900, H=220, PL=120, PR=20, PT=40, PB=36;
     const CW=W-PL-PR, CH=H-PT-PB;
     const LABEL_ROW = 14; // altura por fila de etiqueta bajo el mes
-    const SVG_H = H + series.length * LABEL_ROW + 10;
+    const SVG_H = H + (series.length + statsRows.length) * LABEL_ROW + 10;
     const allVals = series.flatMap(s=>s.data);
     const maxVal  = Math.max(...allVals, 1);
     const yMax    = maxVal<=5 ? maxVal+1 : Math.ceil(maxVal*1.15);
@@ -1190,6 +1214,23 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
                     <text key={mi} x={xPos(mi)} y={rowY}
                       textAnchor="middle" fontSize={9} fill={v>0 ? s.color : "#ccc"} fontWeight={v>0?"700":"400"}>
                       {v>0 ? formatVal(v) : "—"}
+                    </text>
+                  ))}
+                </g>
+              );
+            })}
+            {/* Filas de efectividad mensual (%) */}
+            {statsRows.map((sr, sri) => {
+              const rowY = H + 6 + (series.length + sri + 1) * LABEL_ROW;
+              return (
+                <g key={`sr_${sri}`}>
+                  <text x={PL-6} y={rowY} textAnchor="end" fontSize={8} fill={sr.color} fontWeight="700">{sr.label}</text>
+                  {sr.data.map((v, mi) => (
+                    <text key={mi} x={xPos(mi)} y={rowY}
+                      textAnchor="middle" fontSize={9}
+                      fill={v != null ? sr.color : "#ccc"}
+                      fontWeight={v != null ? "700" : "400"}>
+                      {v != null ? `${v}%` : "—"}
                     </text>
                   ))}
                 </g>
@@ -1264,9 +1305,54 @@ h1{font-size:20px;margin:0 0 4px;}
         {compareMode && <span style={{fontSize:11,color:"#aaa",marginLeft:4}}>Hasta 4 años</span>}
       </div>
 
-      <LineChart title="Facturación mensual vs Presupuestado" series={allSeries.billing}  formatVal={fmtEurK}/>
-      <LineChart title="Ortodoncias realizadas vs pendientes" series={allSeries.ortho}    formatVal={fmtInt}/>
-      <LineChart title="Implantes realizados vs pendientes"   series={allSeries.implants} formatVal={fmtInt}/>
+      {/* ── Tarjetas de efectividad global ─────────────────────────────── */}
+      {globalEfect && (
+        <div style={{display:"flex",gap:12,marginBottom:24,flexWrap:"wrap"}}>
+          {/* Facturación */}
+          <div style={{flex:"2 1 280px",background:"#fff",border:"1px solid #e2e5ed",borderRadius:10,padding:"14px 18px"}}>
+            <div style={{fontSize:10,letterSpacing:2,color:"#555",fontWeight:700,textTransform:"uppercase",marginBottom:10}}>💰 Efectividad Facturación</div>
+            <div style={{display:"flex",gap:16}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:11,color:"#888",marginBottom:3}}>Pagos / Total presup.</div>
+                <div style={{fontSize:28,fontWeight:800,color:globalEfect.billAll!=null?"#3498db":"#ccc",lineHeight:1}}>
+                  {globalEfect.billAll!=null ? `${globalEfect.billAll}%` : "—"}
+                </div>
+                <div style={{fontSize:11,color:"#aaa",marginTop:4}}>{fmtEur(globalEfect.tp)} / {fmtEur(globalEfect.tb)}</div>
+              </div>
+              <div style={{width:1,background:"#e2e5ed",flexShrink:0}}/>
+              <div style={{flex:1}}>
+                <div style={{fontSize:11,color:"#888",marginBottom:3}}>Pagos / Presup.c/pagos</div>
+                <div style={{fontSize:28,fontWeight:800,color:globalEfect.billPay!=null?"#2ecc71":"#ccc",lineHeight:1}}>
+                  {globalEfect.billPay!=null ? `${globalEfect.billPay}%` : "—"}
+                </div>
+                <div style={{fontSize:11,color:"#aaa",marginTop:4}}>{fmtEur(globalEfect.tp)} / {fmtEur(globalEfect.bwp)}</div>
+              </div>
+            </div>
+          </div>
+          {/* Ortodoncia */}
+          <div style={{flex:"1 1 180px",background:"#fff",border:"1px solid #e2e5ed",borderRadius:10,padding:"14px 18px"}}>
+            <div style={{fontSize:10,letterSpacing:2,color:"#555",fontWeight:700,textTransform:"uppercase",marginBottom:10}}>🦷 Efectividad Ortodoncia</div>
+            <div style={{fontSize:11,color:"#888",marginBottom:3}}>Realizadas / (Real+Pend)</div>
+            <div style={{fontSize:28,fontWeight:800,color:globalEfect.ortho!=null?"#9b59b6":"#ccc",lineHeight:1}}>
+              {globalEfect.ortho!=null ? `${globalEfect.ortho}%` : "—"}
+            </div>
+            <div style={{fontSize:11,color:"#aaa",marginTop:4}}>{globalEfect.oR} realiz. · {globalEfect.oP} pend.</div>
+          </div>
+          {/* Implantes */}
+          <div style={{flex:"1 1 180px",background:"#fff",border:"1px solid #e2e5ed",borderRadius:10,padding:"14px 18px"}}>
+            <div style={{fontSize:10,letterSpacing:2,color:"#555",fontWeight:700,textTransform:"uppercase",marginBottom:10}}>🔩 Efectividad Implantes</div>
+            <div style={{fontSize:11,color:"#888",marginBottom:3}}>Realizados / (Real+Pend)</div>
+            <div style={{fontSize:28,fontWeight:800,color:globalEfect.impl!=null?"#3498db":"#ccc",lineHeight:1}}>
+              {globalEfect.impl!=null ? `${globalEfect.impl}%` : "—"}
+            </div>
+            <div style={{fontSize:11,color:"#aaa",marginTop:4}}>{globalEfect.iR} realiz. · {globalEfect.iP} pend.</div>
+          </div>
+        </div>
+      )}
+
+      <LineChart title="Facturación mensual vs Presupuestado" series={allSeries.billing}  formatVal={fmtEurK} statsRows={billStatsRows}/>
+      <LineChart title="Ortodoncias realizadas vs pendientes" series={allSeries.ortho}    formatVal={fmtInt}  statsRows={orthoStatsRows}/>
+      <LineChart title="Implantes realizados vs pendientes"   series={allSeries.implants} formatVal={fmtInt}  statsRows={implStatsRows}/>
 
       {pointModal && (
         <div style={{position:"fixed",inset:0,background:"#0006",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}
