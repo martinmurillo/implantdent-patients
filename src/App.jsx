@@ -910,6 +910,12 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
     const implantRealized = a12(), implantRealizedPts = l12();
     const implantPending  = a12(), implantPendingPts  = l12();
 
+    // HCs únicas por mes (deduplicadas para no contar presupuestos duplicados)
+    const hcByMonth    = Array.from({length:12}, () => new Set());
+    const hcPayByMonth = Array.from({length:12}, () => new Set());
+    const hcYearAll    = new Set();
+    const hcYearPay    = new Set();
+
     // Pacientes que tienen al menos un pago registrado
     const patientsWithPayments = new Set(payments.map(p => p.patient_id));
 
@@ -948,6 +954,16 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
         if (patientsWithPayments.has(pat.id)) {
           budgeted[pm-1] += g;
           budgetedPts[pm-1].push(entry);
+        }
+        // Pacientes únicos por HC (descarta presupuestos duplicados del mismo paciente)
+        const hc = (pat.hc || '').trim();
+        if (hc) {
+          hcByMonth[pm-1].add(hc);
+          hcYearAll.add(hc);
+          if (patientsWithPayments.has(pat.id)) {
+            hcPayByMonth[pm-1].add(hc);
+            hcYearPay.add(hc);
+          }
         }
       }
 
@@ -988,8 +1004,12 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
       }
     });
 
+    const patientsTotal   = hcByMonth.map(s => s.size);
+    const patientsWithPay = hcPayByMonth.map(s => s.size);
+
     return {
-      nums: { paid, budgeted, totalBudgeted, orthoRealized, orthoPending, implantRealized, implantPending },
+      nums: { paid, budgeted, totalBudgeted, orthoRealized, orthoPending, implantRealized, implantPending,
+              patientsTotal, patientsWithPay, totalPtsYear: hcYearAll.size, ptsWithPayYear: hcYearPay.size },
       pts:  { paid:paidPts, budgeted:budgetedPts, totalBudgeted:totalBudgetedPts, orthoRealized:orthoRealizedPts, orthoPending:orthoPendingPts, implantRealized:implantRealizedPts, implantPending:implantPendingPts },
     };
   };
@@ -1088,10 +1108,13 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
       billAll: safePct(tp, tb), billPay: safePct(tp, bwp),
       ortho: safePct(oR, oR + oP), impl: safePct(iR, iR + iP),
       tp, tb, bwp, oR, oP, iR, iP,
+      totalPts: d.totalPtsYear, ptsWithPay: d.ptsWithPayYear,
+      ptsPct: safePct(d.ptsWithPayYear, d.totalPtsYear),
     };
     billStatsRows = [
       { label: "Efect. s/Total", data: d.paid.map((v, i) => safePct(v, d.totalBudgeted[i])), color: "#3498db" },
       { label: "Efect. c/Pagos", data: d.paid.map((v, i) => safePct(v, d.budgeted[i])),      color: "#2ecc71" },
+      { label: "Pacientes",      data: d.patientsTotal.map((v, i) => v > 0 ? `${d.patientsWithPay[i]}/${v}` : null), color: "#e67e22", isRaw: true },
     ];
     orthoStatsRows = [{ label: "Efectividad", data: d.orthoRealized.map((v, i)  => safePct(v, v + d.orthoPending[i])),   color: "#9b59b6" }];
     implStatsRows  = [{ label: "Efectividad", data: d.implantRealized.map((v, i) => safePct(v, v + d.implantPending[i])), color: "#3498db" }];
@@ -1156,7 +1179,7 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
       const rowY = (H + 6 + (seriesData.length + sri + 1) * LABEL_ROW).toFixed(1);
       const nameLabel = `<text x="${PL-6}" y="${rowY}" text-anchor="end" font-size="8" fill="${sr.color}" font-weight="700">${sr.label}</text>`;
       const vals = sr.data.map((v, mi) =>
-        `<text x="${xPos(mi)}" y="${rowY}" text-anchor="middle" font-size="9" fill="${v!=null ? sr.color : '#ccc'}" font-weight="${v!=null?'700':'400'}">${v!=null ? v+'%' : '—'}</text>`
+        `<text x="${xPos(mi)}" y="${rowY}" text-anchor="middle" font-size="9" fill="${v!=null ? sr.color : '#ccc'}" font-weight="${v!=null?'700':'400'}">${v!=null ? (sr.isRaw ? v : v+'%') : '—'}</text>`
       ).join('');
       return nameLabel + vals;
     }).join('');
@@ -1240,7 +1263,7 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
                       textAnchor="middle" fontSize={9}
                       fill={v != null ? sr.color : "#ccc"}
                       fontWeight={v != null ? "700" : "400"}>
-                      {v != null ? `${v}%` : "—"}
+                      {v != null ? (sr.isRaw ? v : `${v}%`) : "—"}
                     </text>
                   ))}
                 </g>
@@ -1287,6 +1310,12 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
     <div style="font-size:10px;color:#888;margin-bottom:2px;">Realizados / (Real+Pend)</div>
     <div style="font-size:26px;font-weight:800;color:#3498db;line-height:1;">${globalEfect.impl!=null?globalEfect.impl+'%':'—'}</div>
     <div style="font-size:10px;color:#aaa;margin-top:3px;">${globalEfect.iR} realiz. · ${globalEfect.iP} pend.</div>
+  </div>
+  <div style="flex:1 1 160px;background:#fff;border:1px solid #e2e5ed;border-radius:10px;padding:12px 16px;">
+    <div style="font-size:10px;letter-spacing:2px;color:#555;font-weight:700;text-transform:uppercase;margin-bottom:8px;">👤 Pacientes</div>
+    <div style="font-size:10px;color:#888;margin-bottom:2px;">Con pagos / Atendidos</div>
+    <div style="font-size:26px;font-weight:800;color:#e67e22;line-height:1;">${globalEfect.ptsPct!=null?globalEfect.ptsPct+'%':'—'}</div>
+    <div style="font-size:10px;color:#aaa;margin-top:3px;">${globalEfect.ptsWithPay} c/pagos · ${globalEfect.totalPts} atendidos</div>
   </div>
 </div>` : '';
 
@@ -1391,6 +1420,15 @@ ${efCards}
               {globalEfect.impl!=null ? `${globalEfect.impl}%` : "—"}
             </div>
             <div style={{fontSize:11,color:"#aaa",marginTop:4}}>{globalEfect.iR} realiz. · {globalEfect.iP} pend.</div>
+          </div>
+          {/* Pacientes */}
+          <div style={{flex:"1 1 180px",background:"#fff",border:"1px solid #e2e5ed",borderRadius:10,padding:"14px 18px"}}>
+            <div style={{fontSize:10,letterSpacing:2,color:"#555",fontWeight:700,textTransform:"uppercase",marginBottom:10}}>👤 Pacientes</div>
+            <div style={{fontSize:11,color:"#888",marginBottom:3}}>Con pagos / Atendidos</div>
+            <div style={{fontSize:28,fontWeight:800,color:globalEfect.ptsPct!=null?"#e67e22":"#ccc",lineHeight:1}}>
+              {globalEfect.ptsPct!=null ? `${globalEfect.ptsPct}%` : "—"}
+            </div>
+            <div style={{fontSize:11,color:"#aaa",marginTop:4}}>{globalEfect.ptsWithPay} c/pagos · {globalEfect.totalPts} atendidos</div>
           </div>
         </div>
       )}
