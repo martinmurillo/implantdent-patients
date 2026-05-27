@@ -54,7 +54,6 @@ function PinLock({ onUnlock }) {
   const pinRef  = useRef(null);
   const [error, setError] = useState(false);
   const [shake, setShake] = useState(false);
-  const [loading, setLoading] = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -66,12 +65,6 @@ function PinLock({ onUnlock }) {
       setTimeout(()=>setShake(false), 500);
       return;
     }
-    setLoading(true);
-    const email    = import.meta.env.VITE_AUTH_EMAIL    || "admin@implantdent.local";
-    const password = import.meta.env.VITE_AUTH_PASSWORD || "AhYTXX-2u!@k2C%";
-    const { error: authErr } = await supabase.auth.signInWithPassword({ email, password });
-    if (authErr) console.warn("Supabase Auth:", authErr.message);
-    setLoading(false);
     onUnlock();
   };
 
@@ -96,12 +89,64 @@ function PinLock({ onUnlock }) {
             }}
           />
           {error && <div style={{color:"#e74c3c",fontSize:12,marginBottom:12}}>PIN incorrecto</div>}
-          <button type="submit" disabled={loading} style={{background:"linear-gradient(135deg,#c9a84c,#a07830)",border:"none",borderRadius:8,color:"#fff",padding:"12px 0",cursor:"pointer",fontSize:14,fontWeight:700,width:"100%",opacity:loading?0.7:1}}>
-            {loading ? "Verificando..." : "Entrar"}
+          <button type="submit" style={{background:"linear-gradient(135deg,#c9a84c,#a07830)",border:"none",borderRadius:8,color:"#fff",padding:"12px 0",cursor:"pointer",fontSize:14,fontWeight:700,width:"100%"}}>
+            Entrar
           </button>
         </form>
       </div>
       <style>{`@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}`}</style>
+    </div>
+  );
+}
+
+// ─── LOGIN FORM ───────────────────────────────────────────────────────────────
+function LoginForm({ onLogin }) {
+  const emailRef = useRef(null);
+  const passRef  = useRef(null);
+  const [error,   setError]   = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError(""); setLoading(true);
+    const { error: err } = await supabase.auth.signInWithPassword({
+      email:    emailRef.current.value.trim(),
+      password: passRef.current.value,
+    });
+    setLoading(false);
+    if (err) { setError("Email o contraseña incorrectos"); return; }
+    onLogin();
+  };
+
+  return (
+    <div style={{minHeight:"100vh",background:"#f0f2f7",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
+      <div style={{background:"#f5f7fa",border:"1px solid #e2e5ed",borderRadius:16,padding:"48px 40px",textAlign:"center",width:320}}>
+        <div style={{fontWeight:900,fontSize:18,letterSpacing:4,color:"#c9a84c",marginBottom:6}}>IMPLANTDENT</div>
+        <div style={{fontSize:11,color:"#444",letterSpacing:2,marginBottom:36}}>GESTIÓN DE PACIENTES</div>
+        <form onSubmit={submit}>
+          <input
+            ref={emailRef} type="email" autoFocus autoComplete="email"
+            placeholder="Email"
+            style={{background:"#fff",border:"1px solid #dde4ef",borderRadius:10,color:"#2c3250",
+              padding:"12px 16px",fontSize:15,width:"100%",outline:"none",
+              boxSizing:"border-box",marginBottom:10}}
+          />
+          <input
+            ref={passRef} type="password" autoComplete="current-password"
+            placeholder="Contraseña"
+            style={{background:"#fff",border:"1px solid #dde4ef",borderRadius:10,color:"#2c3250",
+              padding:"12px 16px",fontSize:15,width:"100%",outline:"none",
+              boxSizing:"border-box",marginBottom:16}}
+          />
+          {error && <div style={{color:"#e74c3c",fontSize:12,marginBottom:12}}>{error}</div>}
+          <button type="submit" disabled={loading}
+            style={{background:"linear-gradient(135deg,#c9a84c,#a07830)",border:"none",borderRadius:8,
+              color:"#fff",padding:"12px 0",cursor:"pointer",fontSize:14,fontWeight:700,
+              width:"100%",opacity:loading?0.7:1}}>
+            {loading ? "Entrando..." : "Entrar"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
@@ -2657,7 +2702,9 @@ function CitasExcelPanel({ patients, onRefresh }) {
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
-  const [unlocked, setUnlocked] = useState(false);
+  const [unlocked,       setUnlocked]       = useState(false);
+  const [hasSession,     setHasSession]     = useState(false);
+  const [sessionChecked, setSessionChecked] = useState(false);
   const [patients,  setPatients]  = useState([]);
   const [doctors,   setDoctors]   = useState([]);
   const [items,     setItems]     = useState([]);
@@ -2699,10 +2746,18 @@ export default function App() {
     await supabase.from("wa_clicks").upsert({patient_id:patientId,button_key:key,count:newCount},{onConflict:"patient_id,button_key"});
   };
 
-  // Cerrar sesión de Supabase solo al expirar el token o hacer sign out explícito
+  // Comprobar sesión activa al arrancar
+  useEffect(()=>{
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setHasSession(!!session);
+      setSessionChecked(true);
+    });
+  }, []);
+
+  // Resetear estado al cerrar sesión (token expirado o sign out explícito)
   useEffect(()=>{
     const { data:{ subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_OUT') setUnlocked(false);
+      if (event === 'SIGNED_OUT') { setUnlocked(false); setHasSession(false); }
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -2961,6 +3016,19 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
     </button>
   );
 
+  // Esperar a que se verifique la sesión antes de mostrar cualquier pantalla
+  if (!sessionChecked) return (
+    <div style={{minHeight:"100vh",background:"#f0f2f7",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{fontSize:13,color:"#888",fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>Cargando...</div>
+    </div>
+  );
+
+  // Sin sesión activa → formulario de login real
+  if (!hasSession) return (
+    <LoginForm onLogin={() => { setHasSession(true); setUnlocked(true); }} />
+  );
+
+  // Sesión activa pero pantalla bloqueada → PIN
   if (!unlocked) return <PinLock onUnlock={()=>setUnlocked(true)} />;
 
   return (
