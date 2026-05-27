@@ -765,7 +765,7 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
 
   const msgFinOferta = `Buenas tardes ${firstName}. Soy Martin de la clinica dental IMPLANTDENT.Te escribo para recordarte que la oferta y las condiciones especiales que te hemos presentado finalizan mañana.\n\nA partir de pasado mañana dejarán de estar disponibles y el presupuesto volverá a las condiciones habituales de la clínica.\n\nSi deseas beneficiarte de esta oferta, es necesario que nos lo confirmes antes de que finalice mañana.\n\nQuedo atento a tu respuesta. Muchas gracias.`;
 
-  const msgRetomar = `Hola, ${firstName} 😊\nTe escribo para saber cómo te encuentras y recordarte que has iniciado tu tratamiento con nosotros.\n\nVeo que todavía no tienes programada la siguiente cita, y es importante ir avanzando en las fases para que el tratamiento evolucione correctamente.\n\nCuando te venga bien, dime y te busco el mejor hueco disponible para continuar.\n\nQuedo atento/a a tu respuesta`;
+  const msgRetomar = `Hola, ${firstName} 😊\nTe escribo para saber cómo te encuentras y recordarte que has iniciado tu tratamiento con nosotros.\n\nVeo que todavía no tienes programada la siguiente cita, y es importante ir avanzando en las fases para que el tratamiento evolucione correctamente.\n\nCuando te venga bien, dime y te busco el mejor hueco disponible para continuar.\n\nQuedo atento a tu respuesta`;
 
   return (
     <div style={{...s.card, borderLeft:`4px solid ${bc}`, display:"flex", gap:0, alignItems:"stretch"}}>
