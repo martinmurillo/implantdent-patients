@@ -1105,10 +1105,10 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
   };
   const fmtInt = (v) => String(Math.round(v));
 
-  const makeSVG = (seriesData, formatVal, W=900, H=220) => {
+  const makeSVG = (seriesData, formatVal, W=900, H=220, statsRowsData=[]) => {
     const PL=120, PR=20, PT=40, PB=36;
     const LABEL_ROW=14;
-    const SVG_H = H + seriesData.length * LABEL_ROW + 10;
+    const SVG_H = H + (seriesData.length + statsRowsData.length) * LABEL_ROW + 10;
     const CW = W - PL - PR, CH = H - PT - PB;
     const allVals = seriesData.flatMap(s => s.data);
     const maxVal  = Math.max(...allVals, 1);
@@ -1151,7 +1151,17 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
       return nameLabel + vals;
     }).join('');
 
-    return `<svg viewBox="0 0 ${W} ${SVG_H}" style="width:100%;display:block" xmlns="http://www.w3.org/2000/svg">${grid}${xAxis}${xLabels}${paths}${dots}${valueRows}</svg>`;
+    // Filas de efectividad % (statsRows)
+    const statsRowsSVG = statsRowsData.map((sr, sri) => {
+      const rowY = (H + 6 + (seriesData.length + sri + 1) * LABEL_ROW).toFixed(1);
+      const nameLabel = `<text x="${PL-6}" y="${rowY}" text-anchor="end" font-size="8" fill="${sr.color}" font-weight="700">${sr.label}</text>`;
+      const vals = sr.data.map((v, mi) =>
+        `<text x="${xPos(mi)}" y="${rowY}" text-anchor="middle" font-size="9" fill="${v!=null ? sr.color : '#ccc'}" font-weight="${v!=null?'700':'400'}">${v!=null ? v+'%' : '—'}</text>`
+      ).join('');
+      return nameLabel + vals;
+    }).join('');
+
+    return `<svg viewBox="0 0 ${W} ${SVG_H}" style="width:100%;display:block" xmlns="http://www.w3.org/2000/svg">${grid}${xAxis}${xLabels}${paths}${dots}${valueRows}${statsRowsSVG}</svg>`;
   };
 
   const LineChart = ({ title, series, formatVal, statsRows = [] }) => {
@@ -1244,24 +1254,59 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
 
   const printProgreso = () => {
     const yearLabel = compareMode ? selectedYears.join(", ") : String(selectedYears[0] || currentYear);
-    const cs = "background:#fff;border-radius:10px;border:1px solid #e2e5ed;padding:4px 0;margin-bottom:24px;overflow:hidden;page-break-inside:avoid;";
+    const cs = "background:#fff;border-radius:10px;border:1px solid #e2e5ed;padding:4px 0;margin-bottom:20px;overflow:hidden;page-break-inside:avoid;";
     const ts = "font-size:11px;color:#555;letter-spacing:2px;font-weight:700;margin:0 0 6px;text-transform:uppercase;";
+
+    // Tarjetas de efectividad global para impresión
+    const efCards = globalEfect ? `
+<div style="display:flex;gap:12px;margin-bottom:22px;flex-wrap:wrap;">
+  <div style="flex:2 1 260px;background:#fff;border:1px solid #e2e5ed;border-radius:10px;padding:12px 16px;">
+    <div style="font-size:10px;letter-spacing:2px;color:#555;font-weight:700;text-transform:uppercase;margin-bottom:8px;">💰 Efectividad Facturación</div>
+    <div style="display:flex;gap:16px;">
+      <div style="flex:1;">
+        <div style="font-size:10px;color:#888;margin-bottom:2px;">Pagos / Total presup.</div>
+        <div style="font-size:26px;font-weight:800;color:#3498db;line-height:1;">${globalEfect.billAll!=null?globalEfect.billAll+'%':'—'}</div>
+        <div style="font-size:10px;color:#aaa;margin-top:3px;">${fmtEur(globalEfect.tp)} / ${fmtEur(globalEfect.tb)}</div>
+      </div>
+      <div style="width:1px;background:#e2e5ed;"></div>
+      <div style="flex:1;">
+        <div style="font-size:10px;color:#888;margin-bottom:2px;">Pagos / Presup.c/pagos</div>
+        <div style="font-size:26px;font-weight:800;color:#2ecc71;line-height:1;">${globalEfect.billPay!=null?globalEfect.billPay+'%':'—'}</div>
+        <div style="font-size:10px;color:#aaa;margin-top:3px;">${fmtEur(globalEfect.tp)} / ${fmtEur(globalEfect.bwp)}</div>
+      </div>
+    </div>
+  </div>
+  <div style="flex:1 1 160px;background:#fff;border:1px solid #e2e5ed;border-radius:10px;padding:12px 16px;">
+    <div style="font-size:10px;letter-spacing:2px;color:#555;font-weight:700;text-transform:uppercase;margin-bottom:8px;">🦷 Efectividad Ortodoncia</div>
+    <div style="font-size:10px;color:#888;margin-bottom:2px;">Realizadas / (Real+Pend)</div>
+    <div style="font-size:26px;font-weight:800;color:#9b59b6;line-height:1;">${globalEfect.ortho!=null?globalEfect.ortho+'%':'—'}</div>
+    <div style="font-size:10px;color:#aaa;margin-top:3px;">${globalEfect.oR} realiz. · ${globalEfect.oP} pend.</div>
+  </div>
+  <div style="flex:1 1 160px;background:#fff;border:1px solid #e2e5ed;border-radius:10px;padding:12px 16px;">
+    <div style="font-size:10px;letter-spacing:2px;color:#555;font-weight:700;text-transform:uppercase;margin-bottom:8px;">🔩 Efectividad Implantes</div>
+    <div style="font-size:10px;color:#888;margin-bottom:2px;">Realizados / (Real+Pend)</div>
+    <div style="font-size:26px;font-weight:800;color:#3498db;line-height:1;">${globalEfect.impl!=null?globalEfect.impl+'%':'—'}</div>
+    <div style="font-size:10px;color:#aaa;margin-top:3px;">${globalEfect.iR} realiz. · ${globalEfect.iP} pend.</div>
+  </div>
+</div>` : '';
+
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>Progreso Anual — ${yearLabel}</title>
 <style>
 body{font-family:'Segoe UI',sans-serif;color:#111;padding:32px;font-size:13px;}
 h1{font-size:20px;margin:0 0 4px;}
-.sub{color:#666;margin-bottom:28px;font-size:13px;}
+.sub{color:#666;margin-bottom:20px;font-size:13px;}
 @media print{body{padding:16px;} @page{size:A4 landscape;margin:1.5cm;}}
 </style></head><body>
 <h1>IMPLANTDENT — Progreso Anual</h1>
 <div class="sub">Año: ${yearLabel}</div>
+${efCards}
 <p style="${ts}">Facturación mensual vs Presupuestado</p>
-<div style="${cs}">${makeSVG(allSeries.billing, fmtEurK)}</div>
+<div style="${cs}">${makeSVG(allSeries.billing, fmtEurK, 900, 220, billStatsRows)}</div>
 <p style="${ts}">Ortodoncias realizadas vs pendientes</p>
-<div style="${cs}">${makeSVG(allSeries.ortho, fmtInt)}</div>
+<div style="${cs}">${makeSVG(allSeries.ortho, fmtInt, 900, 220, orthoStatsRows)}</div>
 <p style="${ts}">Implantes realizados vs pendientes</p>
-<div style="${cs}">${makeSVG(allSeries.implants, fmtInt)}</div>
+<div style="${cs}">${makeSVG(allSeries.implants, fmtInt, 900, 220, implStatsRows)}</div>
 </body></html>`;
     const w = window.open("","_blank");
     w.document.write(html);
