@@ -812,6 +812,8 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
 
   const msgRetomar = `Hola, ${firstName} 😊\nTe escribo para saber cómo te encuentras y recordarte que has iniciado tu tratamiento con nosotros.\n\nVeo que todavía no tienes programada la siguiente cita, y es importante ir avanzando en las fases para que el tratamiento evolucione correctamente.\n\nCuando te venga bien, dime y te busco el mejor hueco disponible para continuar.\n\nQuedo atento a tu respuesta`;
 
+  const msgOrto = `Hola ${firstName}. Soy Martín de Clínica Dental IMPLANTDENT. \n\nEspero que te encuentres bien.\n\n${firstName}, te escribo para avisarte que todos los descuentos y/u ofertas que hicimos en estos días, se reinician a partir del lunes y no se que condiciones tendremos desde ese día. \n\nSi deseas avanzar con el tratamiento y ofertas, me lo dices hoy durante el día hasta las 19:00, y las congelamos con tu compromiso de hacerlos. Te dejo un resumen de las posibilidades del tratamiento ofrecidas:\n\nIMPORTE TOTAL (SIN DESCUENTOS): XXXXXX € \n----------------------------------------------------------------------------------------------------------------------------------------------\n\nFINANCIADO: (Oferta sujeta a condiciones del momento de contratación.)\n\n* XXXXX € (Pago reducido) en XX cuotas de XXXX\n\n-------------------\n\nPAGO EN CLÍNICA MES A MES: (Oferta especial sin aportación inicial del 30%.)\n\n* XXXXX € (Pago completo) en XX cuotas de XXXX\n\nAguardo comentaros ${firstName}. Que tengas un buen día!`;
+
   return (
     <div style={{...s.card, borderLeft:`4px solid ${bc}`, display:"flex", gap:0, alignItems:"stretch"}}>
       {/* ── Main content ── */}
@@ -862,7 +864,8 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
               {label:"cita",      msg:msgCita,      color:"#3498db", key:"cita",      disabled:!msgCita},
               {label:"fin oferta",msg:msgFinOferta, color:"#e74c3c", key:"finoferta"},
               {label:"retomar",   msg:msgRetomar,   color:"#8e44ad", key:"retomar"},
-            ].map(({label,msg,color,key,disabled})=>(
+              {label:"orto",      msg:msgOrto,      color:"#16a085", key:"orto",      show:hasOrtho},
+            ].filter(b=>b.show!==false).map(({label,msg,color,key,disabled})=>(
               disabled
                 ? <span key={key} style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:"#f0f0f0",color:"#bbb",fontStyle:"italic"}}>{label}</span>
                 : (
