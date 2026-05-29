@@ -785,7 +785,7 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
     .filter(a=>a.date&&a.date>=todayStr)
     .sort((a,b)=>a.date.localeCompare(b.date))[0];
   const upcomingCount = (patient.appointments||[]).filter(a=>a.date&&a.date>=todayStr).length;
-  const iniciadoSinCita = status === "en curso" && totalPaid > 0 && !nextAppt;
+  const iniciadoSinCita = (status === "en curso" || status === "cerrado con deuda") && totalPaid > 0 && !nextAppt;
   const nextReminder = [...(patient.reminders||[])]
     .filter(r=>r.date&&r.date>=todayStr)
     .sort((a,b)=>a.date.localeCompare(b.date))[0];
