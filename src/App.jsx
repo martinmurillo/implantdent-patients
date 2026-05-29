@@ -157,7 +157,7 @@ const today    = () => new Date().toISOString().split("T")[0];
 const daysDiff = (d) => !d ? 999 : Math.floor((new Date()-new Date(d))/86400000);
 const STATUSES = ["frío","pendiente","en curso","cerrado con deuda","cerrado sin deuda"];
 const STATUS_COLOR = { "frío":"#7f8c8d", "pendiente":"#c9a84c", "en curso":"#3498db", "cerrado con deuda":"#e67e22", "cerrado sin deuda":"#2ecc71" };
-const STATUS_LABEL = { "frío":"Frío", "pendiente":"Pendiente", "en curso":"En curso", "cerrado con deuda":"C/ deuda", "cerrado sin deuda":"Sin deuda" };
+const STATUS_LABEL = { "frío":"Frío", "pendiente":"Pendiente", "en curso":"Con citas", "cerrado con deuda":"C/ deuda", "cerrado sin deuda":"Sin deuda" };
 const isCerrado = (st) => st === "cerrado con deuda" || st === "cerrado sin deuda";
 const getStatus = (p) => STATUSES.includes(p.status) ? p.status : (p.closed ? "cerrado con deuda" : "pendiente");
 const fmtEur   = (v) => v && parseFloat(v) ? `€${parseFloat(v).toLocaleString("es-ES",{minimumFractionDigits:2})}` : "-";
@@ -785,6 +785,7 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
     .filter(a=>a.date&&a.date>=todayStr)
     .sort((a,b)=>a.date.localeCompare(b.date))[0];
   const upcomingCount = (patient.appointments||[]).filter(a=>a.date&&a.date>=todayStr).length;
+  const iniciadoSinCita = status === "en curso" && totalPaid > 0 && !nextAppt;
   const nextReminder = [...(patient.reminders||[])]
     .filter(r=>r.date&&r.date>=todayStr)
     .sort((a,b)=>a.date.localeCompare(b.date))[0];
@@ -824,6 +825,7 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
             {patient.name||"Sin nombre"}
             {hasOrtho   && <span title="Ortodoncia" style={{fontSize:13}}>⭐</span>}
             {hasImplant && <span title="Implante"   style={{fontSize:13}}>🦷</span>}
+            {iniciadoSinCita && <span className="blink-red" style={{background:"#e74c3c",color:"#fff",borderRadius:5,padding:"2px 8px",fontSize:11,fontWeight:700,letterSpacing:"0.3px"}}>iniciado sin cita</span>}
             {patient.phone && (
               <a href={`whatsapp://send?phone=${(n=>/^[6789]\d{8}$/.test(n)?"34"+n:n)(patient.phone.replace(/\D/g,""))}`}
                 title={`WhatsApp ${patient.phone}`}
@@ -2771,6 +2773,7 @@ export default function App() {
     if (!unlocked) return;
     setDbLoad(true);
     Promise.all([fetchPatients(),fetchDoctors(),fetchItems(),fetchTemplates(),fetchTranslations(),fetchPayments(),fetchWaClicks()])
+      .then(() => autoEnCurso())
       .finally(()=>setDbLoad(false));
   },[unlocked]);
 
@@ -2828,6 +2831,24 @@ export default function App() {
     const missing = toSync.filter(p => !existingIds.has(p.id));
     await Promise.all(missing.map(p => insertTreatmentItems(p)));
     if (missing.length > 0) await fetchItems();
+  };
+
+  const autoEnCurso = async () => {
+    const todayStr = new Date().toISOString().slice(0,10);
+    const {data} = await supabase.from("patients").select("*")
+      .neq("status","frío").neq("status","cerrado sin deuda");
+    const toUpdate = (data||[]).filter(p => {
+      const st = getStatus(p);
+      if (st === "en curso" || isCerrado(st)) return false;
+      return (p.appointments||[]).some(a => a.date && a.date >= todayStr);
+    });
+    if (toUpdate.length === 0) return;
+    await Promise.all(toUpdate.map(p =>
+      supabase.from("patients").update({status:"en curso", closed:false}).eq("id", p.id)
+    ));
+    await Promise.all(toUpdate.map(p => insertTreatmentItems({...p, status:"en curso", closed:false})));
+    await fetchItems();
+    await fetchPatients();
   };
 
   const deletePatient = async (patient) => {
@@ -3339,7 +3360,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
               const tabs = [
                 { id:"frío",               label:"Fríos",             color:"#7f8c8d", list: archivedPatients.filter(p=>getStatus(p)==="frío"),              archived:true },
                 { id:"pendiente",          label:"Pendientes",        color:"#c9a84c", list: recent.filter(p=>getStatus(p)==="pendiente")                              },
-                { id:"en curso",           label:"En curso",          color:"#3498db", list: recent.filter(p=>getStatus(p)==="en curso")                               },
+                { id:"en curso",           label:"Con citas",         color:"#3498db", list: recent.filter(p=>getStatus(p)==="en curso")                               },
                 { id:"cerrado con deuda",  label:"Cerrados c/ deuda", color:"#e67e22", list: recent.filter(p=>getStatus(p)==="cerrado con deuda")                      },
                 { id:"cerrado sin deuda",  label:"Cerrados sin deuda",color:"#2ecc71", list: archivedPatients.filter(p=>getStatus(p)==="cerrado sin deuda"), archived:true },
               ];

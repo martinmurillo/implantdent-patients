@@ -50,6 +50,12 @@
   }
 }
 
+@keyframes blink-red {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.15; }
+}
+.blink-red { animation: blink-red 1s ease-in-out infinite; }
+
 body {
   margin: 0;
 }
