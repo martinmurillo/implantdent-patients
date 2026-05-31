@@ -2700,7 +2700,6 @@ function PresupuestosExcelPanel({ patients, onRefresh }) {
   const [processing,  setProcessing]  = useState(false);
   const [busySet,     setBusySet]     = useState(new Set());
   const [assignedSet, setAssignedSet] = useState(new Set());
-  const [selPat,      setSelPat]      = useState({});     // { idx: patientId }
   const fileRef = useRef();
 
   const handleFile = async (e) => {
@@ -2759,7 +2758,6 @@ function PresupuestosExcelPanel({ patients, onRefresh }) {
       setStatus({ autoCount, conflicts, notFound });
       setAssignedSet(new Set());
       setBusySet(new Set());
-      setSelPat({});
       if (autoCount > 0 && onRefresh) onRefresh();
       setProcessing(false);
     };
@@ -2767,13 +2765,12 @@ function PresupuestosExcelPanel({ patients, onRefresh }) {
     e.target.value = "";
   };
 
-  const assign = async (conflict, idx) => {
-    const patId = selPat[idx];
-    if (!patId) return;
-    setBusySet(prev => new Set([...prev, idx]));
-    await supabase.from("patients").update({ budget_no: conflict.presNum }).eq("id", patId);
-    setAssignedSet(prev => new Set([...prev, idx]));
-    setBusySet(prev => { const s = new Set(prev); s.delete(idx); return s; });
+  const assign = async (conflict, conflictIdx, patientId) => {
+    const key = `${conflictIdx}-${patientId}`;
+    setBusySet(prev => new Set([...prev, key]));
+    await supabase.from("patients").update({ budget_no: conflict.presNum }).eq("id", patientId);
+    setAssignedSet(prev => new Set([...prev, conflictIdx]));
+    setBusySet(prev => { const s = new Set(prev); s.delete(key); return s; });
     if (onRefresh) onRefresh();
   };
 
@@ -2816,45 +2813,61 @@ function PresupuestosExcelPanel({ patients, onRefresh }) {
               </div>
               {status.conflicts.map((c, idx) => {
                 const assigned = assignedSet.has(idx);
-                const busy     = busySet.has(idx);
                 return (
-                  <div key={idx} style={{...cardStyle, borderLeft:`3px solid ${assigned?"#27ae60":"#e67e22"}`}}>
-                    <div style={{display:"flex",alignItems:"flex-start",gap:16,flexWrap:"wrap"}}>
-                      <div style={{flex:"0 0 auto"}}>
-                        <div style={{fontSize:11,color:"#888",marginBottom:2}}>HC Excel</div>
-                        <div style={{fontWeight:700,color:"#2c3250"}}>{c.hc || "—"}</div>
+                  <div key={idx} style={{...cardStyle, borderLeft:`3px solid ${assigned?"#27ae60":"#e67e22"}`, marginBottom:12}}>
+                    {/* cabecera del conflicto */}
+                    <div style={{display:"flex",gap:24,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
+                      <div>
+                        <div style={{fontSize:10,color:"#888",marginBottom:1}}>HC (Excel)</div>
+                        <div style={{fontWeight:700,color:"#2c3250",fontSize:14}}>{c.hc||"—"}</div>
                       </div>
-                      <div style={{flex:"0 0 auto"}}>
-                        <div style={{fontSize:11,color:"#888",marginBottom:2}}>Nº Presupuesto</div>
-                        <div style={{fontWeight:700,color:"#c9a84c"}}>{c.presNum || "—"}</div>
+                      <div>
+                        <div style={{fontSize:10,color:"#888",marginBottom:1}}>Nº Presupuesto a asignar</div>
+                        <div style={{fontWeight:700,color:"#c9a84c",fontSize:16}}>{c.presNum||"—"}</div>
                       </div>
-                      <div style={{flex:1,minWidth:180}}>
-                        <div style={{fontSize:11,color:"#888",marginBottom:2}}>Motivo</div>
-                        <div style={{fontSize:12,color:"#e67e22",fontWeight:600}}>{c.reason}</div>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:10,color:"#888",marginBottom:1}}>Motivo</div>
+                        <div style={{fontSize:11,color:"#e67e22",fontWeight:600}}>{c.reason}</div>
                       </div>
-                      {!assigned && c.candidates.length > 0 && (
-                        <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-                          <select
-                            value={selPat[idx]||""}
-                            onChange={ev=>setSelPat(prev=>({...prev,[idx]:ev.target.value}))}
-                            style={{border:"1px solid #dde4ef",borderRadius:6,padding:"6px 10px",fontSize:12,color:"#2c3250",background:"#fff"}}>
-                            <option value="">Elegir paciente...</option>
-                            {c.candidates.map(p=>(
-                              <option key={p.id} value={p.id}>{p.name} (HC: {p.hc})</option>
-                            ))}
-                          </select>
-                          <button
-                            onClick={()=>assign(c,idx)}
-                            disabled={!selPat[idx]||busy}
-                            style={{background:"linear-gradient(135deg,#c9a84c,#a07830)",border:"none",borderRadius:6,color:"#fff",padding:"6px 14px",cursor:(!selPat[idx]||busy)?"not-allowed":"pointer",fontSize:12,fontWeight:700,opacity:(!selPat[idx]||busy)?0.5:1}}>
-                            {busy?"...":"Asignar"}
-                          </button>
-                        </div>
-                      )}
-                      {assigned && (
-                        <div style={{color:"#27ae60",fontWeight:700,fontSize:13,flexShrink:0}}>✓ Asignado</div>
-                      )}
+                      {assigned && <div style={{color:"#27ae60",fontWeight:700,fontSize:13}}>✓ Asignado</div>}
                     </div>
+
+                    {/* candidatos */}
+                    {!assigned && c.candidates.length > 0 && (
+                      <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                        <div style={{fontSize:10,color:"#888",letterSpacing:1,fontWeight:700,marginBottom:2}}>ELEGIR PACIENTE:</div>
+                        {c.candidates.map(p => {
+                          const key    = `${idx}-${p.id}`;
+                          const busy   = busySet.has(key);
+                          const grand  = patientGrand(p);
+                          const curPres= (p.budget_no||p.budgetNo||"").toString().trim();
+                          return (
+                            <div key={p.id} style={{display:"flex",alignItems:"center",gap:12,background:"#f5f7fa",borderRadius:8,padding:"10px 14px",flexWrap:"wrap"}}>
+                              <div style={{flex:1,minWidth:160}}>
+                                <div style={{fontWeight:700,color:"#2c3250",fontSize:13}}>{p.name}</div>
+                                <div style={{fontSize:11,color:"#888",marginTop:2}}>HC: {p.hc||"—"}</div>
+                              </div>
+                              <div style={{textAlign:"center",minWidth:110}}>
+                                <div style={{fontSize:10,color:"#888"}}>Nº Pres. actual (sistema)</div>
+                                <div style={{fontWeight:700,color:curPres?"#2c3250":"#ccc",fontSize:13}}>{curPres||"sin asignar"}</div>
+                              </div>
+                              <div style={{textAlign:"center",minWidth:110}}>
+                                <div style={{fontSize:10,color:"#888"}}>Total presupuesto sistema</div>
+                                <div style={{fontWeight:700,color:"#2c3250",fontSize:13}}>
+                                  {grand > 0 ? `€${grand.toLocaleString("es-ES",{minimumFractionDigits:2,maximumFractionDigits:2})}` : "—"}
+                                </div>
+                              </div>
+                              <button
+                                onClick={()=>assign(c,idx,p.id)}
+                                disabled={busy}
+                                style={{background:"linear-gradient(135deg,#c9a84c,#a07830)",border:"none",borderRadius:6,color:"#fff",padding:"7px 18px",cursor:busy?"not-allowed":"pointer",fontSize:12,fontWeight:700,opacity:busy?0.6:1,flexShrink:0}}>
+                                {busy?"...":"Asignar"}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}
