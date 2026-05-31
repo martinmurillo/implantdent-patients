@@ -2714,10 +2714,12 @@ function PresupuestosExcelPanel({ patients, onRefresh }) {
       const rows = [];
       for (let i = 1; i < data.length; i++) {
         const row    = data[i];
-        const presNum = (row[2] || "").toString().trim();  // col C
-        const hc      = (row[5] || "").toString().trim();  // col F
+        const presNum    = (row[2]  || "").toString().trim();  // col C
+        const hc         = (row[5]  || "").toString().trim();  // col F
+        const rawExcelAmt= (row[10] || "").toString().trim();  // col K
+        const excelAmt   = parseFloat(rawExcelAmt.replace(",", ".")) || 0;
         if (!presNum && !hc) continue;
-        rows.push({ presNum, hc });
+        rows.push({ presNum, hc, excelAmt });
       }
 
       // cuántas veces aparece cada HC en el Excel
@@ -2783,7 +2785,7 @@ function PresupuestosExcelPanel({ patients, onRefresh }) {
       <div style={{background:"#ffffff",border:"2px dashed #c9a84c44",borderRadius:12,padding:"28px 24px",marginBottom:20,textAlign:"center"}}>
         <div style={{fontSize:13,color:"#555",marginBottom:14}}>
           Seleccioná el Excel con los números de presupuesto.<br/>
-          <span style={{fontSize:11,color:"#888"}}>Col C (Nº presupuesto) · Col F (HC del paciente)</span>
+          <span style={{fontSize:11,color:"#888"}}>Col C (Nº presupuesto) · Col F (HC del paciente) · Col K (total presupuesto)</span>
         </div>
         <button onClick={()=>fileRef.current.click()} disabled={processing}
           style={{background:"linear-gradient(135deg,#c9a84c,#a07830)",border:"none",borderRadius:8,color:"#fff",padding:"10px 24px",cursor:processing?"not-allowed":"pointer",fontSize:13,fontWeight:700,opacity:processing?0.6:1}}>
@@ -2822,8 +2824,14 @@ function PresupuestosExcelPanel({ patients, onRefresh }) {
                         <div style={{fontWeight:700,color:"#2c3250",fontSize:14}}>{c.hc||"—"}</div>
                       </div>
                       <div>
-                        <div style={{fontSize:10,color:"#888",marginBottom:1}}>Nº Presupuesto a asignar</div>
+                        <div style={{fontSize:10,color:"#888",marginBottom:1}}>Nº Presupuesto (Excel)</div>
                         <div style={{fontWeight:700,color:"#c9a84c",fontSize:16}}>{c.presNum||"—"}</div>
+                      </div>
+                      <div>
+                        <div style={{fontSize:10,color:"#888",marginBottom:1}}>Total presupuesto (Excel)</div>
+                        <div style={{fontWeight:700,color:"#2c3250",fontSize:15}}>
+                          {c.excelAmt > 0 ? `€${c.excelAmt.toLocaleString("es-ES",{minimumFractionDigits:2,maximumFractionDigits:2})}` : "—"}
+                        </div>
                       </div>
                       <div style={{flex:1}}>
                         <div style={{fontSize:10,color:"#888",marginBottom:1}}>Motivo</div>
