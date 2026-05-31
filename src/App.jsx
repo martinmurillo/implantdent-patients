@@ -2853,16 +2853,19 @@ function PresupuestosExcelPanel({ patients, onRefresh }) {
                             <div key={p.id} style={{display:"flex",alignItems:"center",gap:12,background:"#f5f7fa",borderRadius:8,padding:"10px 14px",flexWrap:"wrap"}}>
                               <div style={{flex:1,minWidth:160}}>
                                 <div style={{fontWeight:700,color:"#2c3250",fontSize:13}}>{p.name}</div>
-                                <div style={{fontSize:11,color:"#888",marginTop:2}}>HC: {p.hc||"—"}</div>
+                                <div style={{fontSize:11,color:"#888",marginTop:2}}>HC: {p.hc||"—"} · Nº Pres: {curPres||"sin asignar"}</div>
                               </div>
-                              <div style={{textAlign:"center",minWidth:110}}>
-                                <div style={{fontSize:10,color:"#888"}}>Nº Pres. actual (sistema)</div>
-                                <div style={{fontWeight:700,color:curPres?"#2c3250":"#ccc",fontSize:13}}>{curPres||"sin asignar"}</div>
-                              </div>
-                              <div style={{textAlign:"center",minWidth:110}}>
-                                <div style={{fontSize:10,color:"#888"}}>Total presupuesto sistema</div>
-                                <div style={{fontWeight:700,color:"#2c3250",fontSize:13}}>
+                              <div style={{textAlign:"center",minWidth:100}}>
+                                <div style={{fontSize:10,color:"#888",marginBottom:2}}>Total sistema</div>
+                                <div style={{fontWeight:700,color:"#2c3250",fontSize:14}}>
                                   {grand > 0 ? `€${grand.toLocaleString("es-ES",{minimumFractionDigits:2,maximumFractionDigits:2})}` : "—"}
+                                </div>
+                              </div>
+                              <div style={{fontSize:18,color:"#ccc",alignSelf:"center"}}>↔</div>
+                              <div style={{textAlign:"center",minWidth:100}}>
+                                <div style={{fontSize:10,color:"#888",marginBottom:2}}>Total Excel</div>
+                                <div style={{fontWeight:700,fontSize:14,color:c.excelAmt>0&&grand>0&&Math.abs(c.excelAmt-grand)<1?"#27ae60":"#2c3250"}}>
+                                  {c.excelAmt > 0 ? `€${c.excelAmt.toLocaleString("es-ES",{minimumFractionDigits:2,maximumFractionDigits:2})}` : "—"}
                                 </div>
                               </div>
                               <button
