@@ -153,7 +153,7 @@ function LoginForm({ onLogin }) {
 
 // ─── UTILS ───────────────────────────────────────────────────────────────────
 const genId    = () => Math.random().toString(36).slice(2,10);
-const today    = () => new Date().toISOString().split("T")[0];
+const today    = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
 const daysDiff = (d) => !d ? 999 : Math.floor((new Date()-new Date(d))/86400000);
 const STATUSES = ["frío","pendiente","en curso","cerrado con deuda","cerrado sin deuda"];
 const STATUS_COLOR = { "frío":"#7f8c8d", "pendiente":"#c9a84c", "en curso":"#3498db", "cerrado con deuda":"#e67e22", "cerrado sin deuda":"#2ecc71" };
@@ -1538,7 +1538,7 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
   const now = new Date();
   const y = now.getFullYear(), mo = now.getMonth();
   const [from,         setFrom]   = useState(`${y}-${String(mo+1).padStart(2,"0")}-01`);
-  const [to,           setTo]     = useState(now.toISOString().split("T")[0]);
+  const [to,           setTo]     = useState(today());
   const [activeDetail,  setDetail]      = useState(null);
   const [busy,          setBusy]        = useState(null);
   const [syncing,       setSyncing]     = useState(false);
@@ -3746,7 +3746,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
         )}
 
         {!dbLoading && view==="pagos" && (
-          <PagosExcelPanel patients={patients} payments={payments} onPaymentsChange={fetchPayments}/>
+          <PagosExcelPanel patients={[...patients,...archivedPatients]} payments={payments} onPaymentsChange={fetchPayments}/>
         )}
 
         {!dbLoading && view==="citas" && (
