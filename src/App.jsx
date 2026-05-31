@@ -2282,7 +2282,7 @@ function ClinicaPanel({ doctors, templates, translations, onRefreshDoctors, onRe
 }
 
 // ─── PagosExcelPanel ─────────────────────────────────────────────────────────
-function PagosExcelPanel({ patients, onPaymentsChange }) {
+function PagosExcelPanel({ patients, payments, onPaymentsChange }) {
   const [totalRows,   setTotalRows]   = useState(null);
   const [rows,        setRows]        = useState(null);
   const [addedSet,    setAddedSet]    = useState(new Set());
@@ -2338,6 +2338,16 @@ function PagosExcelPanel({ patients, onPaymentsChange }) {
     return "solo presupuesto";
   };
 
+  const isDuplicate = (patientId, dateObj, amt) => {
+    if (!dateObj) return false;
+    const exISO = dateObjToISO(dateObj);
+    return payments.some(pay =>
+      pay.patient_id === patientId &&
+      pay.date === exISO &&
+      Math.abs((parseFloat(pay.amount) || 0) - amt) < 0.01
+    );
+  };
+
   const handleFile = (e) => {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
@@ -2369,6 +2379,7 @@ function PagosExcelPanel({ patients, onPaymentsChange }) {
         if (!patient || matchType === "ambos_distintos") continue;
 
         const amt = parseFloat(rawAmt.replace(",", ".")) || 0;
+        if (isDuplicate(patient.id, dateObj, amt)) continue;
         const patPres = (patient.budget_no || patient.budgetNo || "").toString().trim();
         result.push({ name, presNum, patPres, concept, amt, dateObj, patient, matchType });
       }
@@ -3662,7 +3673,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
         )}
 
         {!dbLoading && view==="pagos" && (
-          <PagosExcelPanel patients={patients} onPaymentsChange={fetchPayments}/>
+          <PagosExcelPanel patients={patients} payments={payments} onPaymentsChange={fetchPayments}/>
         )}
 
         {!dbLoading && view==="citas" && (
