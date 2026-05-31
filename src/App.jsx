@@ -2285,6 +2285,8 @@ function ClinicaPanel({ doctors, templates, translations, onRefreshDoctors, onRe
 function PagosExcelPanel({ patients, payments, onPaymentsChange }) {
   const [list1,   setList1]   = useState(null);  // agrupado por Nº presupuesto
   const [list2,   setList2]   = useState(null);  // coincidencias por nombre
+  const [list3,   setList3]   = useState(null);  // sin ninguna coincidencia
+  const [totals,  setTotals]  = useState(null);  // { excelTotal, matched1, matched2, unmatched }
   const [added1,  setAdded1]  = useState(new Set());  // presNums ya agregados
   const [loading, setLoading] = useState(new Set());  // claves en proceso
   const fileRef = useRef();
@@ -2330,8 +2332,10 @@ function PagosExcelPanel({ patients, payments, onPaymentsChange }) {
       const wb   = XLSX.read(ev.target.result, { type:"array", cellDates:true });
       const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header:1, defval:"" });
 
-      const presMap = new Map();  // presNum → entry
-      const nameMap = new Map();  // patientId → entry
+      const presMap  = new Map();  // presNum → entry
+      const nameMap  = new Map();  // patientId → entry
+      const noMatch  = [];         // filas sin ninguna coincidencia
+      let excelTotal = 0;
 
       for (let i = 1; i < data.length; i++) {
         const row     = data[i];
@@ -2341,6 +2345,7 @@ function PagosExcelPanel({ patients, payments, onPaymentsChange }) {
         const rawAmt  = (row[10] || "").toString().trim();   // col K
         const amt     = parseFloat(rawAmt.replace(",", ".")) || 0;
         if (!name && !presNum) continue;
+        excelTotal += amt;
 
         // Lista 1: coincidencia por Nº presupuesto
         if (presNum) {
@@ -2353,23 +2358,38 @@ function PagosExcelPanel({ patients, payments, onPaymentsChange }) {
             const e = presMap.get(presNum);
             e.totalAmt += amt;
             if (dateObj && (!e.latestDate || dateObj > e.latestDate)) e.latestDate = dateObj;
-            continue;  // no pasar a lista 2
+            continue;
           }
         }
 
-        // Lista 2: coincidencia por nombre (solo si no entró en lista 1)
-        if (!name) continue;
-        const pat = patients.find(p => namesMatch(name, p.name)) || null;
-        if (!pat) continue;
-        if (!nameMap.has(pat.id)) nameMap.set(pat.id, { patient:pat, totalAmt:0, latestDate:null });
-        const e = nameMap.get(pat.id);
-        e.totalAmt += amt;
-        if (dateObj && (!e.latestDate || dateObj > e.latestDate)) e.latestDate = dateObj;
+        // Lista 2: coincidencia por nombre
+        if (name) {
+          const pat = patients.find(p => namesMatch(name, p.name)) || null;
+          if (pat) {
+            if (!nameMap.has(pat.id)) nameMap.set(pat.id, { patient:pat, totalAmt:0, latestDate:null });
+            const e = nameMap.get(pat.id);
+            e.totalAmt += amt;
+            if (dateObj && (!e.latestDate || dateObj > e.latestDate)) e.latestDate = dateObj;
+            continue;
+          }
+        }
+
+        // Lista 3: sin coincidencia
+        noMatch.push({ name, presNum, amt, dateObj });
       }
 
       const sort = (arr) => arr.sort((a,b) => a.patient.name.localeCompare(b.patient.name, "es"));
-      setList1(sort(Array.from(presMap.values())));
-      setList2(sort(Array.from(nameMap.values())));
+      const l1 = sort(Array.from(presMap.values()));
+      const l2 = sort(Array.from(nameMap.values()));
+      setList1(l1);
+      setList2(l2);
+      setList3(noMatch);
+      setTotals({
+        excelTotal,
+        matched1: l1.reduce((s,e) => s+e.totalAmt, 0),
+        matched2: l2.reduce((s,e) => s+e.totalAmt, 0),
+        unmatched: noMatch.reduce((s,r) => s+r.amt, 0),
+      });
       setAdded1(new Set());
       setLoading(new Set());
     };
@@ -2412,6 +2432,23 @@ function PagosExcelPanel({ patients, payments, onPaymentsChange }) {
 
       {list1 !== null && (
         <div>
+          {/* ── Resumen de totales ───────────────────────────────────────── */}
+          {totals && (
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24}}>
+              {[
+                { label:"Total Excel", amt:totals.excelTotal, color:"#2c3250" },
+                { label:"Por presupuesto", amt:totals.matched1, color:"#27ae60" },
+                { label:"Por nombre", amt:totals.matched2, color:"#e67e22" },
+                { label:"Sin coincidencia", amt:totals.unmatched, color:"#e74c3c" },
+              ].map(({label,amt,color})=>(
+                <div key={label} style={{background:"#fff",border:"1px solid #e2e5ed",borderRadius:10,padding:"12px 16px"}}>
+                  <div style={{fontSize:10,color:"#888",letterSpacing:1,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>{label}</div>
+                  <div style={{fontSize:18,fontWeight:700,color}}>{fmtAmt(amt)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* ── Lista 1: por Nº presupuesto ─────────────────────────────── */}
           <div style={{marginBottom:28}}>
             <div style={{fontSize:11,color:"#c9a84c",letterSpacing:2,fontWeight:700,marginBottom:10}}>
@@ -2490,6 +2527,30 @@ function PagosExcelPanel({ patients, payments, onPaymentsChange }) {
               </div>
             )}
           </div>
+
+          {/* ── Lista 3: sin coincidencia ────────────────────────────────── */}
+          {list3 && list3.length > 0 && (
+            <div style={{marginTop:24}}>
+              <div style={{fontSize:11,color:"#e74c3c",letterSpacing:2,fontWeight:700,marginBottom:10}}>
+                SIN COINCIDENCIA — {fmtAmt(totals.unmatched)} ({list3.length} filas)
+              </div>
+              <div style={{background:"#fff",borderRadius:12,border:"1px solid #fca5a5",overflow:"hidden"}}>
+                <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1.2fr",gap:0,background:"#fff5f5",padding:"8px 16px",borderBottom:"1px solid #fca5a5"}}>
+                  {["Nombre en Excel","Nº Pres. Excel","Importe","Fecha"].map((h,i)=>(
+                    <div key={i} style={HDR}>{h}</div>
+                  ))}
+                </div>
+                {list3.map((r,i)=>(
+                  <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1.2fr",gap:0,padding:"9px 16px",borderBottom:"1px solid #fef2f2",alignItems:"center",background:i%2===0?"#fff":"#fffbfb"}}>
+                    <div style={{fontSize:13,color:"#2c3250"}}>{r.name||"—"}</div>
+                    <div style={{fontSize:12,color:"#888"}}>{r.presNum||"—"}</div>
+                    <div style={{fontSize:13,fontWeight:700,color:"#e74c3c"}}>{fmtAmt(r.amt)}</div>
+                    <div style={{fontSize:12,color:"#888"}}>{fmt(r.dateObj)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
