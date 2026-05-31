@@ -2283,10 +2283,10 @@ function ClinicaPanel({ doctors, templates, translations, onRefreshDoctors, onRe
 
 // ─── PagosExcelPanel ─────────────────────────────────────────────────────────
 function PagosExcelPanel({ patients, payments, onPaymentsChange }) {
-  const [totalRows,   setTotalRows]   = useState(null);
-  const [rows,        setRows]        = useState(null);
-  const [addedSet,    setAddedSet]    = useState(new Set());
-  const [loadingSet,  setLoadingSet]  = useState(new Set());
+  const [list1,   setList1]   = useState(null);  // agrupado por Nº presupuesto
+  const [list2,   setList2]   = useState(null);  // coincidencias por nombre
+  const [added1,  setAdded1]  = useState(new Set());  // presNums ya agregados
+  const [loading, setLoading] = useState(new Set());  // claves en proceso
   const fileRef = useRef();
 
   const normalize = (s) =>
@@ -2298,10 +2298,10 @@ function PagosExcelPanel({ patients, payments, onPaymentsChange }) {
     const na = normalize(a), nb = normalize(b);
     if (!na || !nb) return false;
     if (na === nb) return true;
-    const wordsA = na.split(/\s+/).filter(w => w.length > 2);
-    const wordsB = nb.split(/\s+/).filter(w => w.length > 2);
-    const shared = wordsA.filter(w => wordsB.includes(w));
-    return shared.length >= 2 || (wordsA.length === 1 && shared.length === 1) || (wordsB.length === 1 && shared.length === 1);
+    const wa = na.split(/\s+/).filter(w => w.length > 2);
+    const wb = nb.split(/\s+/).filter(w => w.length > 2);
+    const shared = wa.filter(w => wb.includes(w));
+    return shared.length >= 2 || (wa.length === 1 && shared.length === 1) || (wb.length === 1 && shared.length === 1);
   };
 
   const parseDate = (val) => {
@@ -2311,112 +2311,97 @@ function PagosExcelPanel({ patients, payments, onPaymentsChange }) {
     return null;
   };
 
-  const fmtDateObj = (d) => {
+  const fmt = (d) => {
     if (!d) return "—";
     return d.toLocaleDateString("es-ES", { day:"2-digit", month:"2-digit", year:"numeric" });
   };
 
-  const dateObjToISO = (d) => {
+  const toISO = (d) => {
     if (!d) return today();
-    const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,"0"), day = String(d.getDate()).padStart(2,"0");
-    return `${y}-${m}-${day}`;
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
   };
 
-  const fmtAmt = (n) =>
-    "€" + n.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-  const presupuestoMatch = (exPres, patient) => {
-    if (!exPres) return false;
-    const patPres = (patient.budget_no || patient.budgetNo || "").toString().trim();
-    if (!patPres) return false;
-    return exPres === patPres;
-  };
-
-  const matchLabel = (matchType) => {
-    if (matchType === "ambos") return "nombre + presupuesto";
-    if (matchType === "solo_nombre") return "solo nombre";
-    return "solo presupuesto";
-  };
-
-  const isDuplicate = (patientId, dateObj, amt) => {
-    if (!dateObj) return false;
-    const exISO = dateObjToISO(dateObj);
-    return payments.some(pay =>
-      pay.patient_id === patientId &&
-      pay.date === exISO &&
-      Math.abs((parseFloat(pay.amount) || 0) - amt) < 0.01
-    );
-  };
+  const fmtAmt = (n) => "€" + n.toLocaleString("es-ES", { minimumFractionDigits:2, maximumFractionDigits:2 });
 
   const handleFile = (e) => {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const wb = XLSX.read(ev.target.result, { type: "array", cellDates: true });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
-      const result = [];
-      let total = 0;
+      const wb   = XLSX.read(ev.target.result, { type:"array", cellDates:true });
+      const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header:1, defval:"" });
+
+      const presMap = new Map();  // presNum → entry
+      const nameMap = new Map();  // patientId → entry
+
       for (let i = 1; i < data.length; i++) {
         const row     = data[i];
-        const dateObj = parseDate(row[1]);
+        const dateObj = parseDate(row[1]);                    // col B
         const name    = (row[5]  || "").toString().trim();   // col F
         const presNum = (row[6]  || "").toString().trim();   // col G
-        const concept = (row[8]  || "").toString().trim();   // col I
         const rawAmt  = (row[10] || "").toString().trim();   // col K
+        const amt     = parseFloat(rawAmt.replace(",", ".")) || 0;
         if (!name && !presNum) continue;
-        total++;
 
-        const byName = name    ? patients.find(p => namesMatch(name, p.name))           || null : null;
-        const byPres = presNum ? patients.find(p => presupuestoMatch(presNum, p))        || null : null;
-        const bothSame = byName && byPres && byName.id === byPres.id;
-        const matchType = bothSame          ? "ambos"
-          : byPres && !byName              ? "solo_presupuesto"
-          : byName && !byPres              ? "solo_nombre"
-          : byName && byPres && !bothSame  ? "ambos_distintos"  // nombre y presupuesto apuntan a distintos pacientes
-          : null;
-        const patient = bothSame ? byName : (byPres || byName);
-        if (!patient || matchType === "ambos_distintos") continue;
+        // Lista 1: coincidencia por Nº presupuesto
+        if (presNum) {
+          const pat = patients.find(p => {
+            const pp = (p.budget_no || p.budgetNo || "").toString().trim();
+            return pp && pp === presNum;
+          }) || null;
+          if (pat) {
+            if (!presMap.has(presNum)) presMap.set(presNum, { patient:pat, presNum, totalAmt:0, latestDate:null });
+            const e = presMap.get(presNum);
+            e.totalAmt += amt;
+            if (dateObj && (!e.latestDate || dateObj > e.latestDate)) e.latestDate = dateObj;
+            continue;  // no pasar a lista 2
+          }
+        }
 
-        const amt = parseFloat(rawAmt.replace(",", ".")) || 0;
-        if (isDuplicate(patient.id, dateObj, amt)) continue;
-        const patPres = (patient.budget_no || patient.budgetNo || "").toString().trim();
-        result.push({ name, presNum, patPres, concept, amt, dateObj, patient, matchType });
+        // Lista 2: coincidencia por nombre (solo si no entró en lista 1)
+        if (!name) continue;
+        const pat = patients.find(p => namesMatch(name, p.name)) || null;
+        if (!pat) continue;
+        if (!nameMap.has(pat.id)) nameMap.set(pat.id, { patient:pat, totalAmt:0, latestDate:null });
+        const e = nameMap.get(pat.id);
+        e.totalAmt += amt;
+        if (dateObj && (!e.latestDate || dateObj > e.latestDate)) e.latestDate = dateObj;
       }
-      setTotalRows(total);
-      setRows(result);
-      setAddedSet(new Set());
-      setLoadingSet(new Set());
+
+      const sort = (arr) => arr.sort((a,b) => a.patient.name.localeCompare(b.patient.name, "es"));
+      setList1(sort(Array.from(presMap.values())));
+      setList2(sort(Array.from(nameMap.values())));
+      setAdded1(new Set());
+      setLoading(new Set());
     };
     reader.readAsArrayBuffer(file);
     e.target.value = "";
   };
 
-  const addPayment = async (row, idx) => {
-    setLoadingSet(prev => new Set([...prev, idx]));
+  const addPay = async (entry) => {
+    const key = entry.presNum;
+    setLoading(prev => new Set([...prev, key]));
     await supabase.from("payments").insert([{
-      id: genId(), patient_id: row.patient.id,
-      amount: row.amt, date: dateObjToISO(row.dateObj),
-      note: row.concept || "Importado Excel",
+      id: genId(), patient_id: entry.patient.id,
+      amount: entry.totalAmt,
+      date: toISO(entry.latestDate),
+      note: `Importado Excel · Pres. ${entry.presNum}`,
     }]);
-    setAddedSet(prev => new Set([...prev, idx]));
-    setLoadingSet(prev => { const s = new Set(prev); s.delete(idx); return s; });
+    setAdded1(prev => new Set([...prev, key]));
+    setLoading(prev => { const s = new Set(prev); s.delete(key); return s; });
     if (onPaymentsChange) onPaymentsChange();
   };
 
-  const COLS = ["Paciente", "Nº Pres. Excel", "Nº Pres. Paciente", "Concepto", "Importe", "Fecha", "Coincidencia", ""];
-  const GRID = "1.8fr 0.8fr 0.9fr 1.8fr 0.8fr 0.9fr 1fr 90px";
+  const GRID1 = "2fr 1fr 1.2fr 1fr 100px";
+  const HDR   = { fontSize:10, color:"#888", fontWeight:700, letterSpacing:1, textTransform:"uppercase" };
 
   return (
     <div>
-      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
-        <div style={{fontSize:11,color:"#c9a84c",letterSpacing:2,fontWeight:700}}>📂 IMPORTAR PAGOS EXCEL</div>
-      </div>
+      <div style={{fontSize:11,color:"#c9a84c",letterSpacing:2,fontWeight:700,marginBottom:20}}>📂 IMPORTAR COBROS EXCEL</div>
 
-      <div style={{background:"#ffffff",border:"2px dashed #c9a84c44",borderRadius:12,padding:"28px 24px",marginBottom:20,textAlign:"center"}}>
+      <div style={{background:"#fff",border:"2px dashed #c9a84c44",borderRadius:12,padding:"24px",marginBottom:20,textAlign:"center"}}>
         <div style={{fontSize:13,color:"#555",marginBottom:14}}>
-          Seleccioná el archivo Excel con la lista de cobros.<br/>
-          <span style={{fontSize:11,color:"#888"}}>Col B (fecha) · Col F (nombre) · Col G (Nº presupuesto) · Col I (concepto) · Col K (importe)</span>
+          Seleccioná el Excel semanal de cobros.<br/>
+          <span style={{fontSize:11,color:"#888"}}>Col B (fecha) · Col F (nombre) · Col G (Nº presupuesto) · Col K (importe)</span>
         </div>
         <button onClick={()=>fileRef.current.click()}
           style={{background:"linear-gradient(135deg,#c9a84c,#a07830)",border:"none",borderRadius:8,color:"#fff",padding:"10px 24px",cursor:"pointer",fontSize:13,fontWeight:700}}>
@@ -2425,59 +2410,86 @@ function PagosExcelPanel({ patients, payments, onPaymentsChange }) {
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.ods" onChange={handleFile} style={{display:"none"}}/>
       </div>
 
-      {rows !== null && (
+      {list1 !== null && (
         <div>
-          <div style={{fontSize:12,color:"#555",marginBottom:12}}>
-            {totalRows} fila(s) leídas · <span style={{color:"#c9a84c",fontWeight:700}}>{rows.length} con coincidencia</span>
-            {addedSet.size > 0 && <span style={{color:"#27ae60",fontWeight:700}}> · {addedSet.size} agregado(s)</span>}
+          {/* ── Lista 1: por Nº presupuesto ─────────────────────────────── */}
+          <div style={{marginBottom:28}}>
+            <div style={{fontSize:11,color:"#c9a84c",letterSpacing:2,fontWeight:700,marginBottom:10}}>
+              COBROS POR Nº PRESUPUESTO ({list1.length})
+            </div>
+
+            {list1.length === 0 && (
+              <div style={{color:"#aaa",fontSize:13,padding:"12px 0"}}>Sin coincidencias por número de presupuesto</div>
+            )}
+
+            {list1.length > 0 && (
+              <div style={{background:"#fff",borderRadius:12,border:"1px solid #e2e5ed",overflow:"hidden"}}>
+                <div style={{display:"grid",gridTemplateColumns:GRID1,gap:0,background:"#f5f7fa",padding:"8px 16px",borderBottom:"1px solid #e2e5ed"}}>
+                  {["Paciente","Nº Presupuesto","Total Excel","Fecha cobro",""].map((h,i)=>(
+                    <div key={i} style={HDR}>{h}</div>
+                  ))}
+                </div>
+                {list1.map((e, i) => {
+                  const done = added1.has(e.presNum);
+                  const busy = loading.has(e.presNum);
+                  return (
+                    <div key={e.presNum} style={{display:"grid",gridTemplateColumns:GRID1,gap:0,padding:"10px 16px",borderBottom:"1px solid #f0f2f7",alignItems:"center",background:done?"#f0fdf4":i%2===0?"#fff":"#fafbfd"}}>
+                      <div style={{fontWeight:600,color:"#2c3250",fontSize:13}}>{e.patient.name}</div>
+                      <div style={{fontSize:13,color:"#c9a84c",fontWeight:700}}>{e.presNum}</div>
+                      <div style={{fontSize:14,fontWeight:700,color:"#2c3250"}}>{fmtAmt(e.totalAmt)}</div>
+                      <div style={{fontSize:12,color:"#888"}}>{fmt(e.latestDate)}</div>
+                      <div>
+                        {done
+                          ? <span style={{color:"#27ae60",fontWeight:700,fontSize:12}}>✓ Agregado</span>
+                          : <button onClick={()=>addPay(e)} disabled={busy}
+                              style={{background:"linear-gradient(135deg,#c9a84c,#a07830)",border:"none",borderRadius:6,color:"#fff",padding:"6px 14px",cursor:busy?"not-allowed":"pointer",fontSize:12,fontWeight:700,opacity:busy?0.6:1}}>
+                              {busy?"...":"Agregar"}
+                            </button>
+                        }
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
-          {rows.length === 0 && (
-            <div style={{textAlign:"center",color:"#888",padding:40,fontSize:13}}>No se encontraron coincidencias</div>
-          )}
-
-          {rows.length > 0 && (
-            <div style={{background:"#ffffff",borderRadius:12,border:"1px solid #e2e5ed",overflow:"hidden"}}>
-              <div style={{display:"grid",gridTemplateColumns:GRID,gap:0,background:"#f5f7fa",padding:"8px 16px",borderBottom:"1px solid #e2e5ed"}}>
-                {COLS.map((h,ci)=>(
-                  <div key={ci} style={{fontSize:10,color:"#888",fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>{h}</div>
-                ))}
-              </div>
-
-              {rows.map((r, idx) => {
-                const added   = addedSet.has(idx);
-                const loading = loadingSet.has(idx);
-                const mtColor = r.matchType === "ambos" ? "#27ae60" : r.matchType === "solo_nombre" ? "#e67e22" : "#2980b9";
-                return (
-                  <div key={idx} style={{display:"grid",gridTemplateColumns:GRID,gap:0,padding:"9px 16px",borderBottom:"1px solid #f0f2f7",alignItems:"center",background:added?"#f0fdf4":idx%2===0?"#ffffff":"#fafbfd"}}>
-                    <div>
-                      <div style={{fontWeight:600,color:"#2c3250",fontSize:13}}>{r.patient.name}</div>
-                      {r.name !== r.patient.name && (
-                        <div style={{fontSize:10,color:"#aaa",marginTop:1}}>{r.name}</div>
-                      )}
-                    </div>
-                    <div style={{fontSize:12,color:"#555"}}>{r.presNum || "—"}</div>
-                    <div style={{fontSize:12,color:"#555"}}>{r.patPres || "—"}</div>
-                    <div style={{fontSize:12,color:"#555"}}>{r.concept || "—"}</div>
-                    <div style={{fontSize:13,fontWeight:700,color:"#2c3250"}}>{fmtAmt(r.amt)}</div>
-                    <div style={{fontSize:12,color:"#888"}}>{fmtDateObj(r.dateObj)}</div>
-                    <div style={{fontSize:10,color:mtColor,fontWeight:700}}>({matchLabel(r.matchType)})</div>
-                    <div>
-                      {added
-                        ? <span style={{color:"#27ae60",fontSize:12,fontWeight:700}}>✓ Agregado</span>
-                        : <button
-                            onClick={()=>addPayment(r,idx)}
-                            disabled={loading}
-                            style={{background:"linear-gradient(135deg,#c9a84c,#a07830)",border:"none",borderRadius:6,color:"#fff",padding:"5px 12px",cursor:loading?"not-allowed":"pointer",fontSize:12,fontWeight:700,opacity:loading?0.6:1,width:"100%"}}>
-                            {loading ? "..." : "Agregar"}
-                          </button>
-                      }
-                    </div>
-                  </div>
-                );
-              })}
+          {/* ── Lista 2: por nombre ──────────────────────────────────────── */}
+          <div>
+            <div style={{fontSize:11,color:"#888",letterSpacing:2,fontWeight:700,marginBottom:10}}>
+              COINCIDENCIAS POR NOMBRE ({list2.length})
             </div>
-          )}
+
+            {list2.length === 0 && (
+              <div style={{color:"#aaa",fontSize:13,padding:"12px 0"}}>Sin coincidencias adicionales por nombre</div>
+            )}
+
+            {list2.length > 0 && (
+              <div style={{background:"#fff",borderRadius:12,border:"1px solid #e2e5ed",overflow:"hidden"}}>
+                <div style={{display:"grid",gridTemplateColumns:"2fr 1.2fr 1fr 2fr",gap:0,background:"#f5f7fa",padding:"8px 16px",borderBottom:"1px solid #e2e5ed"}}>
+                  {["Paciente","Total Excel","Fecha cobro","Nº Presupuesto en sistema"].map((h,i)=>(
+                    <div key={i} style={HDR}>{h}</div>
+                  ))}
+                </div>
+                {list2.map((e, i) => {
+                  const patPres = (e.patient.budget_no || e.patient.budgetNo || "").toString().trim();
+                  return (
+                    <div key={e.patient.id} style={{display:"grid",gridTemplateColumns:"2fr 1.2fr 1fr 2fr",gap:0,padding:"10px 16px",borderBottom:"1px solid #f0f2f7",alignItems:"center",background:i%2===0?"#fff":"#fafbfd"}}>
+                      <div style={{fontWeight:600,color:"#2c3250",fontSize:13}}>{e.patient.name}</div>
+                      <div style={{fontSize:14,fontWeight:700,color:"#2c3250"}}>{fmtAmt(e.totalAmt)}</div>
+                      <div style={{fontSize:12,color:"#888"}}>{fmt(e.latestDate)}</div>
+                      <div>
+                        {patPres
+                          ? <span style={{fontSize:12,color:"#2c3250"}}>Nº {patPres}</span>
+                          : <span style={{fontSize:12,color:"#e74c3c",fontWeight:600}}>Sin número de presupuesto</span>
+                        }
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
