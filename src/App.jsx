@@ -2320,6 +2320,13 @@ function PagosExcelPanel({ patients, payments }) {
   const fmtAmt = (n) =>
     "€" + n.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+  const presupuestoMatch = (exPres, patient) => {
+    if (!exPres) return false;
+    const patPres = (patient.budget_no || patient.budgetNo || "").toString().trim();
+    if (!patPres) return false;
+    return exPres === patPres;
+  };
+
   const handleFile = (e) => {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
@@ -2332,27 +2339,48 @@ function PagosExcelPanel({ patients, payments }) {
         const row     = data[i];
         const dateObj = parseDate(row[1]);                   // col B (index 1)
         const name    = (row[5] || "").toString().trim();   // col F (index 5)
+        const presNum = (row[6] || "").toString().trim();   // col G (index 6) - nº presupuesto
+        const concept = (row[8] || "").toString().trim();   // col I (index 8) - concepto
         const amount  = (row[10] || "").toString().trim();  // col K (index 10)
-        if (!name) continue;
-        parsed.push({ name, amount, dateObj });
+        if (!name && !presNum) continue;
+        parsed.push({ name, presNum, concept, amount, dateObj });
       }
       setTotalRows(parsed.length);
 
-      // agrupar por paciente: sumar importes y guardar la fecha más reciente
+      // agrupar por patient.id: matching por nombre y/o presupuesto
       const groupMap = new Map();
       for (const exRow of parsed) {
-        const match = patients.find(p => namesMatch(exRow.name, p.name));
+        const byName = exRow.name ? patients.find(p => namesMatch(exRow.name, p.name)) : null;
+        const byPres = exRow.presNum ? patients.find(p => presupuestoMatch(exRow.presNum, p)) : null;
+
+        // si el mismo paciente coincide por ambos validadores
+        const bothSame = byName && byPres && byName.id === byPres.id;
+        const rowMatchType = bothSame ? "ambos"
+          : byPres ? "solo_presupuesto"
+          : byName ? "solo_nombre"
+          : null;
+        const match = bothSame ? byName : (byPres || byName);
         if (!match) continue;
-        if (!groupMap.has(match.name)) {
-          groupMap.set(match.name, { patient: match, patientName: match.name, totalAmount: 0, count: 0, lastDate: null });
+
+        if (!groupMap.has(match.id)) {
+          groupMap.set(match.id, {
+            patient: match, patientName: match.name,
+            totalAmount: 0, count: 0, lastDate: null,
+            concepts: [], matchedByName: false, matchedByPres: false,
+          });
         }
-        const entry = groupMap.get(match.name);
+        const entry = groupMap.get(match.id);
         const amt = parseFloat((exRow.amount || "0").replace(",", ".")) || 0;
         entry.totalAmount += amt;
         entry.count++;
         if (exRow.dateObj && (!entry.lastDate || exRow.dateObj > entry.lastDate)) {
           entry.lastDate = exRow.dateObj;
         }
+        if (exRow.concept && !entry.concepts.includes(exRow.concept)) {
+          entry.concepts.push(exRow.concept);
+        }
+        if (rowMatchType === "ambos" || rowMatchType === "solo_nombre") entry.matchedByName = true;
+        if (rowMatchType === "ambos" || rowMatchType === "solo_presupuesto") entry.matchedByPres = true;
       }
 
       const grouped = Array.from(groupMap.values()).map(entry => {
@@ -2360,13 +2388,22 @@ function PagosExcelPanel({ patients, payments }) {
           .filter(pay => pay.patient_id === entry.patient.id)
           .reduce((s, pay) => s + (parseFloat(pay.amount) || 0), 0);
         const diff = parseFloat((entry.totalAmount - systemPaid).toFixed(2));
-        return { ...entry, systemPaid, diff };
+        const matchType = (entry.matchedByName && entry.matchedByPres) ? "ambos"
+          : entry.matchedByName ? "solo_nombre"
+          : "solo_presupuesto";
+        return { ...entry, systemPaid, diff, matchType };
       }).sort((a, b) => a.patientName.localeCompare(b.patientName, "es"));
 
       setMatches(grouped);
     };
     reader.readAsArrayBuffer(file);
     e.target.value = "";
+  };
+
+  const matchLabel = (matchType) => {
+    if (matchType === "ambos") return "coinciden nombre y presupuesto";
+    if (matchType === "solo_nombre") return "solo coincide nombre";
+    return "solo coincide presupuesto";
   };
 
   const print = () => {
@@ -2377,9 +2414,12 @@ function PagosExcelPanel({ patients, payments }) {
       const estado = ok
         ? `<span style="color:#27ae60;font-weight:700">✓ OK</span>`
         : `<span style="color:#e74c3c;font-weight:700">${m.diff > 0 ? "+" : ""}${fmtAmt(m.diff)}</span>`;
+      const coinc = matchLabel(m.matchType);
+      const conceptos = m.concepts && m.concepts.length > 0 ? m.concepts.join(" / ") : "—";
       return `
       <tr>
-        <td>${m.patientName}</td>
+        <td>${m.patientName}<br/><span style="font-size:10px;color:#888">(${coinc})</span></td>
+        <td style="font-size:11px;color:#555">${conceptos}</td>
         <td style="text-align:center">${fmtDateObj(m.lastDate)}</td>
         <td style="text-align:center">${m.count}</td>
         <td class="amt">${fmtAmt(m.totalAmount)}</td>
@@ -2403,9 +2443,9 @@ function PagosExcelPanel({ patients, payments }) {
 <h1>IMPLANTDENT — Cobros importados</h1>
 <div class="sub">Fecha: ${date} · ${matches.length} paciente(s) · ${totalRows} fila(s) leídas</div>
 <table>
-  <thead><tr><th>Paciente</th><th style="text-align:center">Último pago</th><th style="text-align:center">Nº pagos</th><th style="text-align:right">Total Excel</th><th style="text-align:center">Estado</th></tr></thead>
+  <thead><tr><th>Paciente</th><th>Concepto(s)</th><th style="text-align:center">Último pago</th><th style="text-align:center">Nº pagos</th><th style="text-align:right">Total Excel</th><th style="text-align:center">Estado</th></tr></thead>
   <tbody>${trs}</tbody>
-  <tfoot><tr><td colspan="3">TOTAL</td><td class="amt">${fmtAmt(totalSum)}</td><td></td></tr></tfoot>
+  <tfoot><tr><td colspan="4">TOTAL</td><td class="amt">${fmtAmt(totalSum)}</td><td></td></tr></tfoot>
 </table>
 </body></html>`);
     win.document.close();
@@ -2429,7 +2469,7 @@ function PagosExcelPanel({ patients, payments }) {
       <div style={{background:"#ffffff",border:"2px dashed #c9a84c44",borderRadius:12,padding:"28px 24px",marginBottom:20,textAlign:"center"}}>
         <div style={{fontSize:13,color:"#555",marginBottom:14}}>
           Seleccioná el archivo Excel con la lista de cobros.<br/>
-          <span style={{fontSize:11,color:"#888"}}>Se leen: columna B (fecha), columna F (nombre), columna K (importe)</span>
+          <span style={{fontSize:11,color:"#888"}}>Se leen: col B (fecha), col F (nombre), col G (Nº presupuesto), col I (concepto), col K (importe)</span>
         </div>
         <button onClick={()=>fileRef.current.click()}
           style={{background:"linear-gradient(135deg,#c9a84c,#a07830)",border:"none",borderRadius:8,color:"#fff",padding:"10px 24px",cursor:"pointer",fontSize:13,fontWeight:700}}>
@@ -2450,20 +2490,25 @@ function PagosExcelPanel({ patients, payments }) {
 
           {matches.length > 0 && (
             <div style={{background:"#ffffff",borderRadius:12,border:"1px solid #e2e5ed",overflow:"hidden"}}>
-              <div style={{display:"grid",gridTemplateColumns:"2.5fr 1.2fr 0.6fr 1.2fr 1.1fr",gap:0,background:"#f5f7fa",padding:"8px 16px",borderBottom:"1px solid #e2e5ed"}}>
-                {[["Paciente","left"],["Último pago","left"],["Pagos","center"],["Total Excel","right"],["Estado","center"]].map(([h,align])=>(
+              <div style={{display:"grid",gridTemplateColumns:"2fr 2fr 1.2fr 0.6fr 1.2fr 1.1fr",gap:0,background:"#f5f7fa",padding:"8px 16px",borderBottom:"1px solid #e2e5ed"}}>
+                {[["Paciente","left"],["Concepto(s)","left"],["Último pago","left"],["Pagos","center"],["Total Excel","right"],["Estado","center"]].map(([h,align])=>(
                   <div key={h} style={{fontSize:11,color:"#888",fontWeight:700,letterSpacing:1,textTransform:"uppercase",textAlign:align}}>{h}</div>
                 ))}
               </div>
               {matches.map((m,i)=>{
                 const ok = Math.abs(m.diff) < 0.01;
+                const mtColor = m.matchType === "ambos" ? "#27ae60" : m.matchType === "solo_nombre" ? "#e67e22" : "#2980b9";
                 return (
-                  <div key={i} style={{display:"grid",gridTemplateColumns:"2.5fr 1.2fr 0.6fr 1.2fr 1.1fr",gap:0,padding:"10px 16px",borderBottom:"1px solid #f0f2f7",alignItems:"center",background:i%2===0?"#ffffff":"#fafbfd"}}>
-                    <div style={{fontWeight:700,color:"#2c3250",fontSize:13}}>{m.patientName}</div>
-                    <div style={{fontSize:12,color:"#555"}}>{fmtDateObj(m.lastDate)}</div>
-                    <div style={{fontSize:12,color:"#888",textAlign:"center"}}>{m.count}</div>
-                    <div style={{fontSize:13,fontWeight:700,color:"#2ecc71",textAlign:"right"}}>{fmtAmt(m.totalAmount)}</div>
-                    <div style={{textAlign:"center"}}>
+                  <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 2fr 1.2fr 0.6fr 1.2fr 1.1fr",gap:0,padding:"10px 16px",borderBottom:"1px solid #f0f2f7",alignItems:"start",background:i%2===0?"#ffffff":"#fafbfd"}}>
+                    <div>
+                      <div style={{fontWeight:700,color:"#2c3250",fontSize:13}}>{m.patientName}</div>
+                      <div style={{fontSize:10,color:mtColor,marginTop:2}}>({matchLabel(m.matchType)})</div>
+                    </div>
+                    <div style={{fontSize:12,color:"#555",paddingTop:2}}>{m.concepts && m.concepts.length > 0 ? m.concepts.join(" / ") : "—"}</div>
+                    <div style={{fontSize:12,color:"#555",paddingTop:2}}>{fmtDateObj(m.lastDate)}</div>
+                    <div style={{fontSize:12,color:"#888",textAlign:"center",paddingTop:2}}>{m.count}</div>
+                    <div style={{fontSize:13,fontWeight:700,color:"#2ecc71",textAlign:"right",paddingTop:2}}>{fmtAmt(m.totalAmount)}</div>
+                    <div style={{textAlign:"center",paddingTop:2}}>
                       {ok
                         ? <span style={{color:"#27ae60",fontWeight:700,fontSize:13}}>✓ OK</span>
                         : <span style={{color:"#e74c3c",fontWeight:700,fontSize:12}}>{m.diff > 0 ? "+" : ""}{fmtAmt(m.diff)}</span>
@@ -2472,8 +2517,8 @@ function PagosExcelPanel({ patients, payments }) {
                   </div>
                 );
               })}
-              <div style={{display:"grid",gridTemplateColumns:"2.5fr 1.2fr 0.6fr 1.2fr 1.1fr",gap:0,padding:"10px 16px",background:"#f5f7fa",borderTop:"2px solid #e2e5ed"}}>
-                <div style={{fontSize:12,fontWeight:700,color:"#2c3250",gridColumn:"1/4"}}>TOTAL</div>
+              <div style={{display:"grid",gridTemplateColumns:"2fr 2fr 1.2fr 0.6fr 1.2fr 1.1fr",gap:0,padding:"10px 16px",background:"#f5f7fa",borderTop:"2px solid #e2e5ed"}}>
+                <div style={{fontSize:12,fontWeight:700,color:"#2c3250",gridColumn:"1/5"}}>TOTAL</div>
                 <div style={{fontSize:14,fontWeight:700,color:"#2ecc71",textAlign:"right"}}>{fmtAmt(totalSum)}</div>
                 <div/>
               </div>
