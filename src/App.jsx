@@ -407,7 +407,7 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
   const [p, setP] = useState(() => {
     const raw = patient.treatments;
     const items = Array.isArray(raw) ? raw : (raw?.items || []);
-    const discountPct = Array.isArray(raw) ? "0" : (raw?.discountPct || "0");
+    const discountPct = Array.isArray(raw) ? "10" : (raw?.discountPct || "10");
     return { ...patient, treatments: items, discountPct };
   });
   const [msg, setMsg]       = useState("");
