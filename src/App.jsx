@@ -2694,6 +2694,196 @@ function CitasExcelPanel({ patients, onRefresh }) {
   );
 }
 
+// ─── PresupuestosExcelPanel ──────────────────────────────────────────────────
+function PresupuestosExcelPanel({ patients, onRefresh }) {
+  const [status,      setStatus]      = useState(null);   // { autoCount, conflicts, notFound }
+  const [processing,  setProcessing]  = useState(false);
+  const [busySet,     setBusySet]     = useState(new Set());
+  const [assignedSet, setAssignedSet] = useState(new Set());
+  const [selPat,      setSelPat]      = useState({});     // { idx: patientId }
+  const fileRef = useRef();
+
+  const handleFile = async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    setProcessing(true);
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const wb   = XLSX.read(ev.target.result, { type: "array" });
+      const ws   = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+
+      const rows = [];
+      for (let i = 1; i < data.length; i++) {
+        const row    = data[i];
+        const presNum = (row[2] || "").toString().trim();  // col C
+        const hc      = (row[5] || "").toString().trim();  // col F
+        if (!presNum && !hc) continue;
+        rows.push({ presNum, hc });
+      }
+
+      // cuántas veces aparece cada HC en el Excel
+      const hcExcelCount = new Map();
+      for (const r of rows) {
+        if (r.hc) hcExcelCount.set(r.hc, (hcExcelCount.get(r.hc) || 0) + 1);
+      }
+
+      const conflicts = [];  // revisar manualmente
+      const notFound  = [];  // HC no existe en sistema
+      let autoCount   = 0;
+
+      for (const r of rows) {
+        if (!r.hc) {
+          notFound.push({ ...r, reason: "Sin HC en Excel" });
+          continue;
+        }
+        const sysMatches = patients.filter(p => (p.hc || "").toString().trim() === r.hc);
+        const exCount    = hcExcelCount.get(r.hc) || 1;
+
+        if (sysMatches.length === 0) {
+          notFound.push({ ...r, reason: "HC no encontrado en sistema" });
+          continue;
+        }
+        if (exCount > 1) {
+          conflicts.push({ ...r, reason: `HC repetido en Excel (${exCount} veces)`, candidates: sysMatches });
+          continue;
+        }
+        if (sysMatches.length > 1) {
+          conflicts.push({ ...r, reason: `HC repetido en sistema (${sysMatches.length} pacientes)`, candidates: sysMatches });
+          continue;
+        }
+        // coincidencia única → asignar automáticamente
+        await supabase.from("patients").update({ budget_no: r.presNum }).eq("id", sysMatches[0].id);
+        autoCount++;
+      }
+
+      setStatus({ autoCount, conflicts, notFound });
+      setAssignedSet(new Set());
+      setBusySet(new Set());
+      setSelPat({});
+      if (autoCount > 0 && onRefresh) onRefresh();
+      setProcessing(false);
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = "";
+  };
+
+  const assign = async (conflict, idx) => {
+    const patId = selPat[idx];
+    if (!patId) return;
+    setBusySet(prev => new Set([...prev, idx]));
+    await supabase.from("patients").update({ budget_no: conflict.presNum }).eq("id", patId);
+    setAssignedSet(prev => new Set([...prev, idx]));
+    setBusySet(prev => { const s = new Set(prev); s.delete(idx); return s; });
+    if (onRefresh) onRefresh();
+  };
+
+  const cardStyle = { background:"#fff", border:"1px solid #e2e5ed", borderRadius:10, padding:"12px 16px", marginBottom:8 };
+
+  return (
+    <div>
+      <div style={{fontSize:11,color:"#c9a84c",letterSpacing:2,fontWeight:700,marginBottom:20}}>🔢 IMPORTAR N° DE PRESUPUESTOS</div>
+
+      <div style={{background:"#ffffff",border:"2px dashed #c9a84c44",borderRadius:12,padding:"28px 24px",marginBottom:20,textAlign:"center"}}>
+        <div style={{fontSize:13,color:"#555",marginBottom:14}}>
+          Seleccioná el Excel con los números de presupuesto.<br/>
+          <span style={{fontSize:11,color:"#888"}}>Col C (Nº presupuesto) · Col F (HC del paciente)</span>
+        </div>
+        <button onClick={()=>fileRef.current.click()} disabled={processing}
+          style={{background:"linear-gradient(135deg,#c9a84c,#a07830)",border:"none",borderRadius:8,color:"#fff",padding:"10px 24px",cursor:processing?"not-allowed":"pointer",fontSize:13,fontWeight:700,opacity:processing?0.6:1}}>
+          {processing ? "⏳ Procesando..." : "📊 Seleccionar Excel"}
+        </button>
+        <input ref={fileRef} type="file" accept=".xlsx,.xls,.ods" onChange={handleFile} style={{display:"none"}}/>
+      </div>
+
+      {status && (
+        <div>
+          {/* resumen automáticos */}
+          <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:10,padding:"14px 20px",marginBottom:16,display:"flex",alignItems:"center",gap:12}}>
+            <span style={{fontSize:22}}>✅</span>
+            <div>
+              <div style={{fontWeight:700,color:"#166534",fontSize:14}}>{status.autoCount} número(s) de presupuesto asignados automáticamente</div>
+              {status.notFound.length > 0 && (
+                <div style={{fontSize:12,color:"#555",marginTop:2}}>{status.notFound.length} fila(s) sin coincidencia en el sistema</div>
+              )}
+            </div>
+          </div>
+
+          {/* conflictos para revisar */}
+          {status.conflicts.length > 0 && (
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:11,color:"#e67e22",letterSpacing:2,fontWeight:700,marginBottom:10}}>
+                ⚠️ REQUIEREN REVISIÓN MANUAL ({status.conflicts.length})
+              </div>
+              {status.conflicts.map((c, idx) => {
+                const assigned = assignedSet.has(idx);
+                const busy     = busySet.has(idx);
+                return (
+                  <div key={idx} style={{...cardStyle, borderLeft:`3px solid ${assigned?"#27ae60":"#e67e22"}`}}>
+                    <div style={{display:"flex",alignItems:"flex-start",gap:16,flexWrap:"wrap"}}>
+                      <div style={{flex:"0 0 auto"}}>
+                        <div style={{fontSize:11,color:"#888",marginBottom:2}}>HC Excel</div>
+                        <div style={{fontWeight:700,color:"#2c3250"}}>{c.hc || "—"}</div>
+                      </div>
+                      <div style={{flex:"0 0 auto"}}>
+                        <div style={{fontSize:11,color:"#888",marginBottom:2}}>Nº Presupuesto</div>
+                        <div style={{fontWeight:700,color:"#c9a84c"}}>{c.presNum || "—"}</div>
+                      </div>
+                      <div style={{flex:1,minWidth:180}}>
+                        <div style={{fontSize:11,color:"#888",marginBottom:2}}>Motivo</div>
+                        <div style={{fontSize:12,color:"#e67e22",fontWeight:600}}>{c.reason}</div>
+                      </div>
+                      {!assigned && c.candidates.length > 0 && (
+                        <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                          <select
+                            value={selPat[idx]||""}
+                            onChange={ev=>setSelPat(prev=>({...prev,[idx]:ev.target.value}))}
+                            style={{border:"1px solid #dde4ef",borderRadius:6,padding:"6px 10px",fontSize:12,color:"#2c3250",background:"#fff"}}>
+                            <option value="">Elegir paciente...</option>
+                            {c.candidates.map(p=>(
+                              <option key={p.id} value={p.id}>{p.name} (HC: {p.hc})</option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={()=>assign(c,idx)}
+                            disabled={!selPat[idx]||busy}
+                            style={{background:"linear-gradient(135deg,#c9a84c,#a07830)",border:"none",borderRadius:6,color:"#fff",padding:"6px 14px",cursor:(!selPat[idx]||busy)?"not-allowed":"pointer",fontSize:12,fontWeight:700,opacity:(!selPat[idx]||busy)?0.5:1}}>
+                            {busy?"...":"Asignar"}
+                          </button>
+                        </div>
+                      )}
+                      {assigned && (
+                        <div style={{color:"#27ae60",fontWeight:700,fontSize:13,flexShrink:0}}>✓ Asignado</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* no encontrados */}
+          {status.notFound.length > 0 && (
+            <div>
+              <div style={{fontSize:11,color:"#888",letterSpacing:2,fontWeight:700,marginBottom:10}}>
+                HC NO ENCONTRADOS ({status.notFound.length})
+              </div>
+              {status.notFound.map((c, idx) => (
+                <div key={idx} style={{...cardStyle, background:"#fafafa"}}>
+                  <div style={{display:"flex",gap:16,fontSize:12}}>
+                    <span><span style={{color:"#888"}}>HC:</span> <strong>{c.hc||"—"}</strong></span>
+                    <span><span style={{color:"#888"}}>Pres:</span> <strong>{c.presNum||"—"}</strong></span>
+                    <span style={{color:"#888"}}>{c.reason}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [unlocked,       setUnlocked]       = useState(false);
@@ -3052,8 +3242,9 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
         <NavBtn id="dashboard" label="Pacientes"  badge={0}/>
         <NavBtn id="debts"     label="Deudas"     badge={pendingDebtPatients.length}/>
         <NavBtn id="pagos"     label="Cobros"/>
-        <NavBtn id="citas"     label="Citas"/>
-        <NavBtn id="clinica"   label="Clínica"/>
+        <NavBtn id="citas"         label="Citas"/>
+        <NavBtn id="presupuestos"  label="N° Presupuestos"/>
+        <NavBtn id="clinica"       label="Clínica"/>
         <NavBtn id="stats"     label="Estadísticas" badge={0}/>
 
         {/* ── Agenda semanal ────────────────────────────────────────── */}
@@ -3452,6 +3643,10 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
 
         {!dbLoading && view==="citas" && (
           <CitasExcelPanel patients={patients} onRefresh={fetchPatients}/>
+        )}
+
+        {!dbLoading && view==="presupuestos" && (
+          <PresupuestosExcelPanel patients={[...patients,...archivedPatients]} onRefresh={fetchPatients}/>
         )}
 
         {!dbLoading && view==="clinica" && (
