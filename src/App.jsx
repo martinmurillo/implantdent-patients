@@ -946,8 +946,10 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
   const now = new Date();
   const currentYear = now.getFullYear();
 
-  const implantRx = /implant/i;
-  const orthoRx   = /ortodoncia|orthodontic|invisalign|invisaling|invisible\s|ortod|placa expansiva|hass/i;
+  const implantRx  = /implant/i;
+  const implantExcRx = /corona|aditamento/i;
+  const isImplant  = (name) => implantRx.test(name) && !implantExcRx.test(name);
+  const orthoRx    = /ortodoncia|orthodontic|invisalign|invisaling|invisible\s|ortod|placa expansiva|hass/i;
 
   const computeYearFull = (year) => {
     const a12 = () => Array(12).fill(0);
@@ -1028,7 +1030,7 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
           orthoPending[pm-1]++;
           orthoPendingPts[pm-1].push(entry);
         }
-        if (implantRx.test(txName) && !realizedSet.has(key) && pm >= 1 && pm <= 12) {
+        if (isImplant(txName) && !realizedSet.has(key) && pm >= 1 && pm <= 12 && pat.status !== "frío") {
           const mm = txName.match(/(\d+)\s*implante/i);
           implantPending[pm-1] += mm ? parseInt(mm[1]) : 1;
           implantPendingPts[pm-1].push(entry);
@@ -1048,7 +1050,7 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
       const entry = { patientId:item.patient_id, name:item.patient_name||pat?.name||"—", hc:item.hc||pat?.hc||"—", detail:name+" · "+fmtDate(item.realized_date), txName:name };
 
       if (orthoRx.test(name)) { orthoRealized[rm-1]++; orthoRealizedPts[rm-1].push(entry); }
-      if (implantRx.test(name)) {
+      if (isImplant(name)) {
         const mm = name.match(/(\d+)\s*implante/i);
         implantRealized[rm-1] += mm ? parseInt(mm[1]) : 1;
         implantRealizedPts[rm-1].push(entry);
@@ -1582,12 +1584,16 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
 
   // Implantes y ortodoncia: realizados solo en el rango, pendientes siempre
   const implantRx    = /implant/i;
+  const implantExcRx = /corona|aditamento/i;
+  const isImplant    = (name) => implantRx.test(name) && !implantExcRx.test(name);
   const orthoRx      = /ortodoncia|orthodontic|invisalign|invisaling|invisible\s|ortod|placa expansiva|hass/i;
 
   // Items de treatment_items: realizados solo en rango, pendientes siempre
   const implantItems = items.filter(i => {
-    if (!implantRx.test(i.treatment_name || "")) return false;
-    return i.realized_date ? inRange(i.realized_date) : true;
+    if (!isImplant(i.treatment_name || "")) return false;
+    if (i.realized_date) return inRange(i.realized_date);
+    const pat = patients.find(p => p.id === i.patient_id);
+    return pat?.status !== "frío";
   });
   const orthoItems = items.filter(i => {
     if (!orthoRx.test(i.treatment_name || "")) return false;
@@ -1608,7 +1614,7 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
       // Ortodoncia: todos los pacientes
       if (orthoRx.test(tx.name||"")) orthoItems.push(syn);
       // Implantes: solo si tiene al menos un pago registrado (en curso ya están en treatment_items)
-      if (implantRx.test(tx.name||"") && hasPayment) implantItems.push(syn);
+      if (isImplant(tx.name||"") && hasPayment && pat.status !== "frío") implantItems.push(syn);
     });
   });
 
@@ -1621,7 +1627,7 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
       if (!excluded.has(key)) return;
       const syn = { patient_id:pat.id, patient_name:pat.name, hc:pat.hc, treatment_name:tx.name };
       if (orthoRx.test(tx.name||"")) excludedOrthoItems.push(syn);
-      if (implantRx.test(tx.name||"")) excludedImplantItems.push(syn);
+      if (isImplant(tx.name||"")) excludedImplantItems.push(syn);
     });
   });
 
@@ -3750,7 +3756,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
         )}
 
         {!dbLoading && view==="citas" && (
-          <CitasExcelPanel patients={patients} onRefresh={fetchPatients}/>
+          <CitasExcelPanel patients={[...patients,...archivedPatients]} onRefresh={fetchPatients}/>
         )}
 
         {!dbLoading && view==="presupuestos" && (
