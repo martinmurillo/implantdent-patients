@@ -1502,8 +1502,8 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
   </div>
 </div>`;
 
-    const rowSVG = (tM, svM, tC, svC) => `
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:1px solid #dde4ef;margin-bottom:0;">
+    const rowSVG = (tM, svM, tC, svC, pb=false) => `
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:1px solid #dde4ef;margin-bottom:0;${pb?'page-break-before:always;':''}">
   <div style="padding:10px 8px 0 0;border-right:2px solid #dde4ef;">
     <p style="${ts}">${tM}</p><div style="${cs}">${svM}</div>
   </div>
@@ -1537,7 +1537,7 @@ h1{font-size:15px;margin:0 0 2px;color:#2c3250;}
   </div>
 </div>
 
-${rowSVG('Cobrado vs Presupuestado', svgMartin1, 'Cobrado vs Presupuestado CLÍNICA (Incluye producción Martin)', svgClinic1)}
+${rowSVG('Cobrado vs Presupuestado', svgMartin1, 'Cobrado vs Presupuestado CLÍNICA (Incluye producción Martin)', svgClinic1, true)}
 ${rowSVG('Ortodoncia', svgMartin2, 'Ortodoncia CLÍNICA (Incluye producción Martin)', svgClinic2)}
 ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Martin)', svgClinic3)}
 </body></html>`;
