@@ -1413,47 +1413,91 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
   <div style="${cc}"><div style="${ts}color:#9b59b6;">🦷 Ortodoncia</div><div style="${cn('#9b59b6')}">${clinicTotals.ortodoncia>0?clinicTotals.ortodoncia:'—'}</div><div style="${csb}">Casos ${activeYear}</div></div>
 </div>`;
 
-    // ── SVGs ──────────────────────────────────────────────────────────────
-    const svgW = 860;
-    const svgMartin1  = makeSVG(allSeries.billing,  fmtEurK, svgW, 200, billStatsRows);
-    const svgMartin2  = makeSVG(allSeries.ortho,    fmtInt,  svgW, 200, orthoStatsRows);
-    const svgMartin3  = makeSVG(allSeries.implants, fmtInt,  svgW, 200, implStatsRows);
-    const svgClinic1  = makeSVG(clinicBillingSeries,  fmtEurK, svgW, 200, [], {value:90000,color:'#e74c3c',label:'Objetivo 90k'});
-    const svgClinic2  = makeSVG(clinicImplantsSeries, fmtInt,  svgW, 200);
-    const svgClinic3  = makeSVG(clinicOrthoSeries,    fmtInt,  svgW, 200);
+    // ── SVGs (filas comparativas: Martin | Clínica) ───────────────────────
+    const svgW = 840;
+    const svgMartin1 = makeSVG(allSeries.billing,       fmtEurK, svgW, 180, billStatsRows);
+    const svgMartin2 = makeSVG(allSeries.ortho,         fmtInt,  svgW, 180, orthoStatsRows);
+    const svgMartin3 = makeSVG(allSeries.implants,      fmtInt,  svgW, 180, implStatsRows);
+    const svgClinic1 = makeSVG(clinicBillingSeries,     fmtEurK, svgW, 180, clinicBillingStats, {value:90000,color:'#e74c3c',label:'Objetivo 90k'});
+    const svgClinic2 = makeSVG(clinicOrthoSeries,       fmtInt,  svgW, 180);
+    const svgClinic3 = makeSVG(clinicImplantsSeries,    fmtInt,  svgW, 180);
+
+    // ── Indicadores efectividad (Otros indicadores) ───────────────────────
+    const MAY = 4;
+    const mNums = yearFull ? yearFull.nums : null;
+    const mkInd = (titulo, c1, c2, mArr, cArr) => {
+      const mT = mArr.slice(MAY).reduce((a,b)=>a+b,0);
+      const cT = cArr.slice(MAY).reduce((a,b)=>a+b,0);
+      const cN = Math.max(0, cT - mT);
+      const mp = cT > 0 ? Math.round(mT/cT*100) : null;
+      const meses = MONTHS_SHORT.slice(MAY);
+      const barM = mp != null ? `<div style="width:${mp}%;background:${c1};height:6px;display:inline-block;"></div>` : '';
+      const barC = mp != null ? `<div style="width:${100-mp}%;background:${c2};height:6px;display:inline-block;"></div>` : '';
+      const rowM = mArr.slice(MAY).map(v=>`<td style="text-align:center;font-weight:700;color:${v>0?c1:'#ccc'}">${v>0?v:'—'}</td>`).join('');
+      const rowC = cArr.slice(MAY).map((cv,i)=>{const n=Math.max(0,cv-mArr[MAY+i]);return`<td style="text-align:center;font-weight:700;color:${n>0?c2:'#ccc'}">${n>0?n:'—'}</td>`;}).join('');
+      const rowP = cArr.slice(MAY).map((cv,i)=>{const mv=mArr[MAY+i];const p=cv>0?Math.round(mv/cv*100):null;return`<td style="text-align:center;font-weight:700;color:${p!=null?c1:'#ccc'}">${p!=null?p+'%':'—'}</td>`;}).join('');
+      return `
+<div style="margin-bottom:12px;">
+  <div style="font-size:9px;letter-spacing:2px;font-weight:700;color:${c1};margin-bottom:6px;">${titulo}</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px;">
+    <div style="background:#f5f7fa;border-radius:5px;padding:5px 8px;text-align:center;"><div style="font-size:8px;color:${c1};font-weight:700;">MARTIN</div><div style="font-size:16px;font-weight:800;color:${c1}">${mT}</div>${mp!=null?`<div style="font-size:9px;color:#aaa">${mp}%</div>`:''}</div>
+    <div style="background:#f5f7fa;border-radius:5px;padding:5px 8px;text-align:center;"><div style="font-size:8px;color:${c2};font-weight:700;">CLÍNICA NETA</div><div style="font-size:16px;font-weight:800;color:${c2}">${cN}</div>${mp!=null?`<div style="font-size:9px;color:#aaa">${100-mp}%</div>`:''}</div>
+    <div style="background:#f5f7fa;border-radius:5px;padding:5px 8px;text-align:center;"><div style="font-size:8px;color:#888;font-weight:700;">TOTAL CLÍNICA</div><div style="font-size:16px;font-weight:800;color:#888">${cT}</div><div style="font-size:9px;color:#aaa">100%</div></div>
+  </div>
+  <div style="border-radius:3px;overflow:hidden;height:6px;margin-bottom:6px;background:#eee;">${barM}${barC}</div>
+  <table style="width:100%;border-collapse:collapse;font-size:9px;">
+    <tr><td style="color:#aaa;font-weight:700;width:28px;"></td>${meses.map(m=>`<td style="text-align:center;color:#aaa;font-weight:700">${m}</td>`).join('')}</tr>
+    <tr><td style="color:${c1};font-weight:700">M</td>${rowM}</tr>
+    <tr><td style="color:${c2};font-weight:700">C</td>${rowC}</tr>
+    <tr><td style="color:#888;font-weight:700">%</td>${rowP}</tr>
+  </table>
+</div>`;
+    };
+    const otrosInd = `
+<div style="border:1px solid #e2e5ed;border-radius:8px;padding:12px;background:#fff;margin-bottom:14px;">
+  <div style="font-size:9px;color:#888;letter-spacing:2px;font-weight:700;margin-bottom:10px;">OTROS INDICADORES · desde mayo ${activeYear}</div>
+  ${mkInd('EFECTIVIDAD ORTODONCIA — Martin vs Clínica neta','#9b59b6','#3498db', mNums?mNums.orthoRealized:Array(12).fill(0), cd.ortodoncia)}
+  <hr style="border:none;border-top:1px solid #f0f2f7;margin:8px 0;">
+  ${mkInd('EFECTIVIDAD IMPLANTES — Martin vs Clínica neta','#e67e22','#27ae60', mNums?mNums.implantRealized:Array(12).fill(0), cd.implantes)}
+</div>`;
+
+    const rowSVG = (tM, svM, tC, svC) => `
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:1px solid #dde4ef;margin-bottom:0;">
+  <div style="padding:10px 8px 0 0;border-right:2px solid #dde4ef;">
+    <p style="${ts}">${tM}</p><div style="${cs}">${svM}</div>
+  </div>
+  <div style="padding:10px 0 0 8px;">
+    <p style="${ts}">${tC}</p><div style="${cs}">${svC}</div>
+  </div>
+</div>`;
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>Progreso Anual — ${yearLabel}</title>
 <style>
 *{box-sizing:border-box;}
-body{font-family:'Segoe UI',sans-serif;color:#111;margin:0;padding:20px;font-size:12px;background:#f0f2f7;}
-h1{font-size:16px;margin:0 0 2px;color:#2c3250;}
-.sub{color:#666;margin-bottom:14px;font-size:11px;}
-.split{display:grid;grid-template-columns:1fr 1fr;gap:0;}
-.col{padding:0 10px;}
-.col:first-child{border-right:2px solid #dde4ef;padding-left:0;}
-.col:last-child{padding-right:0;}
-.col-title{font-size:9px;letter-spacing:3px;font-weight:700;text-transform:uppercase;margin-bottom:10px;padding-bottom:4px;border-bottom:2px solid currentColor;}
-@media print{body{padding:10px;background:#fff;} @page{size:A4 landscape;margin:1cm;}}
+body{font-family:'Segoe UI',sans-serif;color:#111;margin:0;padding:16px;font-size:12px;background:#fff;}
+h1{font-size:15px;margin:0 0 2px;color:#2c3250;}
+.sub{color:#666;margin-bottom:12px;font-size:10px;}
+@media print{body{padding:10px;} @page{size:A4 landscape;margin:1cm;}}
 </style></head><body>
 <h1>IMPLANTDENT — Progreso Anual ${yearLabel}</h1>
 <div class="sub">Generado: ${new Date().toLocaleDateString('es-ES')}</div>
-<div class="split">
-  <div class="col">
-    <div class="col-title" style="color:#c9a84c;">PRODUCCIÓN MARTIN</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:0;margin-bottom:14px;">
+  <div style="padding-right:10px;border-right:2px solid #dde4ef;">
+    <div style="font-size:9px;letter-spacing:3px;font-weight:700;color:#c9a84c;margin-bottom:8px;border-bottom:2px solid #c9a84c;padding-bottom:3px;">PRODUCCIÓN MARTIN</div>
     ${martinCards}
-    <p style="${ts}">Cobrado vs Presupuestado</p><div style="${cs}">${svgMartin1}</div>
-    <p style="${ts}">Ortodoncia</p><div style="${cs}">${svgMartin2}</div>
-    <p style="${ts}">Implantes</p><div style="${cs}">${svgMartin3}</div>
+    ${otrosInd}
   </div>
-  <div class="col">
-    <div class="col-title" style="color:#2980b9;">PRODUCCIÓN CLÍNICA <span style="font-weight:400;letter-spacing:0;text-transform:none;">(incluye la producción de Martin)</span></div>
+  <div style="padding-left:10px;">
+    <div style="font-size:9px;letter-spacing:3px;font-weight:700;color:#2980b9;margin-bottom:8px;border-bottom:2px solid #2980b9;padding-bottom:3px;">PRODUCCIÓN CLÍNICA <span style="font-weight:400;letter-spacing:0;text-transform:none;">(incluye producción de Martin)</span></div>
     ${clinicCards}
-    <p style="${ts}">Cobrado vs Presupuestado</p><div style="${cs}">${svgClinic1}</div>
-    <p style="${ts}">Implantes</p><div style="${cs}">${svgClinic2}</div>
-    <p style="${ts}">Ortodoncia</p><div style="${cs}">${svgClinic3}</div>
   </div>
 </div>
+
+${rowSVG('Cobrado vs Presupuestado', svgMartin1, 'Cobrado vs Presupuestado CLÍNICA (Incluye producción Martin)', svgClinic1)}
+${rowSVG('Ortodoncia', svgMartin2, 'Ortodoncia CLÍNICA (Incluye producción Martin)', svgClinic2)}
+${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Martin)', svgClinic3)}
 </body></html>`;
 
     const w = window.open("","_blank");
