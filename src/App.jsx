@@ -1407,8 +1407,8 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
     // ── Tarjetas Clínica (2x2) ─────────────────────────────────────────────
     const clinicCards = `
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-  <div style="${cc}"><div style="${ts}color:#c9a84c;">💰 Presupuestado</div><div style="${cn('#c9a84c')}">${clinicTotals.presupuestado>0?fmtEurK(clinicTotals.presupuestado):'—'}</div><div style="${csb}">Total anual ${activeYear}</div></div>
-  <div style="${cc}"><div style="${ts}color:#2ecc71;">💳 Cobrado</div><div style="${cn('#2ecc71')}">${clinicTotals.cobrado>0?fmtEurK(clinicTotals.cobrado):'—'}</div><div style="${csb}">${clinicTotals.presupuestado>0?Math.round(clinicTotals.cobrado/clinicTotals.presupuestado*100)+'% sobre presup.':'—'}</div></div>
+  <div style="${cc}"><div style="${ts}color:#c9a84c;">💰 Presupuestado</div><div style="${cn('#c9a84c')}">${clinicTotals.presupuestado>0?fmtEur(clinicTotals.presupuestado):'—'}</div><div style="${csb}">Total anual ${activeYear}</div></div>
+  <div style="${cc}"><div style="${ts}color:#2ecc71;">💳 Cobrado</div><div style="${cn('#2ecc71')}">${clinicTotals.cobrado>0?fmtEur(clinicTotals.cobrado):'—'}</div><div style="${csb}">${clinicTotals.presupuestado>0?Math.round(clinicTotals.cobrado/clinicTotals.presupuestado*100)+'% sobre presup.':'—'}</div></div>
   <div style="${cc}"><div style="${ts}color:#3498db;">🔩 Implantes</div><div style="${cn('#3498db')}">${clinicTotals.implantes>0?clinicTotals.implantes:'—'}</div><div style="${csb}">Colocados ${activeYear}</div></div>
   <div style="${cc}"><div style="${ts}color:#9b59b6;">🦷 Ortodoncia</div><div style="${cn('#9b59b6')}">${clinicTotals.ortodoncia>0?clinicTotals.ortodoncia:'—'}</div><div style="${csb}">Casos ${activeYear}</div></div>
 </div>`;
@@ -1571,12 +1571,12 @@ h1{font-size:16px;margin:0 0 2px;color:#2c3250;}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
             <div style={cc}>
               <div style={{...ct,color:"#c9a84c"}}>💰 Presupuestado</div>
-              <div style={cn("#c9a84c")}>{clinicTotals.presupuestado>0?fmtEurK(clinicTotals.presupuestado):"—"}</div>
+              <div style={cn("#c9a84c")}>{clinicTotals.presupuestado>0?fmtEur(clinicTotals.presupuestado):"—"}</div>
               <div style={csb}>Total anual {activeYear}</div>
             </div>
             <div style={cc}>
               <div style={{...ct,color:"#2ecc71"}}>💳 Cobrado</div>
-              <div style={cn("#2ecc71")}>{clinicTotals.cobrado>0?fmtEurK(clinicTotals.cobrado):"—"}</div>
+              <div style={cn("#2ecc71")}>{clinicTotals.cobrado>0?fmtEur(clinicTotals.cobrado):"—"}</div>
               <div style={csb}>{clinicTotals.presupuestado>0?`${Math.round(clinicTotals.cobrado/clinicTotals.presupuestado*100)}% sobre presup.`:"—"}</div>
             </div>
             <div style={cc}>
