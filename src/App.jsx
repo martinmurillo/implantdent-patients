@@ -509,7 +509,7 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
   );
 
   return (
-    <div style={{maxWidth:920,margin:"0 auto"}}>
+    <div>
       <div style={{...s.card, border:"2px dashed #c9a84c33", display:"flex", alignItems:"center", gap:16, marginBottom:20}}>
         <button onClick={()=>fileRef.current.click()} disabled={loading} style={{...s.btnGold, opacity:loading?0.6:1, whiteSpace:"nowrap"}}>
           {loading?"⏳ Leyendo...":"📄 Importar PDF"}
