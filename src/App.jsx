@@ -1280,13 +1280,13 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
     return `<svg viewBox="0 0 ${W} ${SVG_H}" style="width:100%;display:block" xmlns="http://www.w3.org/2000/svg">${grid}${xAxis}${xLabels}${paths}${dots}${valueRows}${statsRowsSVG}</svg>`;
   };
 
-  const LineChart = ({ title, series, formatVal, statsRows = [] }) => {
+  const LineChart = ({ title, series, formatVal, statsRows = [], targetLine = null }) => {
     const W=900, H=220, PL=120, PR=20, PT=40, PB=36;
     const CW=W-PL-PR, CH=H-PT-PB;
-    const LABEL_ROW = 14; // altura por fila de etiqueta bajo el mes
-    const SVG_H = H + (series.length + statsRows.length) * LABEL_ROW + 10;
+    const LABEL_ROW = 26;
+    const SVG_H = H + (series.length + statsRows.length) * LABEL_ROW + 14;
     const allVals = series.flatMap(s=>s.data);
-    const maxVal  = Math.max(...allVals, 1);
+    const maxVal  = Math.max(...allVals, targetLine?.value ?? 1, 1);
     const yMax    = maxVal<=5 ? maxVal+1 : Math.ceil(maxVal*1.15);
     const gridVals= [0,1,2,3,4].map(i=>Math.round(yMax*i/4));
     const xPos = i => PL+(i/11)*CW;
@@ -1305,14 +1305,23 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
               </g>
             ))}
             <line x1={PL} y1={yPos(0)} x2={W-PR} y2={yPos(0)} stroke="#ddd" strokeWidth={1}/>
+            {/* Línea objetivo */}
+            {targetLine && (
+              <g>
+                <line x1={PL} y1={yPos(targetLine.value)} x2={W-PR} y2={yPos(targetLine.value)}
+                  stroke={targetLine.color||"#e74c3c"} strokeWidth={2} strokeDasharray="8,5"/>
+                <text x={W-PR-4} y={yPos(targetLine.value)-5} textAnchor="end"
+                  fontSize={11} fill={targetLine.color||"#e74c3c"} fontWeight="700">
+                  {targetLine.label || formatVal(targetLine.value)}
+                </text>
+              </g>
+            )}
             {MONTHS_SHORT.map((m,i)=>(
               <text key={i} x={xPos(i)} y={H-6} textAnchor="middle" fontSize={10} fill="#777">{m}</text>
             ))}
-            {/* Primero todos los trazos */}
             {series.map((s,si)=>(
               <path key={si} d={pathD(s.data)} fill="none" stroke={s.color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round"/>
             ))}
-            {/* Luego todos los puntos encima */}
             {series.map((s,si)=>(
               <g key={si}>
                 {s.data.map((v,mi)=>{
@@ -1330,30 +1339,30 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
                 })}
               </g>
             ))}
-            {/* Filas de valores con nombre de serie a la izquierda: orden total → c/pagos → pagos */}
+            {/* Filas de valores — fuente doble */}
             {[...series].reverse().map((s,rsi)=>{
-              const rowY = H + 6 + (rsi + 1) * LABEL_ROW;
+              const rowY = H + 10 + (rsi + 1) * LABEL_ROW;
               return (
                 <g key={`row_${rsi}`}>
-                  <text x={PL-6} y={rowY} textAnchor="end" fontSize={8} fill={s.color} fontWeight="700">{s.label}</text>
+                  <text x={PL-6} y={rowY} textAnchor="end" fontSize={16} fill={s.color} fontWeight="700">{s.label}</text>
                   {s.data.map((v,mi)=>(
                     <text key={mi} x={xPos(mi)} y={rowY}
-                      textAnchor="middle" fontSize={9} fill={v>0 ? s.color : "#ccc"} fontWeight={v>0?"700":"400"}>
+                      textAnchor="middle" fontSize={18} fill={v>0 ? s.color : "#ccc"} fontWeight={v>0?"700":"400"}>
                       {v>0 ? formatVal(v) : "—"}
                     </text>
                   ))}
                 </g>
               );
             })}
-            {/* Filas de efectividad mensual (%) */}
+            {/* Filas de efectividad (%) — fuente doble */}
             {statsRows.map((sr, sri) => {
-              const rowY = H + 6 + (series.length + sri + 1) * LABEL_ROW;
+              const rowY = H + 10 + (series.length + sri + 1) * LABEL_ROW;
               return (
                 <g key={`sr_${sri}`}>
-                  <text x={PL-6} y={rowY} textAnchor="end" fontSize={8} fill={sr.color} fontWeight="700">{sr.label}</text>
+                  <text x={PL-6} y={rowY} textAnchor="end" fontSize={16} fill={sr.color} fontWeight="700">{sr.label}</text>
                   {sr.data.map((v, mi) => (
                     <text key={mi} x={xPos(mi)} y={rowY}
-                      textAnchor="middle" fontSize={9}
+                      textAnchor="middle" fontSize={18}
                       fill={v != null ? sr.color : "#ccc"}
                       fontWeight={v != null ? "700" : "400"}>
                       {v != null ? (sr.isRaw ? v : `${v}%`) : "—"}
@@ -1595,7 +1604,7 @@ ${efCards}
             </div>
           </div>
 
-          <LineChart title="Cobrado vs Presupuestado (clínica)" series={clinicBillingSeries}  formatVal={fmtEurK}/>
+          <LineChart title="Cobrado vs Presupuestado (clínica)" series={clinicBillingSeries}  formatVal={fmtEurK} targetLine={{value:90000,color:"#e74c3c",label:"Objetivo 90k"}}/>
           <LineChart title="Implantes (clínica)"                series={clinicImplantsSeries} formatVal={fmtInt}/>
           <LineChart title="Ortodoncia (clínica)"               series={clinicOrthoSeries}    formatVal={fmtInt}/>
         </div>
