@@ -1283,8 +1283,9 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
   const LineChart = ({ title, series, formatVal, statsRows = [], targetLine = null }) => {
     const W=900, H=220, PL=120, PR=20, PT=40, PB=36;
     const CW=W-PL-PR, CH=H-PT-PB;
-    const LABEL_ROW = 26;
-    const SVG_H = H + (series.length + statsRows.length) * LABEL_ROW + 14;
+    // Cada serie ocupa 2 filas: una de label centrado + una de valores
+    const LBL_H = 16, VAL_H = 22, STAT_H = 20;
+    const SVG_H = H + series.length*(LBL_H+VAL_H) + statsRows.length*STAT_H + 16;
     const allVals = series.flatMap(s=>s.data);
     const maxVal  = Math.max(...allVals, targetLine?.value ?? 1, 1);
     const yMax    = maxVal<=5 ? maxVal+1 : Math.ceil(maxVal*1.15);
@@ -1305,7 +1306,6 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
               </g>
             ))}
             <line x1={PL} y1={yPos(0)} x2={W-PR} y2={yPos(0)} stroke="#ddd" strokeWidth={1}/>
-            {/* Línea objetivo */}
             {targetLine && (
               <g>
                 <line x1={PL} y1={yPos(targetLine.value)} x2={W-PR} y2={yPos(targetLine.value)}
@@ -1339,36 +1339,37 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
                 })}
               </g>
             ))}
-            {/* Filas de valores — fuente doble, etiquetas ajustadas al ancho disponible */}
+            {/* Por cada serie: label centrado en su propia fila + fila de valores debajo */}
             {[...series].reverse().map((s,rsi)=>{
-              const rowY = H + 10 + (rsi + 1) * LABEL_ROW;
+              const baseY = H + 8 + rsi*(LBL_H+VAL_H);
+              const lblY  = baseY + LBL_H;
+              const valY  = baseY + LBL_H + VAL_H;
               return (
                 <g key={`row_${rsi}`}>
-                  <text x={PL-6} y={rowY} textAnchor="end" fontSize={16} fill={s.color} fontWeight="700"
-                    textLength={PL-10} lengthAdjust="spacingAndGlyphs">{s.label}</text>
+                  {/* Label centrado — sin riesgo de overlap */}
+                  <rect x={PL} y={baseY+2} width={CW} height={LBL_H} fill={s.color+"11"}/>
+                  <text x={PL+CW/2} y={lblY-2} textAnchor="middle" fontSize={13} fill={s.color} fontWeight="700">{s.label}</text>
+                  {/* Valores mensuales */}
                   {s.data.map((v,mi)=>(
-                    <text key={mi} x={xPos(mi)} y={rowY}
-                      textAnchor="middle" fontSize={18} fill={v>0 ? s.color : "#ccc"} fontWeight={v>0?"700":"400"}
-                      textLength={CW/12-4} lengthAdjust="spacingAndGlyphs">
+                    <text key={mi} x={xPos(mi)} y={valY}
+                      textAnchor="middle" fontSize={16} fill={v>0 ? s.color : "#ccc"} fontWeight={v>0?"700":"400"}>
                       {v>0 ? formatVal(v) : "—"}
                     </text>
                   ))}
                 </g>
               );
             })}
-            {/* Filas de efectividad (%) — fuente doble */}
+            {/* Filas de efectividad (%) */}
             {statsRows.map((sr, sri) => {
-              const rowY = H + 10 + (series.length + sri + 1) * LABEL_ROW;
+              const rowY = H + 8 + series.length*(LBL_H+VAL_H) + sri*STAT_H + STAT_H;
               return (
                 <g key={`sr_${sri}`}>
-                  <text x={PL-6} y={rowY} textAnchor="end" fontSize={16} fill={sr.color} fontWeight="700"
-                    textLength={PL-10} lengthAdjust="spacingAndGlyphs">{sr.label}</text>
+                  <text x={PL-6} y={rowY} textAnchor="end" fontSize={11} fill={sr.color} fontWeight="700">{sr.label}</text>
                   {sr.data.map((v, mi) => (
                     <text key={mi} x={xPos(mi)} y={rowY}
-                      textAnchor="middle" fontSize={18}
+                      textAnchor="middle" fontSize={14}
                       fill={v != null ? sr.color : "#ccc"}
-                      fontWeight={v != null ? "700" : "400"}
-                      textLength={CW/12-4} lengthAdjust="spacingAndGlyphs">
+                      fontWeight={v != null ? "700" : "400"}>
                       {v != null ? (sr.isRaw ? v : `${v}%`) : "—"}
                     </text>
                   ))}
@@ -1552,7 +1553,7 @@ ${efCards}
 
         {/* ════ PRODUCCIÓN CLÍNICA (derecha) ════ */}
         <div style={{padding:"0 32px 32px 12px"}}>
-          <div style={{fontSize:10,color:"#2980b9",letterSpacing:3,fontWeight:700,marginBottom:12}}>PRODUCCIÓN CLÍNICA</div>
+          <div style={{fontSize:10,color:"#2980b9",letterSpacing:3,fontWeight:700,marginBottom:12}}>PRODUCCIÓN CLÍNICA <span style={{fontWeight:400,letterSpacing:0,textTransform:"none"}}>(incluye la producción de Martin)</span></div>
 
           {/* Tarjetas resumen */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
