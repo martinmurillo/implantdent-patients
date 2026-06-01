@@ -1223,8 +1223,8 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
 
   const makeSVG = (seriesData, formatVal, W=900, H=220, statsRowsData=[], targetLine=null) => {
     const PL=120, PR=20, PT=40, PB=36;
-    const LBL_H=16, VAL_H=22, STAT_H=20;
-    const SVG_H = H + seriesData.length*(LBL_H+VAL_H) + statsRowsData.length*STAT_H + 16;
+    const LBL_H=16, VAL_H=22;
+    const SVG_H = H + (seriesData.length + statsRowsData.length)*(LBL_H+VAL_H) + 16;
     const CW = W - PL - PR, CH = H - PT - PB;
     const allVals = seriesData.flatMap(s => s.data);
     const maxVal  = Math.max(...allVals, targetLine?.value ?? 1, 1);
@@ -1274,12 +1274,15 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
     }).join('');
 
     const statsRowsSVG = statsRowsData.map((sr, sri) => {
-      const rowY = (H + 8 + seriesData.length*(LBL_H+VAL_H) + sri*STAT_H + STAT_H).toFixed(1);
-      const lbl  = `<text x="${PL-6}" y="${rowY}" text-anchor="end" font-size="11" fill="${sr.color}" font-weight="700">${sr.label}</text>`;
-      const vals = sr.data.map((v, mi) =>
-        `<text x="${xPos(mi)}" y="${rowY}" text-anchor="middle" font-size="14" fill="${v!=null?sr.color:'#ccc'}" font-weight="${v!=null?'700':'400'}">${v!=null?(sr.isRaw?v:v+'%'):'—'}</text>`
+      const baseY = H + 8 + (seriesData.length + sri)*(LBL_H+VAL_H);
+      const lblY  = baseY + LBL_H;
+      const valY  = baseY + LBL_H + VAL_H;
+      const rect  = `<rect x="${PL}" y="${baseY+2}" width="${CW}" height="${LBL_H}" fill="${sr.color}18"/>`;
+      const lbl   = `<text x="${(PL+CW/2).toFixed(1)}" y="${lblY-2}" text-anchor="middle" font-size="13" fill="${sr.color}" font-weight="700">${sr.label}</text>`;
+      const vals  = sr.data.map((v, mi) =>
+        `<text x="${xPos(mi)}" y="${valY}" text-anchor="middle" font-size="16" fill="${v!=null?sr.color:'#ccc'}" font-weight="${v!=null?'700':'400'}">${v!=null?(sr.isRaw?v:v+'%'):'—'}</text>`
       ).join('');
-      return lbl + vals;
+      return rect + lbl + vals;
     }).join('');
 
     return `<svg viewBox="0 0 ${W} ${SVG_H}" style="width:100%;display:block" xmlns="http://www.w3.org/2000/svg">${grid}${xAxis}${target}${xLabels}${paths}${dots}${valueRows}${statsRowsSVG}</svg>`;
@@ -1289,8 +1292,8 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
     const W=900, H=220, PL=120, PR=20, PT=40, PB=36;
     const CW=W-PL-PR, CH=H-PT-PB;
     // Cada serie ocupa 2 filas: una de label centrado + una de valores
-    const LBL_H = 16, VAL_H = 22, STAT_H = 20;
-    const SVG_H = H + series.length*(LBL_H+VAL_H) + statsRows.length*STAT_H + 16;
+    const LBL_H = 16, VAL_H = 22;
+    const SVG_H = H + (series.length + statsRows.length)*(LBL_H+VAL_H) + 16;
     const allVals = series.flatMap(s=>s.data);
     const maxVal  = Math.max(...allVals, targetLine?.value ?? 1, 1);
     const yMax    = maxVal<=5 ? maxVal+1 : Math.ceil(maxVal*1.15);
@@ -1364,15 +1367,18 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
                 </g>
               );
             })}
-            {/* Filas de efectividad (%) */}
+            {/* Filas de stats — mismo formato que series: banda centrada + valores */}
             {statsRows.map((sr, sri) => {
-              const rowY = H + 8 + series.length*(LBL_H+VAL_H) + sri*STAT_H + STAT_H;
+              const baseY = H + 8 + (series.length + sri)*(LBL_H+VAL_H);
+              const lblY  = baseY + LBL_H;
+              const valY  = baseY + LBL_H + VAL_H;
               return (
                 <g key={`sr_${sri}`}>
-                  <text x={PL-6} y={rowY} textAnchor="end" fontSize={11} fill={sr.color} fontWeight="700">{sr.label}</text>
+                  <rect x={PL} y={baseY+2} width={CW} height={LBL_H} fill={sr.color+"11"}/>
+                  <text x={PL+CW/2} y={lblY-2} textAnchor="middle" fontSize={13} fill={sr.color} fontWeight="700">{sr.label}</text>
                   {sr.data.map((v, mi) => (
-                    <text key={mi} x={xPos(mi)} y={rowY}
-                      textAnchor="middle" fontSize={14}
+                    <text key={mi} x={xPos(mi)} y={valY}
+                      textAnchor="middle" fontSize={16}
                       fill={v != null ? sr.color : "#ccc"}
                       fontWeight={v != null ? "700" : "400"}>
                       {v != null ? (sr.isRaw ? v : `${v}%`) : "—"}
@@ -1517,7 +1523,7 @@ ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Marti
     ortodoncia:    cd.ortodoncia.reduce((a,b)=>a+b,0),
   };
   const clinicBillingSeries  = [{ label:"Cobrado",data:cd.cobrado,color:"#2ecc71" },{ label:"Presupuestado",data:cd.presupuestado,color:"#c9a84c" }];
-  const clinicBillingStats   = [{ label:"% cobrado", color:"#e74c3c", data: cd.presupuestado.map((p,i)=>p>0?Math.round(cd.cobrado[i]/p*100):null) }];
+  const clinicBillingStats   = [{ label:"brecha", color:"#e74c3c", data: cd.presupuestado.map((p,i)=>p>0?Math.round((p-cd.cobrado[i])/p*100):null) }];
   const clinicImplantsSeries = [{ label:"Implantes",data:cd.implantes,color:"#3498db" }];
   const clinicOrthoSeries    = [{ label:"Ortodoncia",data:cd.ortodoncia,color:"#9b59b6" }];
 
