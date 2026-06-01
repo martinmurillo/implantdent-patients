@@ -1339,15 +1339,17 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
                 })}
               </g>
             ))}
-            {/* Filas de valores — fuente doble */}
+            {/* Filas de valores — fuente doble, etiquetas ajustadas al ancho disponible */}
             {[...series].reverse().map((s,rsi)=>{
               const rowY = H + 10 + (rsi + 1) * LABEL_ROW;
               return (
                 <g key={`row_${rsi}`}>
-                  <text x={PL-6} y={rowY} textAnchor="end" fontSize={16} fill={s.color} fontWeight="700">{s.label}</text>
+                  <text x={PL-6} y={rowY} textAnchor="end" fontSize={16} fill={s.color} fontWeight="700"
+                    textLength={PL-10} lengthAdjust="spacingAndGlyphs">{s.label}</text>
                   {s.data.map((v,mi)=>(
                     <text key={mi} x={xPos(mi)} y={rowY}
-                      textAnchor="middle" fontSize={18} fill={v>0 ? s.color : "#ccc"} fontWeight={v>0?"700":"400"}>
+                      textAnchor="middle" fontSize={18} fill={v>0 ? s.color : "#ccc"} fontWeight={v>0?"700":"400"}
+                      textLength={CW/12-4} lengthAdjust="spacingAndGlyphs">
                       {v>0 ? formatVal(v) : "—"}
                     </text>
                   ))}
@@ -1359,12 +1361,14 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
               const rowY = H + 10 + (series.length + sri + 1) * LABEL_ROW;
               return (
                 <g key={`sr_${sri}`}>
-                  <text x={PL-6} y={rowY} textAnchor="end" fontSize={16} fill={sr.color} fontWeight="700">{sr.label}</text>
+                  <text x={PL-6} y={rowY} textAnchor="end" fontSize={16} fill={sr.color} fontWeight="700"
+                    textLength={PL-10} lengthAdjust="spacingAndGlyphs">{sr.label}</text>
                   {sr.data.map((v, mi) => (
                     <text key={mi} x={xPos(mi)} y={rowY}
                       textAnchor="middle" fontSize={18}
                       fill={v != null ? sr.color : "#ccc"}
-                      fontWeight={v != null ? "700" : "400"}>
+                      fontWeight={v != null ? "700" : "400"}
+                      textLength={CW/12-4} lengthAdjust="spacingAndGlyphs">
                       {v != null ? (sr.isRaw ? v : `${v}%`) : "—"}
                     </text>
                   ))}
