@@ -1601,6 +1601,12 @@ h1{font-size:16px;margin:0 0 2px;color:#2c3250;}
                       const net=Math.max(0,cv-martinByMonth[MAY+i]);
                       return <div key={i} style={{textAlign:"center",fontWeight:700,color:net>0?color2:"#e0e0e0"}}>{net>0?net:"—"}</div>;
                     })}
+                    <div style={{color:"#888",fontWeight:700}}>%</div>
+                    {clinicByMonth.slice(MAY).map((cv,i)=>{
+                      const mv=martinByMonth[MAY+i];
+                      const pct=cv>0?Math.round(mv/cv*100):null;
+                      return <div key={i} style={{textAlign:"center",fontWeight:700,color:pct!=null?color1:"#e0e0e0"}}>{pct!=null?pct+'%':"—"}</div>;
+                    })}
                   </div>
                 </div>
               );
