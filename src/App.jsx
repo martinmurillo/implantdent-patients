@@ -1473,6 +1473,7 @@ h1{font-size:16px;margin:0 0 2px;color:#2c3250;}
     ortodoncia:    cd.ortodoncia.reduce((a,b)=>a+b,0),
   };
   const clinicBillingSeries  = [{ label:"Cobrado",data:cd.cobrado,color:"#2ecc71" },{ label:"Presupuestado",data:cd.presupuestado,color:"#c9a84c" }];
+  const clinicBillingStats   = [{ label:"% cobrado", color:"#e74c3c", data: cd.presupuestado.map((p,i)=>p>0?Math.round(cd.cobrado[i]/p*100):null) }];
   const clinicImplantsSeries = [{ label:"Implantes",data:cd.implantes,color:"#3498db" }];
   const clinicOrthoSeries    = [{ label:"Ortodoncia",data:cd.ortodoncia,color:"#9b59b6" }];
 
@@ -1699,7 +1700,7 @@ h1{font-size:16px;margin:0 0 2px;color:#2c3250;}
       {[
         {
           titleM:"Cobrado vs Presupuestado", seriesM:allSeries.billing,  fmtM:fmtEurK, statsM:billStatsRows,
-          titleC:"Cobrado vs Presupuestado CLÍNICA (Incluye producción Martin)", seriesC:clinicBillingSeries, fmtC:fmtEurK, targetC:{value:90000,color:"#e74c3c",label:"Objetivo 90k"},
+          titleC:"Cobrado vs Presupuestado CLÍNICA (Incluye producción Martin)", seriesC:clinicBillingSeries, fmtC:fmtEurK, targetC:{value:90000,color:"#e74c3c",label:"Objetivo 90k"}, statsC:clinicBillingStats,
         },
         {
           titleM:"Ortodoncia", seriesM:allSeries.ortho,    fmtM:fmtInt, statsM:orthoStatsRows,
@@ -1709,13 +1710,13 @@ h1{font-size:16px;margin:0 0 2px;color:#2c3250;}
           titleM:"Implantes",  seriesM:allSeries.implants, fmtM:fmtInt, statsM:implStatsRows,
           titleC:"Implantes CLÍNICA (Incluye producción Martin)",  seriesC:clinicImplantsSeries, fmtC:fmtInt,
         },
-      ].map(({titleM,seriesM,fmtM,statsM=[],titleC,seriesC,fmtC,targetC=null},ri)=>(
+      ].map(({titleM,seriesM,fmtM,statsM=[],titleC,seriesC,fmtC,targetC=null,statsC=[]},ri)=>(
         <div key={ri} style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0,borderTop:"1px solid #dde4ef"}}>
           <div style={{padding:"16px 12px 0 32px",borderRight:"2px solid #dde4ef"}}>
             <LineChart title={titleM} series={seriesM} formatVal={fmtM} statsRows={statsM}/>
           </div>
           <div style={{padding:"16px 32px 0 12px"}}>
-            <LineChart title={titleC} series={seriesC} formatVal={fmtC} targetLine={targetC}/>
+            <LineChart title={titleC} series={seriesC} formatVal={fmtC} targetLine={targetC} statsRows={statsC}/>
           </div>
         </div>
       ))}
