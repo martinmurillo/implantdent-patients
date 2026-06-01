@@ -1631,15 +1631,15 @@ h1{font-size:16px;margin:0 0 2px;color:#2c3250;}
       {[
         {
           titleM:"Cobrado vs Presupuestado", seriesM:allSeries.billing,  fmtM:fmtEurK, statsM:billStatsRows,
-          titleC:"Cobrado vs Presupuestado", seriesC:clinicBillingSeries, fmtC:fmtEurK, targetC:{value:90000,color:"#e74c3c",label:"Objetivo 90k"},
+          titleC:"Cobrado vs Presupuestado CLÍNICA (Incluye producción Martin)", seriesC:clinicBillingSeries, fmtC:fmtEurK, targetC:{value:90000,color:"#e74c3c",label:"Objetivo 90k"},
         },
         {
           titleM:"Ortodoncia", seriesM:allSeries.ortho,    fmtM:fmtInt, statsM:orthoStatsRows,
-          titleC:"Ortodoncia", seriesC:clinicOrthoSeries,  fmtC:fmtInt,
+          titleC:"Ortodoncia CLÍNICA (Incluye producción Martin)", seriesC:clinicOrthoSeries,  fmtC:fmtInt,
         },
         {
           titleM:"Implantes",  seriesM:allSeries.implants, fmtM:fmtInt, statsM:implStatsRows,
-          titleC:"Implantes",  seriesC:clinicImplantsSeries, fmtC:fmtInt,
+          titleC:"Implantes CLÍNICA (Incluye producción Martin)",  seriesC:clinicImplantsSeries, fmtC:fmtInt,
         },
       ].map(({titleM,seriesM,fmtM,statsM=[],titleC,seriesC,fmtC,targetC=null},ri)=>(
         <div key={ri} style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0,borderTop:"1px solid #dde4ef"}}>
