@@ -1559,12 +1559,75 @@ h1{font-size:16px;margin:0 0 2px;color:#2c3250;}
           )}
 
           {/* Placeholder indicadores pendientes */}
-          <div style={{marginBottom:16}}>
-            <div style={{fontSize:9,color:"#888",letterSpacing:2,fontWeight:700,marginBottom:6}}>OTROS INDICADORES</div>
-            <div style={{background:"#fff",borderRadius:8,border:"2px dashed #dde4ef",minHeight:292,display:"flex",alignItems:"center",justifyContent:"center"}}>
-              <span style={{fontSize:12,color:"#ccc",fontStyle:"italic"}}>Indicadores pendientes de definir</span>
-            </div>
-          </div>
+          {/* ── Efectividad ortodoncia Martin vs Clínica (desde mayo) ── */}
+          {(()=>{
+            const MAY = 4; // índice 0-based de mayo
+            const martinByMonth = yearFull ? yearFull.nums.orthoRealized : Array(12).fill(0);
+            const clinicByMonth = cd.ortodoncia;
+            const martinTotal   = martinByMonth.slice(MAY).reduce((a,b)=>a+b,0);
+            const clinicTotal   = clinicByMonth.slice(MAY).reduce((a,b)=>a+b,0);
+            const clinicNet     = Math.max(0, clinicTotal - martinTotal);
+            const martinPct     = clinicTotal > 0 ? Math.round(martinTotal / clinicTotal * 100) : null;
+            const netPct        = clinicTotal > 0 ? 100 - martinPct : null;
+            const meses         = MONTHS_SHORT.slice(MAY); // May→Dic
+            return (
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:9,color:"#888",letterSpacing:2,fontWeight:700,marginBottom:6}}>OTROS INDICADORES</div>
+                <div style={{background:"#fff",borderRadius:8,border:"1px solid #e2e5ed",minHeight:292,padding:"12px 14px"}}>
+                  <div style={{fontSize:10,color:"#9b59b6",letterSpacing:2,fontWeight:700,marginBottom:4}}>EFECTIVIDAD ORTODONCIA</div>
+                  <div style={{fontSize:10,color:"#888",marginBottom:12}}>Martin vs Clínica neta · desde mayo {activeYear}</div>
+
+                  {/* Totales */}
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
+                    <div style={{background:"#f5f7fa",borderRadius:6,padding:"8px 10px",textAlign:"center"}}>
+                      <div style={{fontSize:9,color:"#9b59b6",fontWeight:700,marginBottom:3}}>MARTIN</div>
+                      <div style={{fontSize:22,fontWeight:800,color:"#9b59b6",lineHeight:1}}>{martinTotal}</div>
+                      {martinPct!=null && <div style={{fontSize:10,color:"#aaa",marginTop:2}}>{martinPct}%</div>}
+                    </div>
+                    <div style={{background:"#f5f7fa",borderRadius:6,padding:"8px 10px",textAlign:"center"}}>
+                      <div style={{fontSize:9,color:"#3498db",fontWeight:700,marginBottom:3}}>CLÍNICA NETA</div>
+                      <div style={{fontSize:22,fontWeight:800,color:"#3498db",lineHeight:1}}>{clinicNet}</div>
+                      {netPct!=null && <div style={{fontSize:10,color:"#aaa",marginTop:2}}>{netPct}%</div>}
+                    </div>
+                    <div style={{background:"#f5f7fa",borderRadius:6,padding:"8px 10px",textAlign:"center"}}>
+                      <div style={{fontSize:9,color:"#555",fontWeight:700,marginBottom:3}}>TOTAL CLÍNICA</div>
+                      <div style={{fontSize:22,fontWeight:800,color:"#555",lineHeight:1}}>{clinicTotal}</div>
+                      <div style={{fontSize:10,color:"#aaa",marginTop:2}}>100%</div>
+                    </div>
+                  </div>
+
+                  {/* Barra de proporción */}
+                  {clinicTotal > 0 && (
+                    <div style={{borderRadius:4,overflow:"hidden",display:"flex",height:10,marginBottom:12}}>
+                      <div style={{width:`${martinPct}%`,background:"#9b59b6",transition:"width 0.4s"}}/>
+                      <div style={{flex:1,background:"#3498db"}}/>
+                    </div>
+                  )}
+                  {clinicTotal === 0 && (
+                    <div style={{borderRadius:4,height:10,background:"#eee",marginBottom:12}}/>
+                  )}
+
+                  {/* Tabla mensual Mayo→Dic */}
+                  <div style={{fontSize:9,color:"#888",fontWeight:700,letterSpacing:1,marginBottom:4}}>POR MES (MAYO → DICIEMBRE)</div>
+                  <div style={{display:"grid",gridTemplateColumns:`40px repeat(${meses.length},1fr)`,gap:0,fontSize:10}}>
+                    <div style={{color:"#888"}}/>
+                    {meses.map((m,i)=><div key={i} style={{textAlign:"center",color:"#888",fontWeight:700,paddingBottom:2}}>{m}</div>)}
+                    {/* Martin */}
+                    <div style={{color:"#9b59b6",fontWeight:700,paddingRight:4}}>M</div>
+                    {martinByMonth.slice(MAY).map((v,i)=>(
+                      <div key={i} style={{textAlign:"center",fontWeight:700,color:v>0?"#9b59b6":"#ddd"}}>{v>0?v:"—"}</div>
+                    ))}
+                    {/* Clínica neta */}
+                    <div style={{color:"#3498db",fontWeight:700,paddingRight:4}}>C</div>
+                    {clinicByMonth.slice(MAY).map((cv,i)=>{
+                      const net = Math.max(0, cv - martinByMonth[MAY+i]);
+                      return <div key={i} style={{textAlign:"center",fontWeight:700,color:net>0?"#3498db":"#ddd"}}>{net>0?net:"—"}</div>;
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* ════ PRODUCCIÓN CLÍNICA (derecha) ════ */}
