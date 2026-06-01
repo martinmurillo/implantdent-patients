@@ -1221,13 +1221,13 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
   };
   const fmtInt = (v) => String(Math.round(v));
 
-  const makeSVG = (seriesData, formatVal, W=900, H=220, statsRowsData=[]) => {
+  const makeSVG = (seriesData, formatVal, W=900, H=220, statsRowsData=[], targetLine=null) => {
     const PL=120, PR=20, PT=40, PB=36;
-    const LABEL_ROW=14;
-    const SVG_H = H + (seriesData.length + statsRowsData.length) * LABEL_ROW + 10;
+    const LBL_H=16, VAL_H=22, STAT_H=20;
+    const SVG_H = H + seriesData.length*(LBL_H+VAL_H) + statsRowsData.length*STAT_H + 16;
     const CW = W - PL - PR, CH = H - PT - PB;
     const allVals = seriesData.flatMap(s => s.data);
-    const maxVal  = Math.max(...allVals, 1);
+    const maxVal  = Math.max(...allVals, targetLine?.value ?? 1, 1);
     const yMax    = maxVal <= 5 ? maxVal + 1 : Math.ceil(maxVal * 1.15);
     const gridVals = [0,1,2,3,4].map(i => Math.round(yMax * i / 4));
     const xPos = i => (PL + (i/11) * CW).toFixed(1);
@@ -1241,43 +1241,48 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
 
     const xAxis = `<line x1="${PL}" y1="${yPos(0)}" x2="${W-PR}" y2="${yPos(0)}" stroke="#ddd" stroke-width="1"/>`;
 
+    const target = targetLine
+      ? `<line x1="${PL}" y1="${yPos(targetLine.value)}" x2="${W-PR}" y2="${yPos(targetLine.value)}" stroke="${targetLine.color||'#e74c3c'}" stroke-width="2" stroke-dasharray="8,5"/>` +
+        `<text x="${W-PR-4}" y="${(parseFloat(yPos(targetLine.value))-5).toFixed(1)}" text-anchor="end" font-size="11" fill="${targetLine.color||'#e74c3c'}" font-weight="700">${targetLine.label||formatVal(targetLine.value)}</text>`
+      : '';
+
     const xLabels = MONTHS_SHORT.map((m,i) =>
       `<text x="${xPos(i)}" y="${H-6}" text-anchor="middle" font-size="10" fill="#777">${m}</text>`
     ).join('');
 
-    // Todos los trazos primero, luego los puntos encima
     const paths = seriesData.map(s =>
       `<path d="${pathD(s.data)}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`
     ).join('');
 
     const dots = seriesData.map(s =>
-      s.data.map((v,i) => {
-        const cx = xPos(i), cy = yPos(v);
-        return `<circle cx="${cx}" cy="${cy}" r="4" fill="${s.color}" stroke="#fff" stroke-width="1.5"/>`;
-      }).join('')
+      s.data.map((v,i) =>
+        `<circle cx="${xPos(i)}" cy="${yPos(v)}" r="4" fill="${s.color}" stroke="#fff" stroke-width="1.5"/>`
+      ).join('')
     ).join('');
 
-    // Filas de valores invertidas (total → c/pagos → pagos) con nombre a la izquierda
+    // 2 filas por serie: label centrado + valores
     const valueRows = [...seriesData].reverse().map((s, rsi) => {
-      const rowY = (H + 6 + (rsi + 1) * LABEL_ROW).toFixed(1);
-      const nameLabel = `<text x="${PL-6}" y="${rowY}" text-anchor="end" font-size="8" fill="${s.color}" font-weight="700">${s.label}</text>`;
-      const vals = s.data.map((v, mi) =>
-        `<text x="${xPos(mi)}" y="${rowY}" text-anchor="middle" font-size="9" fill="${v>0 ? s.color : '#ccc'}" font-weight="${v>0?'700':'400'}">${v>0 ? formatVal(v) : '—'}</text>`
+      const baseY = H + 8 + rsi*(LBL_H+VAL_H);
+      const lblY  = baseY + LBL_H;
+      const valY  = baseY + LBL_H + VAL_H;
+      const rect  = `<rect x="${PL}" y="${baseY+2}" width="${CW}" height="${LBL_H}" fill="${s.color}18"/>`;
+      const lbl   = `<text x="${(PL+CW/2).toFixed(1)}" y="${lblY-2}" text-anchor="middle" font-size="13" fill="${s.color}" font-weight="700">${s.label}</text>`;
+      const vals  = s.data.map((v, mi) =>
+        `<text x="${xPos(mi)}" y="${valY}" text-anchor="middle" font-size="16" fill="${v>0?s.color:'#ccc'}" font-weight="${v>0?'700':'400'}">${v>0?formatVal(v):'—'}</text>`
       ).join('');
-      return nameLabel + vals;
+      return rect + lbl + vals;
     }).join('');
 
-    // Filas de efectividad % (statsRows)
     const statsRowsSVG = statsRowsData.map((sr, sri) => {
-      const rowY = (H + 6 + (seriesData.length + sri + 1) * LABEL_ROW).toFixed(1);
-      const nameLabel = `<text x="${PL-6}" y="${rowY}" text-anchor="end" font-size="8" fill="${sr.color}" font-weight="700">${sr.label}</text>`;
+      const rowY = (H + 8 + seriesData.length*(LBL_H+VAL_H) + sri*STAT_H + STAT_H).toFixed(1);
+      const lbl  = `<text x="${PL-6}" y="${rowY}" text-anchor="end" font-size="11" fill="${sr.color}" font-weight="700">${sr.label}</text>`;
       const vals = sr.data.map((v, mi) =>
-        `<text x="${xPos(mi)}" y="${rowY}" text-anchor="middle" font-size="9" fill="${v!=null ? sr.color : '#ccc'}" font-weight="${v!=null?'700':'400'}">${v!=null ? (sr.isRaw ? v : v+'%') : '—'}</text>`
+        `<text x="${xPos(mi)}" y="${rowY}" text-anchor="middle" font-size="14" fill="${v!=null?sr.color:'#ccc'}" font-weight="${v!=null?'700':'400'}">${v!=null?(sr.isRaw?v:v+'%'):'—'}</text>`
       ).join('');
-      return nameLabel + vals;
+      return lbl + vals;
     }).join('');
 
-    return `<svg viewBox="0 0 ${W} ${SVG_H}" style="width:100%;display:block" xmlns="http://www.w3.org/2000/svg">${grid}${xAxis}${xLabels}${paths}${dots}${valueRows}${statsRowsSVG}</svg>`;
+    return `<svg viewBox="0 0 ${W} ${SVG_H}" style="width:100%;display:block" xmlns="http://www.w3.org/2000/svg">${grid}${xAxis}${target}${xLabels}${paths}${dots}${valueRows}${statsRowsSVG}</svg>`;
   };
 
   const LineChart = ({ title, series, formatVal, statsRows = [], targetLine = null }) => {
@@ -1384,71 +1389,78 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
 
   const printProgreso = () => {
     const yearLabel = compareMode ? selectedYears.join(", ") : String(selectedYears[0] || currentYear);
-    const cs = "background:#fff;border-radius:10px;border:1px solid #e2e5ed;padding:4px 0;margin-bottom:20px;overflow:hidden;page-break-inside:avoid;";
-    const ts = "font-size:11px;color:#555;letter-spacing:2px;font-weight:700;margin:0 0 6px;text-transform:uppercase;";
+    const cs  = "background:#fff;border-radius:8px;border:1px solid #e2e5ed;padding:4px 0;margin-bottom:14px;overflow:hidden;page-break-inside:avoid;";
+    const ts  = "font-size:10px;color:#555;letter-spacing:2px;font-weight:700;margin:0 0 5px;text-transform:uppercase;";
+    const cc  = "background:#fff;border:1px solid #e2e5ed;border-radius:8px;padding:8px 12px;";
+    const cn  = (c) => `font-size:18px;font-weight:800;color:${c};line-height:1;`;
+    const csb = "font-size:10px;color:#aaa;margin-top:2px;";
 
-    // Tarjetas de efectividad global para impresión
-    const efCards = globalEfect ? `
-<div style="display:flex;gap:12px;margin-bottom:22px;flex-wrap:wrap;">
-  <div style="flex:2 1 260px;background:#fff;border:1px solid #e2e5ed;border-radius:10px;padding:12px 16px;">
-    <div style="font-size:10px;letter-spacing:2px;color:#555;font-weight:700;text-transform:uppercase;margin-bottom:8px;">💰 Efectividad Facturación</div>
-    <div style="display:flex;gap:16px;">
-      <div style="flex:1;">
-        <div style="font-size:10px;color:#888;margin-bottom:2px;">Pagos / Total presup.</div>
-        <div style="font-size:26px;font-weight:800;color:#3498db;line-height:1;">${globalEfect.billAll!=null?globalEfect.billAll+'%':'—'}</div>
-        <div style="font-size:10px;color:#aaa;margin-top:3px;">${fmtEur(globalEfect.tp)} / ${fmtEur(globalEfect.tb)}</div>
-      </div>
-      <div style="width:1px;background:#e2e5ed;"></div>
-      <div style="flex:1;">
-        <div style="font-size:10px;color:#888;margin-bottom:2px;">Pagos / Presup.c/pagos</div>
-        <div style="font-size:26px;font-weight:800;color:#2ecc71;line-height:1;">${globalEfect.billPay!=null?globalEfect.billPay+'%':'—'}</div>
-        <div style="font-size:10px;color:#aaa;margin-top:3px;">${fmtEur(globalEfect.tp)} / ${fmtEur(globalEfect.bwp)}</div>
-      </div>
-    </div>
-  </div>
-  <div style="flex:1 1 160px;background:#fff;border:1px solid #e2e5ed;border-radius:10px;padding:12px 16px;">
-    <div style="font-size:10px;letter-spacing:2px;color:#555;font-weight:700;text-transform:uppercase;margin-bottom:8px;">🦷 Efectividad Ortodoncia</div>
-    <div style="font-size:10px;color:#888;margin-bottom:2px;">Realizadas / (Real+Pend)</div>
-    <div style="font-size:26px;font-weight:800;color:#9b59b6;line-height:1;">${globalEfect.ortho!=null?globalEfect.ortho+'%':'—'}</div>
-    <div style="font-size:10px;color:#aaa;margin-top:3px;">${globalEfect.oR} realiz. · ${globalEfect.oP} pend.</div>
-  </div>
-  <div style="flex:1 1 160px;background:#fff;border:1px solid #e2e5ed;border-radius:10px;padding:12px 16px;">
-    <div style="font-size:10px;letter-spacing:2px;color:#555;font-weight:700;text-transform:uppercase;margin-bottom:8px;">🔩 Efectividad Implantes</div>
-    <div style="font-size:10px;color:#888;margin-bottom:2px;">Realizados / (Real+Pend)</div>
-    <div style="font-size:26px;font-weight:800;color:#3498db;line-height:1;">${globalEfect.impl!=null?globalEfect.impl+'%':'—'}</div>
-    <div style="font-size:10px;color:#aaa;margin-top:3px;">${globalEfect.iR} realiz. · ${globalEfect.iP} pend.</div>
-  </div>
-  <div style="flex:1 1 160px;background:#fff;border:1px solid #e2e5ed;border-radius:10px;padding:12px 16px;">
-    <div style="font-size:10px;letter-spacing:2px;color:#555;font-weight:700;text-transform:uppercase;margin-bottom:8px;">👤 Pacientes</div>
-    <div style="font-size:10px;color:#888;margin-bottom:2px;">Con pagos / Atendidos</div>
-    <div style="font-size:26px;font-weight:800;color:#e67e22;line-height:1;">${globalEfect.ptsPct!=null?globalEfect.ptsPct+'%':'—'}</div>
-    <div style="font-size:10px;color:#aaa;margin-top:3px;">${globalEfect.ptsWithPay} c/pagos · ${globalEfect.totalPts} atendidos</div>
-  </div>
+    // ── Tarjetas Martin (2x2) ─────────────────────────────────────────────
+    const martinCards = globalEfect ? `
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+  <div style="${cc}"><div style="${ts}color:#c9a84c;">💰 Fact. s/Total</div><div style="${cn('#3498db')}">${globalEfect.billAll!=null?globalEfect.billAll+'%':'—'}</div><div style="${csb}">${fmtEur(globalEfect.tp)} / ${fmtEur(globalEfect.tb)}</div></div>
+  <div style="${cc}"><div style="${ts}color:#c9a84c;">💰 Fact. c/Pagos</div><div style="${cn('#2ecc71')}">${globalEfect.billPay!=null?globalEfect.billPay+'%':'—'}</div><div style="${csb}">${fmtEur(globalEfect.tp)} / ${fmtEur(globalEfect.bwp)}</div></div>
+  <div style="${cc}"><div style="${ts}color:#9b59b6;">🦷 Ortodoncia</div><div style="${cn('#9b59b6')}">${globalEfect.ortho!=null?globalEfect.ortho+'%':'—'}</div><div style="${csb}">${globalEfect.oR} realiz. · ${globalEfect.oP} pend.</div></div>
+  <div style="${cc}"><div style="${ts}color:#3498db;">🔩 Implantes</div><div style="${cn('#3498db')}">${globalEfect.impl!=null?globalEfect.impl+'%':'—'}</div><div style="${csb}">${globalEfect.iR} realiz. · ${globalEfect.iP} pend.</div></div>
 </div>` : '';
+
+    // ── Tarjetas Clínica (2x2) ─────────────────────────────────────────────
+    const clinicCards = `
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+  <div style="${cc}"><div style="${ts}color:#c9a84c;">💰 Presupuestado</div><div style="${cn('#c9a84c')}">${clinicTotals.presupuestado>0?fmtEurK(clinicTotals.presupuestado):'—'}</div><div style="${csb}">Total anual ${activeYear}</div></div>
+  <div style="${cc}"><div style="${ts}color:#2ecc71;">💳 Cobrado</div><div style="${cn('#2ecc71')}">${clinicTotals.cobrado>0?fmtEurK(clinicTotals.cobrado):'—'}</div><div style="${csb}">${clinicTotals.presupuestado>0?Math.round(clinicTotals.cobrado/clinicTotals.presupuestado*100)+'% sobre presup.':'—'}</div></div>
+  <div style="${cc}"><div style="${ts}color:#3498db;">🔩 Implantes</div><div style="${cn('#3498db')}">${clinicTotals.implantes>0?clinicTotals.implantes:'—'}</div><div style="${csb}">Colocados ${activeYear}</div></div>
+  <div style="${cc}"><div style="${ts}color:#9b59b6;">🦷 Ortodoncia</div><div style="${cn('#9b59b6')}">${clinicTotals.ortodoncia>0?clinicTotals.ortodoncia:'—'}</div><div style="${csb}">Casos ${activeYear}</div></div>
+</div>`;
+
+    // ── SVGs ──────────────────────────────────────────────────────────────
+    const svgW = 860;
+    const svgMartin1  = makeSVG(allSeries.billing,  fmtEurK, svgW, 200, billStatsRows);
+    const svgMartin2  = makeSVG(allSeries.ortho,    fmtInt,  svgW, 200, orthoStatsRows);
+    const svgMartin3  = makeSVG(allSeries.implants, fmtInt,  svgW, 200, implStatsRows);
+    const svgClinic1  = makeSVG(clinicBillingSeries,  fmtEurK, svgW, 200, [], {value:90000,color:'#e74c3c',label:'Objetivo 90k'});
+    const svgClinic2  = makeSVG(clinicImplantsSeries, fmtInt,  svgW, 200);
+    const svgClinic3  = makeSVG(clinicOrthoSeries,    fmtInt,  svgW, 200);
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>Progreso Anual — ${yearLabel}</title>
 <style>
-body{font-family:'Segoe UI',sans-serif;color:#111;padding:32px;font-size:13px;}
-h1{font-size:20px;margin:0 0 4px;}
-.sub{color:#666;margin-bottom:20px;font-size:13px;}
-@media print{body{padding:16px;} @page{size:A4 landscape;margin:1.5cm;}}
+*{box-sizing:border-box;}
+body{font-family:'Segoe UI',sans-serif;color:#111;margin:0;padding:20px;font-size:12px;background:#f0f2f7;}
+h1{font-size:16px;margin:0 0 2px;color:#2c3250;}
+.sub{color:#666;margin-bottom:14px;font-size:11px;}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:0;}
+.col{padding:0 10px;}
+.col:first-child{border-right:2px solid #dde4ef;padding-left:0;}
+.col:last-child{padding-right:0;}
+.col-title{font-size:9px;letter-spacing:3px;font-weight:700;text-transform:uppercase;margin-bottom:10px;padding-bottom:4px;border-bottom:2px solid currentColor;}
+@media print{body{padding:10px;background:#fff;} @page{size:A4 landscape;margin:1cm;}}
 </style></head><body>
-<h1>IMPLANTDENT — Progreso Anual</h1>
-<div class="sub">Año: ${yearLabel}</div>
-${efCards}
-<p style="${ts}">Facturación mensual vs Presupuestado</p>
-<div style="${cs}">${makeSVG(allSeries.billing, fmtEurK, 900, 220, billStatsRows)}</div>
-<p style="${ts}">Ortodoncias realizadas vs pendientes</p>
-<div style="${cs}">${makeSVG(allSeries.ortho, fmtInt, 900, 220, orthoStatsRows)}</div>
-<p style="${ts}">Implantes realizados vs pendientes</p>
-<div style="${cs}">${makeSVG(allSeries.implants, fmtInt, 900, 220, implStatsRows)}</div>
+<h1>IMPLANTDENT — Progreso Anual ${yearLabel}</h1>
+<div class="sub">Generado: ${new Date().toLocaleDateString('es-ES')}</div>
+<div class="split">
+  <div class="col">
+    <div class="col-title" style="color:#c9a84c;">PRODUCCIÓN MARTIN</div>
+    ${martinCards}
+    <p style="${ts}">Facturación vs Presupuestado</p><div style="${cs}">${svgMartin1}</div>
+    <p style="${ts}">Ortodoncia</p><div style="${cs}">${svgMartin2}</div>
+    <p style="${ts}">Implantes</p><div style="${cs}">${svgMartin3}</div>
+  </div>
+  <div class="col">
+    <div class="col-title" style="color:#2980b9;">PRODUCCIÓN CLÍNICA <span style="font-weight:400;letter-spacing:0;text-transform:none;">(incluye la producción de Martin)</span></div>
+    ${clinicCards}
+    <p style="${ts}">Cobrado vs Presupuestado</p><div style="${cs}">${svgClinic1}</div>
+    <p style="${ts}">Implantes</p><div style="${cs}">${svgClinic2}</div>
+    <p style="${ts}">Ortodoncia</p><div style="${cs}">${svgClinic3}</div>
+  </div>
+</div>
 </body></html>`;
+
     const w = window.open("","_blank");
     w.document.write(html);
     w.document.close();
     w.focus();
-    w.print();
+    setTimeout(()=>w.print(), 400);
   };
 
   // ── datos para el lado clínica ───────────────────────────────────────────────
