@@ -942,7 +942,7 @@ function MonthNav({ year, month, onChange }) {
 }
 
 // ─── ProgresoPanel ───────────────────────────────────────────────────────────
-function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
+function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinicStat, onClose, onOpenPatient }) {
   const now = new Date();
   const currentYear = now.getFullYear();
 
@@ -1083,6 +1083,46 @@ function ProgresoPanel({ payments, items, patients, onClose, onOpenPatient }) {
   const [selectedYears, setSelectedYears] = useState([currentYear]);
   const [compareMode,   setCompareMode]   = useState(false);
   const [pointModal,    setPointModal]    = useState(null);
+
+  // ── Clínica: estado local para inputs mensuales ───────────────────────────
+  const [clinicLocal, setClinicLocal] = useState(() => {
+    const map = {};
+    clinicStats.forEach(s => {
+      map[`${s.year}-${s.month}`] = {
+        presupuestado: s.presupuestado != null ? String(s.presupuestado) : "",
+        cobrado:       s.cobrado       != null ? String(s.cobrado)       : "",
+        implantes:     s.implantes     != null ? String(s.implantes)     : "",
+        ortodoncia:    s.ortodoncia    != null ? String(s.ortodoncia)    : "",
+      };
+    });
+    return map;
+  });
+  const [savingClinic, setSavingClinic] = useState(new Set());
+
+  const getCL = (year, month, field) => clinicLocal[`${year}-${month}`]?.[field] ?? "";
+  const setCL = (year, month, field, val) => {
+    const key = `${year}-${month}`;
+    setClinicLocal(prev => ({ ...prev, [key]: { ...(prev[key] || {}), [field]: val } }));
+  };
+  const saveClinicRow = async (year, month) => {
+    const key = `${year}-${month}`;
+    const v   = clinicLocal[key] || {};
+    setSavingClinic(prev => new Set([...prev, key]));
+    if (onSaveClinicStat) await onSaveClinicStat(year, month, {
+      presupuestado: parseFloat(v.presupuestado) || 0,
+      cobrado:       parseFloat(v.cobrado)       || 0,
+      implantes:     parseInt(v.implantes)       || 0,
+      ortodoncia:    parseInt(v.ortodoncia)      || 0,
+    });
+    setSavingClinic(prev => { const s = new Set(prev); s.delete(key); return s; });
+  };
+  const buildClinicData = (year) => {
+    const a = (f) => Array.from({length:12}, (_,i) => {
+      const s = clinicStats.find(s => s.year===year && s.month===i+1);
+      return parseFloat(s?.[f]) || 0;
+    });
+    return { presupuestado:a("presupuestado"), cobrado:a("cobrado"), implantes:a("implantes"), ortodoncia:a("ortodoncia") };
+  };
   const [excluded, setExcluded] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem("progreso_excluded") || "[]")); }
     catch { return new Set(); }
@@ -1397,10 +1437,32 @@ ${efCards}
     w.print();
   };
 
+  // ── datos para el lado clínica ───────────────────────────────────────────────
+  const activeYear = selectedYears[0] || currentYear;
+  const cd = buildClinicData(activeYear);
+  const clinicTotals = {
+    presupuestado: cd.presupuestado.reduce((a,b)=>a+b,0),
+    cobrado:       cd.cobrado.reduce((a,b)=>a+b,0),
+    implantes:     cd.implantes.reduce((a,b)=>a+b,0),
+    ortodoncia:    cd.ortodoncia.reduce((a,b)=>a+b,0),
+  };
+  const clinicBillingSeries  = [{ label:"Cobrado",data:cd.cobrado,color:"#2ecc71" },{ label:"Presupuestado",data:cd.presupuestado,color:"#c9a84c" }];
+  const clinicImplantsSeries = [{ label:"Implantes",data:cd.implantes,color:"#3498db" }];
+  const clinicOrthoSeries    = [{ label:"Ortodoncia",data:cd.ortodoncia,color:"#9b59b6" }];
+
+  // estilos reutilizables para tarjetas compactas
+  const cc  = { background:"#fff", border:"1px solid #e2e5ed", borderRadius:8, padding:"8px 12px" };
+  const ct  = { fontSize:9, letterSpacing:2, color:"#555", fontWeight:700, textTransform:"uppercase", marginBottom:5 };
+  const cn  = (c) => ({ fontSize:18, fontWeight:800, color:c, lineHeight:1 });
+  const csb = { fontSize:10, color:"#aaa", marginTop:2 };
+  const inS = { width:"100%", background:"#f5f7fa", border:"1px solid #dde4ef", borderRadius:4, color:"#2c3250", padding:"3px 6px", fontSize:11, outline:"none", textAlign:"right", boxSizing:"border-box" };
+
   return (
-    <div>
-      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
-        <button onClick={onClose}
+    <div style={{margin:"0 -32px", background:"#f0f2f7"}}>
+      {/* ── Barra superior ──────────────────────────────────────────────────── */}
+      <div style={{padding:"0 32px 12px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+          <button onClick={onClose}
           style={{background:"none",border:"1px solid #e2e5ed",borderRadius:8,color:"#555",cursor:"pointer",fontSize:13,padding:"5px 14px"}}>
           ← Volver
         </button>
@@ -1432,63 +1494,112 @@ ${efCards}
         {compareMode && <span style={{fontSize:11,color:"#aaa",marginLeft:4}}>Hasta 4 años</span>}
       </div>
 
-      {/* ── Tarjetas de efectividad global ─────────────────────────────── */}
-      {globalEfect && (
-        <div style={{display:"flex",gap:12,marginBottom:24,flexWrap:"wrap"}}>
-          {/* Facturación */}
-          <div style={{flex:"2 1 280px",background:"#fff",border:"1px solid #e2e5ed",borderRadius:10,padding:"14px 18px"}}>
-            <div style={{fontSize:10,letterSpacing:2,color:"#555",fontWeight:700,textTransform:"uppercase",marginBottom:10}}>💰 Efectividad Facturación</div>
-            <div style={{display:"flex",gap:16}}>
-              <div style={{flex:1}}>
-                <div style={{fontSize:11,color:"#888",marginBottom:3}}>Pagos / Total presup.</div>
-                <div style={{fontSize:28,fontWeight:800,color:globalEfect.billAll!=null?"#3498db":"#ccc",lineHeight:1}}>
-                  {globalEfect.billAll!=null ? `${globalEfect.billAll}%` : "—"}
-                </div>
-                <div style={{fontSize:11,color:"#aaa",marginTop:4}}>{fmtEur(globalEfect.tp)} / {fmtEur(globalEfect.tb)}</div>
-              </div>
-              <div style={{width:1,background:"#e2e5ed",flexShrink:0}}/>
-              <div style={{flex:1}}>
-                <div style={{fontSize:11,color:"#888",marginBottom:3}}>Pagos / Presup.c/pagos</div>
-                <div style={{fontSize:28,fontWeight:800,color:globalEfect.billPay!=null?"#2ecc71":"#ccc",lineHeight:1}}>
-                  {globalEfect.billPay!=null ? `${globalEfect.billPay}%` : "—"}
-                </div>
-                <div style={{fontSize:11,color:"#aaa",marginTop:4}}>{fmtEur(globalEfect.tp)} / {fmtEur(globalEfect.bwp)}</div>
-              </div>
-            </div>
-          </div>
-          {/* Ortodoncia */}
-          <div style={{flex:"1 1 180px",background:"#fff",border:"1px solid #e2e5ed",borderRadius:10,padding:"14px 18px"}}>
-            <div style={{fontSize:10,letterSpacing:2,color:"#555",fontWeight:700,textTransform:"uppercase",marginBottom:10}}>🦷 Efectividad Ortodoncia</div>
-            <div style={{fontSize:11,color:"#888",marginBottom:3}}>Realizadas / (Real+Pend)</div>
-            <div style={{fontSize:28,fontWeight:800,color:globalEfect.ortho!=null?"#9b59b6":"#ccc",lineHeight:1}}>
-              {globalEfect.ortho!=null ? `${globalEfect.ortho}%` : "—"}
-            </div>
-            <div style={{fontSize:11,color:"#aaa",marginTop:4}}>{globalEfect.oR} realiz. · {globalEfect.oP} pend.</div>
-          </div>
-          {/* Implantes */}
-          <div style={{flex:"1 1 180px",background:"#fff",border:"1px solid #e2e5ed",borderRadius:10,padding:"14px 18px"}}>
-            <div style={{fontSize:10,letterSpacing:2,color:"#555",fontWeight:700,textTransform:"uppercase",marginBottom:10}}>🔩 Efectividad Implantes</div>
-            <div style={{fontSize:11,color:"#888",marginBottom:3}}>Realizados / (Real+Pend)</div>
-            <div style={{fontSize:28,fontWeight:800,color:globalEfect.impl!=null?"#3498db":"#ccc",lineHeight:1}}>
-              {globalEfect.impl!=null ? `${globalEfect.impl}%` : "—"}
-            </div>
-            <div style={{fontSize:11,color:"#aaa",marginTop:4}}>{globalEfect.iR} realiz. · {globalEfect.iP} pend.</div>
-          </div>
-          {/* Pacientes */}
-          <div style={{flex:"1 1 180px",background:"#fff",border:"1px solid #e2e5ed",borderRadius:10,padding:"14px 18px"}}>
-            <div style={{fontSize:10,letterSpacing:2,color:"#555",fontWeight:700,textTransform:"uppercase",marginBottom:10}}>👤 Pacientes</div>
-            <div style={{fontSize:11,color:"#888",marginBottom:3}}>Con pagos / Atendidos</div>
-            <div style={{fontSize:28,fontWeight:800,color:globalEfect.ptsPct!=null?"#e67e22":"#ccc",lineHeight:1}}>
-              {globalEfect.ptsPct!=null ? `${globalEfect.ptsPct}%` : "—"}
-            </div>
-            <div style={{fontSize:11,color:"#aaa",marginTop:4}}>{globalEfect.ptsWithPay} c/pagos · {globalEfect.totalPts} atendidos</div>
-          </div>
-        </div>
-      )}
+      </div>{/* cierre padding barra superior */}
 
-      <LineChart title="Facturación mensual vs Presupuestado" series={allSeries.billing}  formatVal={fmtEurK} statsRows={billStatsRows}/>
-      <LineChart title="Ortodoncias realizadas vs pendientes" series={allSeries.ortho}    formatVal={fmtInt}  statsRows={orthoStatsRows}/>
-      <LineChart title="Implantes realizados vs pendientes"   series={allSeries.implants} formatVal={fmtInt}  statsRows={implStatsRows}/>
+      {/* ── Split 50/50 ─────────────────────────────────────────────────────── */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",alignItems:"start"}}>
+
+        {/* ════ PRODUCCIÓN MARTIN (izquierda) ════ */}
+        <div style={{padding:"0 12px 32px 32px",borderRight:"2px solid #dde4ef"}}>
+          <div style={{fontSize:10,color:"#c9a84c",letterSpacing:3,fontWeight:700,marginBottom:12}}>PRODUCCIÓN MARTIN</div>
+
+          {globalEfect && (
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+              {/* Facturación s/total */}
+              <div style={cc}>
+                <div style={ct}>💰 Fact. s/Total</div>
+                <div style={cn(globalEfect.billAll!=null?"#3498db":"#ccc")}>{globalEfect.billAll!=null?`${globalEfect.billAll}%`:"—"}</div>
+                <div style={csb}>{fmtEur(globalEfect.tp)} / {fmtEur(globalEfect.tb)}</div>
+              </div>
+              {/* Facturación c/pagos */}
+              <div style={cc}>
+                <div style={ct}>💰 Fact. c/Pagos</div>
+                <div style={cn(globalEfect.billPay!=null?"#2ecc71":"#ccc")}>{globalEfect.billPay!=null?`${globalEfect.billPay}%`:"—"}</div>
+                <div style={csb}>{fmtEur(globalEfect.tp)} / {fmtEur(globalEfect.bwp)}</div>
+              </div>
+              {/* Ortodoncia */}
+              <div style={cc}>
+                <div style={ct}>🦷 Ortodoncia</div>
+                <div style={cn(globalEfect.ortho!=null?"#9b59b6":"#ccc")}>{globalEfect.ortho!=null?`${globalEfect.ortho}%`:"—"}</div>
+                <div style={csb}>{globalEfect.oR} realiz. · {globalEfect.oP} pend.</div>
+              </div>
+              {/* Implantes */}
+              <div style={cc}>
+                <div style={ct}>🔩 Implantes</div>
+                <div style={cn(globalEfect.impl!=null?"#3498db":"#ccc")}>{globalEfect.impl!=null?`${globalEfect.impl}%`:"—"}</div>
+                <div style={csb}>{globalEfect.iR} realiz. · {globalEfect.iP} pend.</div>
+              </div>
+            </div>
+          )}
+
+          <LineChart title="Facturación vs Presupuestado" series={allSeries.billing}  formatVal={fmtEurK} statsRows={billStatsRows}/>
+          <LineChart title="Ortodoncia"                   series={allSeries.ortho}    formatVal={fmtInt}  statsRows={orthoStatsRows}/>
+          <LineChart title="Implantes"                    series={allSeries.implants} formatVal={fmtInt}  statsRows={implStatsRows}/>
+        </div>
+
+        {/* ════ PRODUCCIÓN CLÍNICA (derecha) ════ */}
+        <div style={{padding:"0 32px 32px 12px"}}>
+          <div style={{fontSize:10,color:"#2980b9",letterSpacing:3,fontWeight:700,marginBottom:12}}>PRODUCCIÓN CLÍNICA</div>
+
+          {/* Tarjetas resumen */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+            <div style={cc}>
+              <div style={{...ct,color:"#c9a84c"}}>💰 Presupuestado</div>
+              <div style={cn("#c9a84c")}>{clinicTotals.presupuestado>0?fmtEurK(clinicTotals.presupuestado):"—"}</div>
+              <div style={csb}>Total anual {activeYear}</div>
+            </div>
+            <div style={cc}>
+              <div style={{...ct,color:"#2ecc71"}}>💳 Cobrado</div>
+              <div style={cn("#2ecc71")}>{clinicTotals.cobrado>0?fmtEurK(clinicTotals.cobrado):"—"}</div>
+              <div style={csb}>{clinicTotals.presupuestado>0?`${Math.round(clinicTotals.cobrado/clinicTotals.presupuestado*100)}% sobre presup.`:"—"}</div>
+            </div>
+            <div style={cc}>
+              <div style={{...ct,color:"#3498db"}}>🔩 Implantes</div>
+              <div style={cn("#3498db")}>{clinicTotals.implantes>0?clinicTotals.implantes:"—"}</div>
+              <div style={csb}>Colocados año {activeYear}</div>
+            </div>
+            <div style={cc}>
+              <div style={{...ct,color:"#9b59b6"}}>🦷 Ortodoncia</div>
+              <div style={cn("#9b59b6")}>{clinicTotals.ortodoncia>0?clinicTotals.ortodoncia:"—"}</div>
+              <div style={csb}>Casos año {activeYear}</div>
+            </div>
+          </div>
+
+          {/* Grid de entrada mensual */}
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:9,color:"#888",letterSpacing:2,fontWeight:700,marginBottom:6}}>DATOS MENSUALES {activeYear} — completar a fin de mes</div>
+            <div style={{background:"#fff",borderRadius:8,border:"1px solid #e2e5ed",overflow:"hidden"}}>
+              <div style={{display:"grid",gridTemplateColumns:"44px 1fr 1fr 56px 56px",gap:0,background:"#f5f7fa",padding:"5px 10px",borderBottom:"1px solid #e2e5ed"}}>
+                {["","Presupuestado","Cobrado","Impl.","Orto."].map((h,i)=>(
+                  <div key={i} style={{fontSize:9,color:"#888",fontWeight:700,letterSpacing:1,textAlign:i>1?"center":"left"}}>{h}</div>
+                ))}
+              </div>
+              {MONTHS_ES.map((mn,mi)=>{
+                const m   = mi+1;
+                const key = `${activeYear}-${m}`;
+                const saving = savingClinic.has(key);
+                return (
+                  <div key={mi} style={{display:"grid",gridTemplateColumns:"44px 1fr 1fr 56px 56px",gap:4,padding:"4px 10px",borderBottom:"1px solid #f0f2f7",alignItems:"center",background:mi%2===0?"#fff":"#fafbfd"}}>
+                    <div style={{fontSize:11,color:"#888",fontWeight:600}}>{MONTHS_SHORT[mi]}</div>
+                    {["presupuestado","cobrado","implantes","ortodoncia"].map(field=>(
+                      <input key={field} type="number" placeholder="0"
+                        value={getCL(activeYear,m,field)}
+                        onChange={e=>setCL(activeYear,m,field,e.target.value)}
+                        onBlur={()=>saveClinicRow(activeYear,m)}
+                        style={{...inS,opacity:saving?0.5:1}}
+                      />
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <LineChart title="Cobrado vs Presupuestado (clínica)" series={clinicBillingSeries}  formatVal={fmtEurK}/>
+          <LineChart title="Implantes (clínica)"                series={clinicImplantsSeries} formatVal={fmtInt}/>
+          <LineChart title="Ortodoncia (clínica)"               series={clinicOrthoSeries}    formatVal={fmtInt}/>
+        </div>
+      </div>{/* fin split */}
 
       {pointModal && (
         <div style={{position:"fixed",inset:0,background:"#0006",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}
@@ -1536,7 +1647,7 @@ ${efCards}
 }
 
 // ─── EstadisticasPanel ───────────────────────────────────────────────────────
-function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefreshItems, onSync, onEnsureArchived, archivedLoaded }) {
+function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefreshItems, onSync, onEnsureArchived, archivedLoaded, clinicStats=[], onSaveClinicStat }) {
   const now = new Date();
   const y = now.getFullYear(), mo = now.getMonth();
   const [from,         setFrom]   = useState(`${y}-${String(mo+1).padStart(2,"0")}-01`);
@@ -1908,6 +2019,8 @@ ${orthoItems.filter(i=>i.realized_date).length === 0
         payments={payments}
         items={items}
         patients={patients}
+        clinicStats={clinicStats}
+        onSaveClinicStat={onSaveClinicStat}
         onClose={() => setShowProgreso(false)}
         onOpenPatient={onOpenPatient}
       />
@@ -3034,6 +3147,13 @@ export default function App() {
   const fetchTranslations = async () => { const {data,error}=await supabase.from("treatment_translations").select("*").order("name_es"); if(!error){setTranslations(data||[]);setTranslationDict(data||[]);} };
   const fetchPayments     = async () => { const {data}=await supabase.from("payments").select("*").order("date",{ascending:false}); setPayments(data||[]); };
   const fetchWaClicks     = async () => { const {data}=await supabase.from("wa_clicks").select("*"); setWaClicks(data||[]); };
+  const [clinicStats, setClinicStats] = useState([]);
+  const fetchClinicStats = async () => { const {data}=await supabase.from("clinic_monthly_stats").select("*"); setClinicStats(data||[]); };
+  const saveClinicStat = async (year, month, vals) => {
+    const id = `${year}-${String(month).padStart(2,"0")}`;
+    await supabase.from("clinic_monthly_stats").upsert([{ id, year, month, ...vals }]);
+    await fetchClinicStats();
+  };
   const incWaClick = async (patientId, key) => {
     const existing = waClicks.find(c=>c.patient_id===patientId&&c.button_key===key);
     const lsKey = `wa_${patientId}_${key}`;
@@ -3060,7 +3180,7 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  useEffect(()=>{ Promise.all([fetchPatients(),fetchDoctors(),fetchItems(),fetchTemplates(),fetchTranslations(),fetchPayments(),fetchWaClicks()]).finally(()=>setDbLoad(false)); },[]);
+  useEffect(()=>{ Promise.all([fetchPatients(),fetchDoctors(),fetchItems(),fetchTemplates(),fetchTranslations(),fetchPayments(),fetchWaClicks(),fetchClinicStats()]).finally(()=>setDbLoad(false)); },[]);
 
   useEffect(()=>{
     if (!unlocked) return;
@@ -3769,7 +3889,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
         )}
 
         {!dbLoading && view==="stats" && (
-          <EstadisticasPanel payments={payments} items={items} patients={allPatients} onOpenPatient={openEdit} onRefreshItems={fetchItems} onSync={syncAllItems} onEnsureArchived={ensureArchived} archivedLoaded={archivedLoaded}/>
+          <EstadisticasPanel payments={payments} items={items} patients={allPatients} onOpenPatient={openEdit} onRefreshItems={fetchItems} onSync={syncAllItems} onEnsureArchived={ensureArchived} archivedLoaded={archivedLoaded} clinicStats={clinicStats} onSaveClinicStat={saveClinicStat}/>
         )}
       </div>
     </div>
