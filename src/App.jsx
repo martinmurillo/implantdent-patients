@@ -1467,6 +1467,34 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
   ${mkInd('EFECTIVIDAD IMPLANTES — Martin vs Clínica neta','#e67e22','#27ae60', mNums?mNums.implantRealized:Array(12).fill(0), cd.implantes)}
 </div>`;
 
+    const datosMenusuales = `
+<div style="margin-bottom:12px;">
+  <div style="font-size:9px;color:#888;letter-spacing:2px;font-weight:700;margin-bottom:6px;">DATOS MENSUALES ${activeYear}</div>
+  <div style="background:#fff;border-radius:8px;border:1px solid #e2e5ed;overflow:hidden;">
+    <div style="display:grid;grid-template-columns:44px 1fr 1fr 56px 56px;gap:0;background:#f5f7fa;padding:5px 10px;border-bottom:1px solid #e2e5ed;">
+      <div style="font-size:9px;color:#888;font-weight:700;"></div>
+      <div style="font-size:9px;color:#888;font-weight:700;letter-spacing:1px;">Presupuestado</div>
+      <div style="font-size:9px;color:#888;font-weight:700;letter-spacing:1px;">Cobrado</div>
+      <div style="font-size:9px;color:#888;font-weight:700;letter-spacing:1px;text-align:center;">Impl.</div>
+      <div style="font-size:9px;color:#888;font-weight:700;letter-spacing:1px;text-align:center;">Orto.</div>
+    </div>
+    ${MONTHS_SHORT.map((mn, mi) => {
+      const p    = cd.presupuestado[mi];
+      const c    = cd.cobrado[mi];
+      const impl = cd.implantes[mi];
+      const orto = cd.ortodoncia[mi];
+      const bg   = mi % 2 === 0 ? '#fff' : '#fafbfd';
+      return `<div style="display:grid;grid-template-columns:44px 1fr 1fr 56px 56px;gap:4px;padding:4px 10px;border-bottom:1px solid #f0f2f7;align-items:center;background:${bg};">
+      <div style="font-size:11px;color:#888;font-weight:600;">${mn}</div>
+      <div style="font-size:11px;color:${p>0?'#c9a84c':'#ccc'};font-weight:${p>0?600:400};">${p>0?fmtEur(p):'—'}</div>
+      <div style="font-size:11px;color:${c>0?'#2ecc71':'#ccc'};font-weight:${c>0?600:400};">${c>0?fmtEur(c):'—'}</div>
+      <div style="font-size:11px;color:${impl>0?'#3498db':'#ccc'};font-weight:${impl>0?600:400};text-align:center;">${impl>0?impl:'—'}</div>
+      <div style="font-size:11px;color:${orto>0?'#9b59b6':'#ccc'};font-weight:${orto>0?600:400};text-align:center;">${orto>0?orto:'—'}</div>
+    </div>`;
+    }).join('')}
+  </div>
+</div>`;
+
     const rowSVG = (tM, svM, tC, svC) => `
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:1px solid #dde4ef;margin-bottom:0;">
   <div style="padding:10px 8px 0 0;border-right:2px solid #dde4ef;">
@@ -1498,6 +1526,7 @@ h1{font-size:15px;margin:0 0 2px;color:#2c3250;}
   <div style="padding-left:10px;">
     <div style="font-size:9px;letter-spacing:3px;font-weight:700;color:#2980b9;margin-bottom:8px;border-bottom:2px solid #2980b9;padding-bottom:3px;">PRODUCCIÓN CLÍNICA <span style="font-weight:400;letter-spacing:0;text-transform:none;">(incluye producción de Martin)</span></div>
     ${clinicCards}
+    ${datosMenusuales}
   </div>
 </div>
 
