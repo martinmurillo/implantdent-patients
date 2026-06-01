@@ -1552,7 +1552,7 @@ ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Marti
     ortodoncia:    cd.ortodoncia.reduce((a,b)=>a+b,0),
   };
   const clinicBillingSeries  = [{ label:"Cobrado",data:cd.cobrado,color:"#2ecc71" },{ label:"Presupuestado",data:cd.presupuestado,color:"#c9a84c" }];
-  const clinicBillingStats   = [{ label:"brecha", color:"#e74c3c", data: cd.presupuestado.map((p,i)=>p>0?Math.round((p-cd.cobrado[i])/p*100):null) }];
+  const clinicBillingStats   = [];
   const clinicImplantsSeries = [{ label:"Implantes",data:cd.implantes,color:"#3498db" }];
   const clinicOrthoSeries    = [{ label:"Ortodoncia",data:cd.ortodoncia,color:"#9b59b6" }];
 
