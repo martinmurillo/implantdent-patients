@@ -1442,7 +1442,7 @@ h1{font-size:16px;margin:0 0 2px;color:#2c3250;}
   <div class="col">
     <div class="col-title" style="color:#c9a84c;">PRODUCCIÓN MARTIN</div>
     ${martinCards}
-    <p style="${ts}">Facturación vs Presupuestado</p><div style="${cs}">${svgMartin1}</div>
+    <p style="${ts}">Cobrado vs Presupuestado</p><div style="${cs}">${svgMartin1}</div>
     <p style="${ts}">Ortodoncia</p><div style="${cs}">${svgMartin2}</div>
     <p style="${ts}">Implantes</p><div style="${cs}">${svgMartin3}</div>
   </div>
@@ -1558,13 +1558,17 @@ h1{font-size:16px;margin:0 0 2px;color:#2c3250;}
             </div>
           )}
 
-          <LineChart title="Facturación vs Presupuestado" series={allSeries.billing}  formatVal={fmtEurK} statsRows={billStatsRows}/>
-          <LineChart title="Ortodoncia"                   series={allSeries.ortho}    formatVal={fmtInt}  statsRows={orthoStatsRows}/>
-          <LineChart title="Implantes"                    series={allSeries.implants} formatVal={fmtInt}  statsRows={implStatsRows}/>
+          {/* Placeholder indicadores pendientes */}
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:9,color:"#888",letterSpacing:2,fontWeight:700,marginBottom:6}}>OTROS INDICADORES</div>
+            <div style={{background:"#fff",borderRadius:8,border:"2px dashed #dde4ef",minHeight:292,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <span style={{fontSize:12,color:"#ccc",fontStyle:"italic"}}>Indicadores pendientes de definir</span>
+            </div>
+          </div>
         </div>
 
         {/* ════ PRODUCCIÓN CLÍNICA (derecha) ════ */}
-        <div style={{padding:"0 32px 32px 12px"}}>
+        <div style={{padding:"0 32px 16px 12px"}}>
           <div style={{fontSize:10,color:"#2980b9",letterSpacing:3,fontWeight:700,marginBottom:12}}>PRODUCCIÓN CLÍNICA <span style={{fontWeight:400,letterSpacing:0,textTransform:"none"}}>(incluye la producción de Martin)</span></div>
 
           {/* Tarjetas resumen */}
@@ -1620,12 +1624,33 @@ h1{font-size:16px;margin:0 0 2px;color:#2c3250;}
               })}
             </div>
           </div>
-
-          <LineChart title="Cobrado vs Presupuestado (clínica)" series={clinicBillingSeries}  formatVal={fmtEurK} targetLine={{value:90000,color:"#e74c3c",label:"Objetivo 90k"}}/>
-          <LineChart title="Implantes (clínica)"                series={clinicImplantsSeries} formatVal={fmtInt}/>
-          <LineChart title="Ortodoncia (clínica)"               series={clinicOrthoSeries}    formatVal={fmtInt}/>
         </div>
-      </div>{/* fin split */}
+      </div>{/* fin split cards */}
+
+      {/* ── Filas de gráficos comparativos (Martin izq | Clínica der) ──────── */}
+      {[
+        {
+          titleM:"Cobrado vs Presupuestado", seriesM:allSeries.billing,  fmtM:fmtEurK, statsM:billStatsRows,
+          titleC:"Cobrado vs Presupuestado", seriesC:clinicBillingSeries, fmtC:fmtEurK, targetC:{value:90000,color:"#e74c3c",label:"Objetivo 90k"},
+        },
+        {
+          titleM:"Ortodoncia", seriesM:allSeries.ortho,    fmtM:fmtInt, statsM:orthoStatsRows,
+          titleC:"Ortodoncia", seriesC:clinicOrthoSeries,  fmtC:fmtInt,
+        },
+        {
+          titleM:"Implantes",  seriesM:allSeries.implants, fmtM:fmtInt, statsM:implStatsRows,
+          titleC:"Implantes",  seriesC:clinicImplantsSeries, fmtC:fmtInt,
+        },
+      ].map(({titleM,seriesM,fmtM,statsM=[],titleC,seriesC,fmtC,targetC=null},ri)=>(
+        <div key={ri} style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0,borderTop:"1px solid #dde4ef"}}>
+          <div style={{padding:"16px 12px 0 32px",borderRight:"2px solid #dde4ef"}}>
+            <LineChart title={titleM} series={seriesM} formatVal={fmtM} statsRows={statsM}/>
+          </div>
+          <div style={{padding:"16px 32px 0 12px"}}>
+            <LineChart title={titleC} series={seriesC} formatVal={fmtC} targetLine={targetC}/>
+          </div>
+        </div>
+      ))}
 
       {pointModal && (
         <div style={{position:"fixed",inset:0,background:"#0006",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}
