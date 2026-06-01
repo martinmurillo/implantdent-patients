@@ -1232,7 +1232,8 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
     const gridVals = [0,1,2,3,4].map(i => Math.round(yMax * i / 4));
     const xPos = i => (PL + (i/11) * CW).toFixed(1);
     const yPos = v => (PT + CH - (v/yMax) * CH).toFixed(1);
-    const pathD = data => data.map((v,i) => `${i===0?'M':'L'}${xPos(i)},${yPos(v)}`).join(' ');
+    const lastNZ = data => { for (let i=data.length-1;i>=0;i--) if(data[i]) return i; return -1; };
+    const pathD = data => { const e=lastNZ(data); if(e<0) return ''; return data.slice(0,e+1).map((v,i)=>`${i===0?'M':'L'}${xPos(i)},${yPos(v)}`).join(' '); };
 
     const grid = gridVals.map(v =>
       `<line x1="${PL}" y1="${yPos(v)}" x2="${W-PR}" y2="${yPos(v)}" stroke="#e2e5ed" stroke-width="1" stroke-dasharray="4,3"/>` +
@@ -1254,11 +1255,12 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
       `<path d="${pathD(s.data)}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`
     ).join('');
 
-    const dots = seriesData.map(s =>
-      s.data.map((v,i) =>
-        `<circle cx="${xPos(i)}" cy="${yPos(v)}" r="4" fill="${s.color}" stroke="#fff" stroke-width="1.5"/>`
-      ).join('')
-    ).join('');
+    const dots = seriesData.map(s => {
+      const e = lastNZ(s.data);
+      return s.data.map((v,i) =>
+        i > e ? '' : `<circle cx="${xPos(i)}" cy="${yPos(v)}" r="4" fill="${s.color}" stroke="#fff" stroke-width="1.5"/>`
+      ).join('');
+    }).join('');
 
     // 2 filas por serie: label centrado + valores
     const valueRows = [...seriesData].reverse().map((s, rsi) => {
@@ -1300,7 +1302,8 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
     const gridVals= [0,1,2,3,4].map(i=>Math.round(yMax*i/4));
     const xPos = i => PL+(i/11)*CW;
     const yPos = v => PT+CH-(v/yMax)*CH;
-    const pathD= data=>data.map((v,i)=>`${i===0?'M':'L'}${xPos(i).toFixed(1)},${yPos(v).toFixed(1)}`).join(' ');
+    const lastNZ = data => { for (let i=data.length-1;i>=0;i--) if(data[i]) return i; return -1; };
+    const pathD = data => { const e=lastNZ(data); if(e<0) return ''; return data.slice(0,e+1).map((v,i)=>`${i===0?'M':'L'}${xPos(i).toFixed(1)},${yPos(v).toFixed(1)}`).join(' '); };
 
     return (
       <div style={{marginBottom:24}}>
@@ -1330,9 +1333,12 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
             {series.map((s,si)=>(
               <path key={si} d={pathD(s.data)} fill="none" stroke={s.color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round"/>
             ))}
-            {series.map((s,si)=>(
+            {series.map((s,si)=>{
+              const e=lastNZ(s.data);
+              return (
               <g key={si}>
                 {s.data.map((v,mi)=>{
+                  if(mi>e) return null;
                   const cx=xPos(mi), cy=yPos(v);
                   const ptList=s.pts?.[mi]||[];
                   return (
@@ -1346,7 +1352,8 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
                   );
                 })}
               </g>
-            ))}
+              );
+            })}
             {/* Por cada serie: label centrado en su propia fila + fila de valores debajo */}
             {[...series].reverse().map((s,rsi)=>{
               const baseY = H + 8 + rsi*(LBL_H+VAL_H);
