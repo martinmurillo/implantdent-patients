@@ -2607,7 +2607,7 @@ function ClinicaPanel({ doctors, templates, translations, onRefreshDoctors, onRe
 }
 
 // ─── PagosExcelPanel ─────────────────────────────────────────────────────────
-function PagosExcelPanel({ patients, payments, onPaymentsChange }) {
+function PagosExcelPanel({ patients, payments, onPaymentsChange, onDebtCleared }) {
   const [list1,   setList1]   = useState(null);  // agrupado por Nº presupuesto
   const [list2,   setList2]   = useState(null);  // coincidencias por nombre
   const [list3,   setList3]   = useState(null);  // sin ninguna coincidencia
@@ -2731,6 +2731,21 @@ function PagosExcelPanel({ patients, payments, onPaymentsChange }) {
       date: toISO(entry.latestDate),
       note: `Importado Excel · Pres. ${entry.presNum}`,
     }]);
+
+    // Si la deuda queda saldada → cerrado sin deuda automático
+    const grand = patientGrand(entry.patient);
+    if (grand > 0 && getStatus(entry.patient) !== "cerrado sin deuda") {
+      const prevPaid = payments.filter(pay => pay.patient_id === entry.patient.id)
+        .reduce((s, pay) => s + (parseFloat(pay.amount) || 0), 0);
+      if (prevPaid + entry.totalAmt >= grand) {
+        await supabase.from("patients").update({ status: "cerrado sin deuda", closed: true }).eq("id", entry.patient.id);
+        if (onDebtCleared) await onDebtCleared(entry.patient);
+        setAdded1(prev => new Set([...prev, key]));
+        setLoading(prev => { const s = new Set(prev); s.delete(key); return s; });
+        return;
+      }
+    }
+
     setAdded1(prev => new Set([...prev, key]));
     setLoading(prev => { const s = new Set(prev); s.delete(key); return s; });
     if (onPaymentsChange) onPaymentsChange();
@@ -2883,7 +2898,7 @@ function PagosExcelPanel({ patients, payments, onPaymentsChange }) {
 }
 
 // ─── CitasExcelPanel ──────────────────────────────────────────────────────────
-function CitasExcelPanel({ patients, onRefresh }) {
+function CitasExcelPanel({ patients, onRefresh, onEnCursoUpdated }) {
   const [preview,  setPreview]  = useState(null); // [{patientId, patientName, hc, toAdd:[iso], toRemove:[iso]}]
   const [syncing,  setSyncing]  = useState(false);
   const [result,   setResult]   = useState(null);
@@ -2967,6 +2982,9 @@ function CitasExcelPanel({ patients, onRefresh }) {
     setSyncing(true);
     const todayIso = today();
     let totalAdded = 0, totalRemoved = 0;
+    const statusUpdates = [];
+    const enCursoPatients = [];
+
     for (const entry of preview) {
       const pat = patients.find(p => p.id === entry.patientId);
       if (!pat) continue;
@@ -2976,7 +2994,30 @@ function CitasExcelPanel({ patients, onRefresh }) {
       await supabase.from("patients").update({ appointments: [...past, ...keepFuture, ...newFuture] }).eq("id", entry.patientId);
       totalAdded   += entry.toAdd.length;
       totalRemoved += entry.toRemove.length;
+
+      // Calcular nuevo estado según citas resultantes
+      const hasFuture = keepFuture.length > 0 || newFuture.length > 0;
+      const st = getStatus(pat);
+      let newStatus = null;
+      if (hasFuture) {
+        if (st === "frío") newStatus = "pendiente";
+        else if (st !== "cerrado sin deuda" && st !== "en curso") newStatus = "en curso";
+      } else {
+        if (st === "en curso" || st === "cerrado con deuda") newStatus = "pendiente";
+      }
+      if (newStatus) {
+        statusUpdates.push({ id: entry.patientId, newStatus });
+        if (newStatus === "en curso") enCursoPatients.push({ ...pat, status: "en curso", closed: false });
+      }
     }
+
+    if (statusUpdates.length > 0) {
+      await Promise.all(statusUpdates.map(({ id, newStatus }) =>
+        supabase.from("patients").update({ status: newStatus, closed: isCerrado(newStatus) }).eq("id", id)
+      ));
+      if (enCursoPatients.length > 0 && onEnCursoUpdated) await onEnCursoUpdated(enCursoPatients);
+    }
+
     await onRefresh();
     setResult({ added: totalAdded, removed: totalRemoved, patients: preview.length });
     setPreview(null);
@@ -3341,7 +3382,7 @@ export default function App() {
     if (!unlocked) return;
     setDbLoad(true);
     Promise.all([fetchPatients(),fetchDoctors(),fetchItems(),fetchTemplates(),fetchTranslations(),fetchPayments(),fetchWaClicks()])
-      .then(() => autoEnCurso())
+      .then(() => autoSyncStatuses())
       .finally(()=>setDbLoad(false));
   },[unlocked]);
 
@@ -3401,22 +3442,31 @@ export default function App() {
     if (missing.length > 0) await fetchItems();
   };
 
-  const autoEnCurso = async () => {
-    const todayStr = new Date().toISOString().slice(0,10);
-    const {data} = await supabase.from("patients").select("*")
-      .neq("status","frío").neq("status","cerrado sin deuda");
-    const toUpdate = (data||[]).filter(p => {
+  const autoSyncStatuses = async () => {
+    const todayStr = today();
+    const {data} = await supabase.from("patients").select("*");
+    const toUpdate = [];
+    for (const p of (data||[])) {
       const st = getStatus(p);
-      if (st === "en curso" || isCerrado(st)) return false;
-      return (p.appointments||[]).some(a => a.date && a.date >= todayStr);
-    });
+      const hasFuture = (p.appointments||[]).some(a => a.date && a.date >= todayStr);
+      let newStatus = null;
+      if (hasFuture) {
+        if (st === "frío") newStatus = "pendiente";
+        else if (st !== "cerrado sin deuda" && st !== "en curso") newStatus = "en curso";
+      } else {
+        if (st === "en curso") newStatus = "pendiente";
+      }
+      if (newStatus) toUpdate.push({p, newStatus});
+    }
     if (toUpdate.length === 0) return;
-    await Promise.all(toUpdate.map(p =>
-      supabase.from("patients").update({status:"en curso", closed:false}).eq("id", p.id)
+    await Promise.all(toUpdate.map(({p, newStatus}) =>
+      supabase.from("patients").update({status:newStatus, closed:isCerrado(newStatus)}).eq("id", p.id)
     ));
-    await Promise.all(toUpdate.map(p => insertTreatmentItems({...p, status:"en curso", closed:false})));
-    await fetchItems();
+    const enCursoUpdates = toUpdate.filter(({newStatus}) => newStatus === "en curso");
+    await Promise.all(enCursoUpdates.map(({p, newStatus}) => insertTreatmentItems({...p, status:newStatus, closed:false})));
+    if (enCursoUpdates.length > 0) await fetchItems();
     await fetchPatients();
+    if (archivedLoaded) await fetchArchived();
   };
 
   const deletePatient = async (patient) => {
@@ -4027,11 +4077,22 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
         )}
 
         {!dbLoading && view==="pagos" && (
-          <PagosExcelPanel patients={[...patients,...archivedPatients]} payments={payments} onPaymentsChange={fetchPayments}/>
+          <PagosExcelPanel patients={[...patients,...archivedPatients]} payments={payments} onPaymentsChange={fetchPayments}
+            onDebtCleared={async (patient) => {
+              await insertTreatmentItems({...patient, status:"cerrado sin deuda", closed:true});
+              await Promise.all([fetchItems(), fetchPayments(), fetchPatients()]);
+              if (archivedLoaded) await fetchArchived();
+            }}
+          />
         )}
 
         {!dbLoading && view==="citas" && (
-          <CitasExcelPanel patients={[...patients,...archivedPatients]} onRefresh={fetchPatients}/>
+          <CitasExcelPanel patients={[...patients,...archivedPatients]} onRefresh={fetchPatients}
+            onEnCursoUpdated={async (pats) => {
+              await Promise.all(pats.map(p => insertTreatmentItems(p)));
+              await fetchItems();
+            }}
+          />
         )}
 
         {!dbLoading && view==="presupuestos" && (
