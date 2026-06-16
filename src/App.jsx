@@ -155,11 +155,11 @@ function LoginForm({ onLogin }) {
 const genId    = () => Math.random().toString(36).slice(2,10);
 const today    = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
 const daysDiff = (d) => !d ? 999 : Math.floor((new Date()-new Date(d))/86400000);
-const STATUSES = ["frío","pendiente","en curso","cerrado con deuda","cerrado sin deuda"];
-const STATUS_COLOR = { "frío":"#7f8c8d", "pendiente":"#c9a84c", "en curso":"#3498db", "cerrado con deuda":"#e67e22", "cerrado sin deuda":"#2ecc71" };
-const STATUS_LABEL = { "frío":"Frío", "pendiente":"Pendiente", "en curso":"Con citas", "cerrado con deuda":"C/ deuda", "cerrado sin deuda":"Sin deuda" };
-const isCerrado = (st) => st === "cerrado con deuda" || st === "cerrado sin deuda";
-const getStatus = (p) => STATUSES.includes(p.status) ? p.status : (p.closed ? "cerrado con deuda" : "pendiente");
+const STATUSES = ["frío","pendiente","en curso","cerrado sin deuda"];
+const STATUS_COLOR = { "frío":"#7f8c8d", "pendiente":"#c9a84c", "en curso":"#3498db", "cerrado sin deuda":"#2ecc71" };
+const STATUS_LABEL = { "frío":"Frío", "pendiente":"Pendiente", "en curso":"Con citas", "cerrado sin deuda":"Sin deuda" };
+const isCerrado = (st) => st === "cerrado sin deuda";
+const getStatus = (p) => STATUSES.includes(p.status) ? p.status : (p.closed ? "cerrado sin deuda" : "pendiente");
 const fmtEur   = (v) => v && parseFloat(v) ? `€${parseFloat(v).toLocaleString("es-ES",{minimumFractionDigits:2})}` : "-";
 const effectiveValue = (tr) => parseFloat(tr.value) || 0;
 
@@ -785,7 +785,7 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
     .filter(a=>a.date&&a.date>=todayStr)
     .sort((a,b)=>a.date.localeCompare(b.date))[0];
   const upcomingCount = (patient.appointments||[]).filter(a=>a.date&&a.date>=todayStr).length;
-  const iniciadoSinCita = (status === "en curso" || status === "cerrado con deuda") && totalPaid > 0 && !nextAppt;
+  const iniciadoSinCita = status === "en curso" && totalPaid > 0 && !nextAppt;
   const nextReminder = [...(patient.reminders||[])]
     .filter(r=>r.date&&r.date>=todayStr)
     .sort((a,b)=>a.date.localeCompare(b.date))[0];
@@ -3003,7 +3003,7 @@ function CitasExcelPanel({ patients, onRefresh, onEnCursoUpdated }) {
         if (st === "frío") newStatus = "pendiente";
         else if (st !== "cerrado sin deuda" && st !== "en curso") newStatus = "en curso";
       } else {
-        if (st === "en curso" || st === "cerrado con deuda") newStatus = "pendiente";
+        if (st === "en curso") newStatus = "pendiente";
       }
       if (newStatus) {
         statusUpdates.push({ id: entry.patientId, newStatus });
@@ -3980,7 +3980,6 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
                 { id:"frío",               label:"Fríos",             color:"#7f8c8d", list: archivedPatients.filter(p=>getStatus(p)==="frío"),              archived:true },
                 { id:"pendiente",          label:"Pendientes",        color:"#c9a84c", list: recent.filter(p=>getStatus(p)==="pendiente")                              },
                 { id:"en curso",           label:"Con citas",         color:"#3498db", list: recent.filter(p=>getStatus(p)==="en curso")                               },
-                { id:"cerrado con deuda",  label:"Cerrados c/ deuda", color:"#e67e22", list: recent.filter(p=>getStatus(p)==="cerrado con deuda")                      },
                 { id:"cerrado sin deuda",  label:"Cerrados sin deuda",color:"#2ecc71", list: archivedPatients.filter(p=>getStatus(p)==="cerrado sin deuda"), archived:true },
               ];
               const activeTab = tabs.find(t=>t.id===statusTab) || tabs[0];
