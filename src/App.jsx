@@ -3979,7 +3979,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
               const tabs = [
                 { id:"frío",               label:"Fríos",             color:"#7f8c8d", list: archivedPatients.filter(p=>getStatus(p)==="frío"),              archived:true },
                 { id:"pendiente",          label:"Pendientes",        color:"#c9a84c", list: recent.filter(p=>getStatus(p)==="pendiente")                              },
-                { id:"en curso",           label:"Con citas",         color:"#3498db", list: recent.filter(p=>getStatus(p)==="en curso")                               },
+                { id:"en curso",           label:"Con citas",         color:"#3498db", list: recent.filter(p=>getStatus(p)==="en curso").sort((a,b)=>{ const td=today(); const na=(a.appointments||[]).filter(ap=>ap.date&&ap.date>=td).sort((x,y)=>x.date.localeCompare(y.date))[0]?.date||"9999-99-99"; const nb=(b.appointments||[]).filter(ap=>ap.date&&ap.date>=td).sort((x,y)=>x.date.localeCompare(y.date))[0]?.date||"9999-99-99"; return na.localeCompare(nb); }) },
                 { id:"cerrado sin deuda",  label:"Cerrados sin deuda",color:"#2ecc71", list: archivedPatients.filter(p=>getStatus(p)==="cerrado sin deuda"), archived:true },
               ];
               const activeTab = tabs.find(t=>t.id===statusTab) || tabs[0];
