@@ -4027,13 +4027,44 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
                       {isSearching ? "Sin resultados para esa búsqueda" : `Sin presupuestos ${activeTab.label.toLowerCase()}`}
                     </div>
                   )}
-                  {tabList.map(p=><PatientCard key={p.id} patient={p} onEdit={openEdit} onSetStatus={setPatientStatus} onDelete={deletePatient}
-                    patientPayments={payments.filter(pay=>pay.patient_id===p.id)}
-                    onOpen={isSearching ? openEdit : null}
-                    templates={templates}
-                    waClicks={waClicks.filter(c=>c.patient_id===p.id)}
-                    onWaClick={(key)=>incWaClick(p.id,key)}
-                  />)}
+                  {(() => {
+                    const renderCard = (p) => (
+                      <PatientCard key={p.id} patient={p} onEdit={openEdit} onSetStatus={setPatientStatus} onDelete={deletePatient}
+                        patientPayments={payments.filter(pay=>pay.patient_id===p.id)}
+                        onOpen={isSearching ? openEdit : null}
+                        templates={templates}
+                        waClicks={waClicks.filter(c=>c.patient_id===p.id)}
+                        onWaClick={(key)=>incWaClick(p.id,key)}
+                      />
+                    );
+                    if (!isSearching && activeTab.id === "frío" && tabList.length > 0) {
+                      const sortByDate = arr => [...arr].sort((a,b) => (b.date||"").localeCompare(a.date||""));
+                      const hasOrtho    = p => getTxItems(p).some(t=>(t.name||"").toLowerCase().includes("ortodoncia"));
+                      const hasImplant  = p => getTxItems(p).some(t=>(t.name||"").toLowerCase().includes("implante"));
+                      const withPayment = sortByDate(tabList.filter(p => payments.some(pay=>pay.patient_id===p.id)));
+                      const noPayment   = tabList.filter(p => !payments.some(pay=>pay.patient_id===p.id));
+                      const withOrtho   = sortByDate(noPayment.filter(hasOrtho));
+                      const noOrtho     = noPayment.filter(p => !hasOrtho(p));
+                      const withImplant = sortByDate(noOrtho.filter(hasImplant));
+                      const rest        = sortByDate(noOrtho.filter(p => !hasImplant(p)));
+                      const Divider = ({title, count}) => (
+                        <div style={{display:"flex",alignItems:"center",gap:10,margin:"22px 0 10px",fontSize:11,fontWeight:700,letterSpacing:1.5,color:"#7f8c8d",textTransform:"uppercase"}}>
+                          <div style={{flex:1,height:1,background:"#e2e5ed"}}/>
+                          <span>{title} — {count}</span>
+                          <div style={{flex:1,height:1,background:"#e2e5ed"}}/>
+                        </div>
+                      );
+                      return (
+                        <>
+                          {withPayment.length > 0 && <><Divider title="Con pagos" count={withPayment.length}/>{withPayment.map(renderCard)}</>}
+                          {withOrtho.length   > 0 && <><Divider title="Ortodoncia" count={withOrtho.length}/>{withOrtho.map(renderCard)}</>}
+                          {withImplant.length > 0 && <><Divider title="Implantes" count={withImplant.length}/>{withImplant.map(renderCard)}</>}
+                          {rest.length        > 0 && <><Divider title="General" count={rest.length}/>{rest.map(renderCard)}</>}
+                        </>
+                      );
+                    }
+                    return tabList.map(renderCard);
+                  })()}
                 </>
               );
             })()}
