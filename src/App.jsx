@@ -4081,10 +4081,20 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
             </div>
             {pendingDebtPatients.length===0
               ? <div style={{textAlign:"center",color:"#333",padding:56,fontSize:14}}>No hay pacientes con saldo pendiente</div>
-              : pendingDebtPatients.map(p=>{
+              : (()=>{
+                  const todayStr = new Date().toISOString().slice(0,10);
+                  return pendingDebtPatients.map(p=>{
                   const grand = patientGrand(p);
                   const paid = payments.filter(pay=>pay.patient_id===p.id).reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
                   const pending = grand - paid;
+                  const nextApptP = (p.appointments||[])
+                    .filter(a=>a.date&&a.date>=todayStr)
+                    .sort((a,b)=>a.date.localeCompare(b.date))[0];
+                  const firstNameP = ((p.name||"").trim().split(/\s+/)[0] || "paciente").replace(/^./, c=>c.toUpperCase()).replace(/(?<=^.).*/, s=>s.toLowerCase());
+                  const waPhoneP = p.phone ? (n=>/^[6789]\d{8}$/.test(n)?"34"+n:n)(p.phone.replace(/\D/g,"")) : null;
+                  const msgRetomarP = `Hola, ${firstNameP} 😊\nTe escribo para saber cómo te encuentras y recordarte que has iniciado tu tratamiento con nosotros.\n\nVeo que todavía no tienes programada la siguiente cita, y es importante ir avanzando en las fases para que el tratamiento evolucione correctamente.\n\nCuando te venga bien, dime y te busco el mejor hueco disponible para continuar.\n\nQuedo atento a tu respuesta`;
+                  const waLinkP = waPhoneP ? `whatsapp://send?phone=${waPhoneP}&text=${encodeURIComponent(msgRetomarP)}` : null;
+                  const retomarCount = (waClicks.find(c=>c.patient_id===p.id && c.button_key==="retomar")?.count) || parseInt(localStorage.getItem(`wa_${p.id}_retomar`)||"0");
                   return (
                     <div key={p.id} onClick={()=>openEdit(p)}
                       style={{...s.card,cursor:"pointer",borderLeft:"4px solid #e74c3c88",display:"flex",justifyContent:"space-between",alignItems:"center"}}
@@ -4094,14 +4104,36 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
                         <div style={{fontWeight:700,color:"#2c3250",fontSize:15}}>{p.name||"Sin nombre"}</div>
                         <div style={{fontSize:12,color:"#555",marginTop:2}}>HC: {p.hc||"—"} · #{p.budget_no||"—"}</div>
                         <div style={{fontSize:12,color:"#777",marginTop:2}}>Total: {fmtEur(grand)} · Pagado: {fmtEur(paid)}</div>
+                        <div style={{fontSize:12,marginTop:2}}>
+                          {nextApptP
+                            ? <span style={{color:"#3498db",fontWeight:600}}>🗓 Próx cita: {fmtDate(nextApptP.date)}{nextApptP.label?` — ${nextApptP.label}`:""}</span>
+                            : <span style={{color:"#e74c3c",fontWeight:600}}>Sin cita agendada</span>}
+                        </div>
                       </div>
-                      <div style={{textAlign:"right"}}>
-                        <div style={{fontSize:22,fontWeight:800,color:"#e74c3c"}}>{fmtEur(pending)}</div>
-                        <div style={{fontSize:11,color:"#555"}}>saldo pendiente</div>
+                      <div style={{display:"flex",alignItems:"center",gap:16}}>
+                        {waPhoneP && (
+                          <div style={{position:"relative",display:"inline-flex"}} onClick={e=>e.stopPropagation()}>
+                            <a href={waLinkP} onClick={()=>incWaClick(p.id,"retomar")}
+                              title={`WhatsApp ${p.phone} — retomar`}
+                              style={{fontSize:11,padding:"5px 11px",borderRadius:6,background:"#8e44ad18",border:"1px solid #8e44ad55",color:"#8e44ad",fontWeight:600,textDecoration:"none",whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:4}}>
+                              💬 retomar
+                            </a>
+                            {retomarCount > 0 && (
+                              <span title="Ya enviado" style={{position:"absolute",top:-7,right:-7,background:"#8e44ad",color:"#fff",borderRadius:"50%",minWidth:16,height:16,fontSize:10,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px",lineHeight:1,pointerEvents:"none"}}>
+                                {retomarCount}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        <div style={{textAlign:"right"}}>
+                          <div style={{fontSize:22,fontWeight:800,color:"#e74c3c"}}>{fmtEur(pending)}</div>
+                          <div style={{fontSize:11,color:"#555"}}>saldo pendiente</div>
+                        </div>
                       </div>
                     </div>
                   );
-                })
+                  });
+                })()
             }
           </>
         )}
