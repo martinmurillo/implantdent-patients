@@ -9,6 +9,9 @@
 // Esto es la vía de respaldo, solo para presupuestos que no estén en el
 // sistema. El camino normal es cargar los tratamientos desde la base.
 import { loadPdfJs } from "./pdfjs.js";
+import { tipoTratamiento } from "./planCalc.js";
+
+export { tipoTratamiento };
 
 // Franjas horizontales de la tabla, en proporción del ancho de página
 const X_CODIGO  = 0.155;
@@ -64,14 +67,6 @@ export function parseRows(rows) {
 
 // El importe que vale es el que quedó tras el descuento del propio PDF
 export const importeFila = (fila) => (fila.neto !== null ? fila.neto : fila.bruto);
-
-// Clasificación mínima para la colocación inicial en el tablero
-export const tipoTratamiento = (nombre) => {
-  const n = String(nombre).toLowerCase();
-  if (/corona.*implante/.test(n)) return "corona";
-  if (/implante|multi ?unit|pilar/.test(n)) return "implante";
-  return "otro";
-};
 
 // Colocación de arranque: si hay implantes, las coronas se van al mes 5,
 // que es cuando suele estar osteointegrado. El usuario mueve el resto.

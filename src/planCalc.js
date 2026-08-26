@@ -25,6 +25,25 @@ export const addMeses = (iso, k) => {
   return `${ny}-${String(nm + 1).padStart(2, "0")}-${String(nd).padStart(2, "0")}`;
 };
 
+export const sumarDias = (iso, n) => {
+  const [y, m, d] = String(iso).split("-").map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d + n));
+  return t.toISOString().slice(0, 10);
+};
+
+// ─── Clasificación de tratamientos ───────────────────────────────────────────
+// Vive acá y no en el lector de PDF porque la usan tanto la colocación inicial
+// como las alertas de cobertura.
+export const tipoTratamiento = (nombre) => {
+  const n = String(nombre).toLowerCase();
+  if (/corona.*implante/.test(n)) return "corona";
+  if (/implante|multi ?unit|pilar/.test(n)) return "implante";
+  return "otro";
+};
+
+// Los que conviene no empezar sin tenerlos cobrados
+export const esCaro = (nombre) => tipoTratamiento(nombre) !== "otro";
+
 // ─── Cuota sugerida ──────────────────────────────────────────────────────────
 // Solo orientativa: el importe real lo fija la financiera con sus intereses,
 // y si el usuario lo pisa a mano ese valor manda (cuota_manual).
@@ -186,3 +205,58 @@ export const estadoCuota = (cuota, pagos = [], hoy) => {
   if (cuota.payment_id && pagos.some(p => p.id === cuota.payment_id)) return "pagado";
   return cuota.vence_el < hoy ? "vencido" : "pendiente";
 };
+
+// ─── Seguimiento de un plan acordado ─────────────────────────────────────────
+export function resumenPlan({ plan, cuotas = [], pagos = [], hoy }) {
+  const conEstado = [...cuotas]
+    .sort((a, b) => a.vence_el.localeCompare(b.vence_el) || a.numero - b.numero)
+    .map(c => ({ ...c, estado: estadoCuota(c, pagos, hoy) }));
+
+  const pagadas  = conEstado.filter(c => c.estado === "pagado");
+  const vencidas = conEstado.filter(c => c.estado === "vencido");
+  const total    = round2(conEstado.reduce((s, c) => s + (Number(c.importe) || 0), 0));
+  const cobrado  = round2(pagadas.reduce((s, c) => s + (Number(c.importe) || 0), 0));
+
+  let estado;
+  if (plan.estado === "cancelado") estado = "cancelado";
+  else if (conEstado.length > 0 && pagadas.length === conEstado.length) estado = "terminado";
+  else if (vencidas.length > 0) estado = "atrasado";
+  else estado = "al día";
+
+  return {
+    cuotas: conEstado,
+    pagadas: pagadas.length,
+    totalCuotas: conEstado.length,
+    vencidas,
+    proxima: conEstado.find(c => c.estado !== "pagado") || null,
+    total, cobrado,
+    restante: round2(total - cobrado),
+    estado,
+  };
+}
+
+// Tratamientos caros que se hacen pronto y que lo cobrado todavía no cubre.
+// Es el aviso que hay que ver ANTES de la cita, no después.
+export function coberturaProxima({ plan, cuotas = [], pagos = [], hoy, diasVista = 35 }) {
+  const colocacion = plan.colocacion || [];
+  if (!colocacion.length || !plan.fecha_inicio) return [];
+
+  const cobradoHoy = cuotas
+    .filter(c => estadoCuota(c, pagos, hoy) === "pagado")
+    .reduce((s, c) => s + (Number(c.importe) || 0), 0);
+
+  const limite = sumarDias(hoy, diasVista);
+  const avisos = [];
+  for (const t of colocacion) {
+    if (!esCaro(t.nombre)) continue;
+    const fecha = addMeses(plan.fecha_inicio, (Number(t.mes) || 1) - 1);
+    if (fecha < hoy || fecha > limite) continue;
+    // todo lo que estará ejecutado una vez hecho este tratamiento
+    const ejecutadoHasta = colocacion
+      .filter(x => (Number(x.mes) || 1) <= (Number(t.mes) || 1))
+      .reduce((s, x) => s + (Number(x.importe) || 0), 0);
+    const falta = ejecutadoHasta - cobradoHoy;
+    if (falta > EPS) avisos.push({ nombre: t.nombre, fecha, mes: Number(t.mes) || 1, falta: round2(falta) });
+  }
+  return avisos.sort((a, b) => a.fecha.localeCompare(b.fecha));
+}

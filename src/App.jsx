@@ -2,7 +2,8 @@
 import { supabase } from "./supabase";
 import { translateTreatment, setTranslationDict } from "./treatments";
 import { loadPdfJs } from "./pdfjs";
-import { calcPlan, cuotaSugerida, totalTratamientos, cuotasDelPlan } from "./planCalc";
+import { calcPlan, cuotaSugerida, totalTratamientos, cuotasDelPlan,
+         resumenPlan, coberturaProxima } from "./planCalc";
 import { colocacionInicial, parsePlanPDF, importeFila } from "./pdfPlan";
 import * as XLSX from "xlsx";
 
@@ -3664,6 +3665,141 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
   );
 }
 
+// ─── PendientesDePago ────────────────────────────────────────────────────────
+// Seguimiento de los planes ya acordados. No es la agenda ni los recordatorios
+// de visita: esto es un compromiso económico.
+function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobrar }) {
+  const [filtro, setFiltro] = useState("todos");
+  const [cobrando, setCobrando] = useState(null);
+  const hoy = today();
+
+  const filas = plans
+    .filter(pl => pl.estado === "activo" || pl.estado === "terminado")
+    .map(pl => {
+      // Sin FK a patients: si el paciente ya no está, el plan se ignora en vez de romper
+      const paciente = patients.find(p => p.id === pl.patient_id);
+      if (!paciente) return null;
+      const propias = cuotas.filter(c => c.plan_id === pl.id);
+      const resumen = resumenPlan({ plan: pl, cuotas: propias, pagos, hoy });
+      const avisos  = coberturaProxima({ plan: pl, cuotas: propias, pagos, hoy });
+      return { plan: pl, paciente, resumen, avisos };
+    })
+    .filter(Boolean)
+    .filter(f => filtro === "todos"
+      || (filtro === "atrasado"  && f.resumen.estado === "atrasado")
+      || (filtro === "aldia"     && f.resumen.estado === "al día")
+      || (filtro === "terminado" && f.resumen.estado === "terminado"))
+    // el vencimiento más próximo primero; los terminados al final
+    .sort((a, b) => {
+      const va = a.resumen.proxima?.vence_el || "9999-12-31";
+      const vb = b.resumen.proxima?.vence_el || "9999-12-31";
+      return va.localeCompare(vb);
+    });
+
+  const COLOR = { "atrasado":"#e74c3c", "al día":"#2ecc71", "terminado":"#3498db", "cancelado":"#7f8c8d" };
+
+  const cobrar = async (plan, cuota) => {
+    setCobrando(cuota.id);
+    await onCobrar(plan, cuota);
+    setCobrando(null);
+  };
+
+  return (
+    <div>
+      <div style={{display:"flex", gap:6, marginBottom:14, flexWrap:"wrap"}}>
+        {[["todos","Todos"],["atrasado","Atrasados"],["aldia","Al día"],["terminado","Terminados"]].map(([id,label])=>(
+          <button key={id} onClick={()=>setFiltro(id)}
+            style={{background:filtro===id?"#c9a84c22":"#ffffff", border:`1px solid ${filtro===id?"#c9a84c":"#dde4ef"}`,
+              borderRadius:6, color:filtro===id?"#c9a84c":"#555", padding:"5px 12px", cursor:"pointer",
+              fontSize:12, fontWeight:filtro===id?700:400}}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {filas.length === 0 && (
+        <div style={{textAlign:"center", color:"#888", padding:50, background:"#ffffff", borderRadius:10, fontSize:13}}>
+          {plans.length === 0 ? "Todavía no hay planes de pago guardados." : "Ningún plan con ese filtro."}
+        </div>
+      )}
+
+      {filas.map(({ plan, paciente, resumen, avisos }) => (
+        <div key={plan.id} style={{...s.card, borderLeft:`4px solid ${COLOR[resumen.estado]||"#dde4ef"}`}}>
+          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", gap:10, flexWrap:"wrap"}}>
+            <div>
+              <div style={{fontWeight:700, color:"#2c3250", fontSize:15, display:"flex", alignItems:"center", gap:8}}>
+                {paciente.name || "Sin nombre"}
+                <span style={{background:(COLOR[resumen.estado]||"#888")+"22", color:COLOR[resumen.estado]||"#888",
+                  borderRadius:5, padding:"2px 8px", fontSize:11, fontWeight:700}}>
+                  {resumen.estado}
+                </span>
+              </div>
+              <div style={{fontSize:12, color:"#888", marginTop:3}}>
+                #{plan.budget_no||"—"} · {plan.modo === "cuotas" ? `entrega + ${plan.n_cuotas} cuotas` : "paga por visita"}
+                {" · inicio "}{fmtDate(plan.fecha_inicio)}
+                {plan.notas ? ` · ${plan.notas}` : ""}
+              </div>
+            </div>
+            <div style={{display:"flex", gap:18, alignItems:"center", flexWrap:"wrap"}}>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:10, color:"#888", letterSpacing:1}}>COBRADO</div>
+                <div style={{fontSize:15, fontWeight:700, color:"#2ecc71"}}>
+                  {fmtEur(resumen.cobrado)} <span style={{color:"#bbb", fontWeight:400}}>/ {fmtEur(resumen.total)}</span>
+                </div>
+                <div style={{fontSize:11, color:"#888"}}>{resumen.pagadas} de {resumen.totalCuotas} cuotas</div>
+              </div>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:10, color:"#888", letterSpacing:1}}>QUEDA</div>
+                <div style={{fontSize:15, fontWeight:700, color:resumen.restante > 0 ? "#c9a84c" : "#2ecc71"}}>
+                  {fmtEur(resumen.restante)}
+                </div>
+              </div>
+              <button onClick={()=>onAbrirPlan(plan)} style={{...s.btnDark, padding:"5px 12px", fontSize:12}}>
+                Ver plan
+              </button>
+            </div>
+          </div>
+
+          {resumen.proxima && (
+            <div style={{marginTop:10, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap",
+              background: resumen.proxima.estado === "vencido" ? "#fbedea" : "#f0f2f7",
+              borderRadius:8, padding:"8px 12px"}}>
+              <span style={{fontSize:12.5, color: resumen.proxima.estado === "vencido" ? "#7a2a18" : "#555"}}>
+                {resumen.proxima.estado === "vencido" ? "⚠ Cuota vencida sin cobrar" : "Próxima cuota"}
+                {": "}
+                <b>{resumen.proxima.concepto === "entrega" ? "Entrega"
+                  : resumen.proxima.concepto === "visita" ? `Pago del mes ${resumen.proxima.mes}`
+                  : `Cuota ${resumen.proxima.numero} de ${plan.n_cuotas || resumen.totalCuotas}`}</b>
+                {" · "}{fmtEur(resumen.proxima.importe)}
+                {" · vence "}{fmtDate(resumen.proxima.vence_el)}
+              </span>
+              <div style={{flex:1}}/>
+              <button onClick={()=>cobrar(plan, resumen.proxima)} disabled={cobrando === resumen.proxima.id}
+                style={{...s.btnGold, padding:"5px 14px", fontSize:12, opacity: cobrando === resumen.proxima.id ? 0.6 : 1}}>
+                {cobrando === resumen.proxima.id ? "Registrando..." : "Marcar cobrada"}
+              </button>
+            </div>
+          )}
+
+          {resumen.vencidas.length > 1 && (
+            <div style={{marginTop:6, fontSize:12, color:"#e74c3c"}}>
+              Hay {resumen.vencidas.length} cuotas vencidas sin cobrar, por {fmtEur(resumen.vencidas.reduce((a,c)=>a+(parseFloat(c.importe)||0),0))} en total.
+            </div>
+          )}
+
+          {avisos.map(av => (
+            <div key={av.tx_id || av.nombre + av.fecha} style={{marginTop:8, background:"#fdf4e3", color:"#6e4c0c",
+              borderLeft:"3px solid #c8891b", padding:"8px 12px", borderRadius:7, fontSize:12.5}}>
+              🦷 <b>{av.nombre}</b> está previsto para el {fmtDate(av.fecha)} (mes {av.mes}) y todavía faltan{" "}
+              <b>{fmtEur(av.falta)}</b> por cobrar para cubrirlo. Conviene resolverlo antes de la cita.
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── PlanesPanel ─────────────────────────────────────────────────────────────
 // Contenedor de la pestaña. "Pendientes de pago" es la pantalla de uso diario;
 // al tablero se llega casi siempre desde el botón del presupuesto.
@@ -3674,11 +3810,25 @@ const txsParaPlan = (patient) => getTxItems(patient).map(t => ({
 const colocacionPara = (txs) =>
   Object.fromEntries(colocacionInicial(txs).map(t => [t.id, t.mes]));
 
-function PlanesPanel({ patients, plans = [], cuotas = [], onSavePlan, onDeletePlan, presupuestoInicial = null }) {
+// Un plan ya guardado se abre para editar; si no hay ninguno, se arranca uno
+// con los tratamientos colocados por defecto.
+const planParaPresupuesto = (patient, plans) => {
+  const existente = plans.find(pl => pl.patient_id === patient.id && pl.estado === "activo")
+                 || plans.find(pl => pl.patient_id === patient.id);
+  if (existente) return planDesdeFila(existente);
+  const colocacion = colocacionPara(txsParaPlan(patient));
+  const ultimo = Math.max(1, ...Object.values(colocacion), 1);
+  return { ...emptyPlan(), colocacion, nMeses: Math.max(6, ultimo + 1) };
+};
+
+function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], onSavePlan, onDeletePlan, onCobrarCuota, presupuestoInicial = null }) {
   const [tab,    setTab]    = useState(presupuestoInicial ? "tablero" : "pendientes");
   const [selId,  setSelId]  = useState(presupuestoInicial);
   const [filtro, setFiltro] = useState("");
-  const [plan,   setPlan]   = useState(emptyPlan());
+  const [plan,   setPlan]   = useState(() => {
+    const p = presupuestoInicial ? patients.find(x => x.id === presupuestoInicial) : null;
+    return p ? planParaPresupuesto(p, plans) : emptyPlan();
+  });
   const [sueltos, setSueltos] = useState(null);   // tratamientos leídos de un PDF suelto
   const [msg,    setMsg]    = useState("");
   const [guardando, setGuardando] = useState(false);
@@ -3689,19 +3839,15 @@ function PlanesPanel({ patients, plans = [], cuotas = [], onSavePlan, onDeletePl
   const planesDelPaciente = paciente ? plans.filter(pl => pl.patient_id === paciente.id) : [];
   const yaGuardado = plans.some(pl => pl.id === plan.id);
 
-  // Arranca un plan nuevo sobre un presupuesto, o abre el que ya tenga
   const elegir = (p) => {
-    // Un plan ya guardado se abre para editar, no se rehace
-    const existente = plans.find(pl => pl.patient_id === p.id && pl.estado === "activo")
-                   || plans.find(pl => pl.patient_id === p.id);
     setSelId(p.id); setSueltos(null); setMsg(""); setTab("tablero");
-    if (existente) { setPlan(planDesdeFila(existente)); return; }
-    const colocacion = colocacionPara(txsParaPlan(p));
-    const ultimo = Math.max(1, ...Object.values(colocacion), 1);
-    setPlan({ ...emptyPlan(), colocacion, nMeses: Math.max(6, ultimo + 1) });
+    setPlan(planParaPresupuesto(p, plans));
   };
 
-  const abrirPlan = (row) => { setPlan(planDesdeFila(row)); setSueltos(null); setMsg(""); setTab("tablero"); };
+  const abrirPlan = (row) => {
+    setSelId(row.patient_id); setSueltos(null); setMsg(""); setTab("tablero");
+    setPlan(planDesdeFila(row));
+  };
 
   const nuevoPlan = () => {
     if (!paciente) return;
@@ -3790,12 +3936,8 @@ function PlanesPanel({ patients, plans = [], cuotas = [], onSavePlan, onDeletePl
       </div>
 
       {tab === "pendientes" && (
-        <div style={{textAlign:"center", color:"#888", padding:60, background:"#ffffff", borderRadius:10, fontSize:13}}>
-          <div style={{fontSize:15, color:"#2c3250", marginBottom:6}}>
-            {plans.filter(pl=>pl.estado==="activo").length} plan(es) activo(s) · {cuotas.filter(c=>!c.payment_id).length} cuota(s) por cobrar
-          </div>
-          El seguimiento — vencimientos, atrasos y avisos de cobertura — llega en la próxima entrega.
-        </div>
+        <PendientesDePago plans={plans} cuotas={cuotas} pagos={pagos} patients={patients}
+          onAbrirPlan={abrirPlan} onCobrar={onCobrarCuota}/>
       )}
 
       {tab === "tablero" && !paciente && !sueltos && (
@@ -4104,6 +4246,20 @@ export default function App() {
     return {};
   };
 
+  // El dinero vive en payments; la cuota solo guarda el vínculo. Así el saldo
+  // del paciente y las pestañas Deudas y Cobros siguen cuadrando solas.
+  const cobrarCuota = async (plan, cuota) => {
+    const payId = genId();
+    const { error } = await supabase.from("payments").insert([{
+      id: payId, patient_id: plan.patient_id,
+      amount: parseFloat(cuota.importe) || 0, date: today(),
+      note: cuota.concepto === "entrega" ? "Entrega — plan de pago" : `Cuota ${cuota.numero} — plan de pago`,
+    }]);
+    if (error) return;
+    await supabase.from("payment_plan_cuotas").update({ payment_id: payId }).eq("id", cuota.id);
+    await Promise.all([fetchPayments(), fetchPlanCuotas()]);
+  };
+
   const deletePlan = async (planId) => {
     await supabase.from("payment_plan_cuotas").delete().eq("plan_id", planId);
     await supabase.from("payment_plans").delete().eq("id", planId);
@@ -4291,8 +4447,8 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
       )
     : recent;
 
-  const NavBtn = ({id,label,badge}) => (
-    <button onClick={()=>navigate(id)}
+  const NavBtn = ({id,label,badge,onSelect}) => (
+    <button onClick={()=>{navigate(id); if(onSelect) onSelect();}}
       style={{background:"none",border:"none",color:view===id?"#c9a84c":"#666",cursor:"pointer",fontSize:13,fontWeight:view===id?700:400,borderBottom:view===id?"2px solid #c9a84c":"2px solid transparent",padding:"0 10px",height:60,display:"flex",alignItems:"center"}}>
       {label}
       {badge>0 && <span style={{background:"#e74c3c",color:"#fff",borderRadius:"50%",width:18,height:18,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,marginLeft:5}}>{badge}</span>}
@@ -4324,7 +4480,9 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
         <NavBtn id="pagos"     label="Cobros"/>
         <NavBtn id="citas"         label="Citas"/>
         <NavBtn id="presupuestos"  label="N° Presupuestos"/>
-        <NavBtn id="planes"        label="Planes de pago"/>
+        {/* los planes de pacientes ya cerrados viven en la lista archivada,
+            que se carga bajo demanda: sin esto Pendientes los saltearía */}
+        <NavBtn id="planes"        label="Planes de pago" onSelect={ensureArchived}/>
         <NavBtn id="clinica"       label="Clínica"/>
         <NavBtn id="stats"     label="Estadísticas" badge={0}/>
 
@@ -4612,7 +4770,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
             </div>
             <PatientForm patient={editing} onSave={savePatient} onCancel={()=>{goBack();setEditing(null);}} templates={templates}
               payments={payments} onPaymentsChange={fetchPayments} isNew={!allPatients.some(x=>x.id===editing.id)}
-              onArmarPlan={(p)=>{ setPlanPara(p.id); navigate("planes"); }}/>
+              onArmarPlan={(p)=>{ ensureArchived(); setPlanPara(p.id); navigate("planes"); }}/>
           </>
         )}
 
@@ -4805,8 +4963,8 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
         )}
 
         {!dbLoading && view==="planes" && (
-          <PlanesPanel key={planPara || "libre"} patients={allPatients} plans={plans} cuotas={planCuotas}
-            onSavePlan={savePlan} onDeletePlan={deletePlan} presupuestoInicial={planPara}/>
+          <PlanesPanel key={planPara || "libre"} patients={allPatients} plans={plans} cuotas={planCuotas} pagos={payments}
+            onSavePlan={savePlan} onDeletePlan={deletePlan} onCobrarCuota={cobrarCuota} presupuestoInicial={planPara}/>
         )}
 
         {!dbLoading && view==="clinica" && (

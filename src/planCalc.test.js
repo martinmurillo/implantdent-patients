@@ -1,8 +1,8 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
-  addMeses, cuotaSugerida, totalTratamientos,
-  calcPlan, cuotasDelPlan, estadoCuota,
+  addMeses, sumarDias, cuotaSugerida, totalTratamientos,
+  calcPlan, cuotasDelPlan, estadoCuota, resumenPlan, coberturaProxima,
 } from "./planCalc.js";
 
 // ─── Fechas ──────────────────────────────────────────────────────────────────
@@ -388,5 +388,138 @@ describe("estadoCuota", () => {
   test("si el pago vinculado se borró desde Cobros, vuelve a contar como impaga", () => {
     assert.equal(estadoCuota({ payment_id: "borrado", vence_el: "2026-08-25" }, pagos, hoy), "vencido");
     assert.equal(estadoCuota({ payment_id: "borrado", vence_el: "2026-09-30" }, pagos, hoy), "pendiente");
+  });
+});
+
+// ─── Seguimiento de planes acordados ─────────────────────────────────────────
+describe("sumarDias", () => {
+  test("cruza fin de mes y fin de año", () => {
+    assert.equal(sumarDias("2026-08-26", 35), "2026-09-30");
+    assert.equal(sumarDias("2026-12-20", 15), "2027-01-04");
+    assert.equal(sumarDias("2028-02-28", 1),  "2028-02-29");
+  });
+});
+
+describe("resumenPlan", () => {
+  const hoy = "2026-08-26";
+  const plan = { id:"p1", estado:"activo" };
+  const cuotas = [
+    { id:"c0", numero:0, concepto:"entrega", mes:1, vence_el:"2026-05-31", importe:2000, payment_id:"pg1" },
+    { id:"c1", numero:1, concepto:"cuota",   mes:2, vence_el:"2026-06-30", importe:426.74, payment_id:"pg2" },
+    { id:"c2", numero:2, concepto:"cuota",   mes:3, vence_el:"2026-07-31", importe:426.74, payment_id:null },
+    { id:"c3", numero:3, concepto:"cuota",   mes:4, vence_el:"2026-09-30", importe:426.74, payment_id:null },
+  ];
+  const pagos = [{ id:"pg1", amount:2000 }, { id:"pg2", amount:426.74 }];
+
+  test("cuenta pagadas sobre el total y lo que queda por cobrar", () => {
+    const r = resumenPlan({ plan, cuotas, pagos, hoy });
+    assert.equal(r.pagadas, 2);
+    assert.equal(r.totalCuotas, 4);
+    assert.equal(r.total, 3280.22);
+    assert.equal(r.cobrado, 2426.74);
+    assert.equal(r.restante, 853.48);
+  });
+
+  test("marca atrasado si hay una cuota vencida sin cobrar", () => {
+    const r = resumenPlan({ plan, cuotas, pagos, hoy });
+    assert.equal(r.estado, "atrasado");
+    assert.deepEqual(r.vencidas.map(c => c.id), ["c2"]);
+  });
+
+  test("la próxima cuota es la primera sin cobrar, por vencimiento", () => {
+    const r = resumenPlan({ plan, cuotas, pagos, hoy });
+    assert.equal(r.proxima.id, "c2");
+    assert.equal(r.proxima.vence_el, "2026-07-31");
+  });
+
+  test("al día cuando nada vencido está impago", () => {
+    const alDia = cuotas.map(c => c.id === "c2" ? { ...c, payment_id:"pg3" } : c);
+    const r = resumenPlan({ plan, cuotas: alDia, pagos: [...pagos, { id:"pg3", amount:426.74 }], hoy });
+    assert.equal(r.estado, "al día");
+    assert.equal(r.proxima.id, "c3");
+  });
+
+  test("terminado cuando están todas cobradas", () => {
+    const todas = cuotas.map(c => ({ ...c, payment_id:"pgX" }));
+    const r = resumenPlan({ plan, cuotas: todas, pagos: [{ id:"pgX", amount:1 }], hoy });
+    assert.equal(r.estado, "terminado");
+    assert.equal(r.proxima, null);
+    assert.equal(r.restante, 0);
+  });
+
+  test("un plan cancelado no se reporta como atrasado", () => {
+    const r = resumenPlan({ plan: { ...plan, estado:"cancelado" }, cuotas, pagos, hoy });
+    assert.equal(r.estado, "cancelado");
+  });
+
+  test("si el pago vinculado se borró desde Cobros, la cuota vuelve a contar", () => {
+    const r = resumenPlan({ plan, cuotas, pagos: [{ id:"pg1", amount:2000 }], hoy });
+    assert.equal(r.pagadas, 1);
+    assert.equal(r.cobrado, 2000);
+    assert.equal(r.vencidas.length, 2);   // c1 y c2
+  });
+
+  test("un plan sin cuotas no explota", () => {
+    const r = resumenPlan({ plan, cuotas: [], pagos: [], hoy });
+    assert.equal(r.totalCuotas, 0);
+    assert.equal(r.proxima, null);
+    assert.equal(r.estado, "al día");
+  });
+});
+
+describe("coberturaProxima", () => {
+  const hoy = "2026-08-26";
+  // mes 1 = 2026-07-15 · mes 2 = 15/08 · mes 3 = 15/09 · mes 4 = 15/10
+  const plan = {
+    fecha_inicio: "2026-07-15",
+    colocacion: [
+      { tx_id:"a", nombre:"LIMPIEZA BUCAL",        importe:100,  mes:1 },
+      { tx_id:"b", nombre:"IMPLANTE ESTANDAR",     importe:2000, mes:3 },
+      { tx_id:"c", nombre:"CORONA SOBRE IMPLANTE", importe:800,  mes:6 },
+    ],
+  };
+  const cuotas = [
+    { id:"c0", numero:0, vence_el:"2026-07-15", importe:500, payment_id:"pg1" },
+    { id:"c1", numero:1, vence_el:"2026-08-15", importe:500, payment_id:"pg2" },
+    { id:"c2", numero:2, vence_el:"2026-09-15", importe:500, payment_id:null },
+  ];
+  const pagos = [{ id:"pg1" }, { id:"pg2" }];
+
+  test("avisa del implante del mes que viene si no está cubierto", () => {
+    const av = coberturaProxima({ plan, cuotas, pagos, hoy });
+    assert.equal(av.length, 1);
+    assert.equal(av[0].nombre, "IMPLANTE ESTANDAR");
+    assert.equal(av[0].fecha, "2026-09-15");
+    // ejecutado hasta el mes 3 = 2100, cobrado = 1000
+    assert.equal(av[0].falta, 1100);
+  });
+
+  test("no avisa si ya está cobrado de sobra", () => {
+    const cobradas = cuotas.map(c => ({ ...c, payment_id:"pgX", importe:2000 }));
+    const av = coberturaProxima({ plan, cuotas: cobradas, pagos: [{ id:"pgX" }], hoy });
+    assert.deepEqual(av, []);
+  });
+
+  test("no mira tratamientos que caen fuera de la ventana", () => {
+    // la corona del mes 6 vence en diciembre: todavía no es asunto de hoy
+    const av = coberturaProxima({ plan, cuotas, pagos, hoy });
+    assert.equal(av.some(a => a.nombre.includes("CORONA")), false);
+  });
+
+  test("ignora los tratamientos baratos aunque estén descubiertos", () => {
+    const soloLimpieza = { ...plan, colocacion: [{ tx_id:"a", nombre:"LIMPIEZA BUCAL", importe:5000, mes:3 }] };
+    const av = coberturaProxima({ plan: soloLimpieza, cuotas, pagos, hoy });
+    assert.deepEqual(av, []);
+  });
+
+  test("no mira hacia atrás: lo del mes pasado ya pasó", () => {
+    const atras = { ...plan, colocacion: [{ tx_id:"b", nombre:"IMPLANTE ESTANDAR", importe:9000, mes:1 }] };
+    const av = coberturaProxima({ plan: atras, cuotas, pagos, hoy });
+    assert.deepEqual(av, []);
+  });
+
+  test("un plan sin colocación ni fecha no explota", () => {
+    assert.deepEqual(coberturaProxima({ plan: {}, cuotas, pagos, hoy }), []);
+    assert.deepEqual(coberturaProxima({ plan: { fecha_inicio:"2026-07-15" }, cuotas, pagos, hoy }), []);
   });
 });
