@@ -216,6 +216,76 @@ describe("calcPlan · descubiertos acumulados", () => {
   });
 });
 
+// ─── Caso comercial real: cuota manual por encima de la calculada ───────────
+// Es el escenario habitual y el número que se le muestra al paciente, así que
+// no puede mentir: la financiera pone su cuota con intereses, el usuario la
+// escribe a mano y el motor tiene que respetarla tal cual.
+describe("calcPlan · cuota manual por encima de la sugerida", () => {
+  const tratamientos = [
+    { id: "i1", nombre: "IMPLANTE ESTANDAR",       importe: 764.15, mes: 1 },
+    { id: "i2", nombre: "IMPLANTE ESTANDAR",       importe: 764.15, mes: 1 },
+    { id: "in", nombre: "INJERTO OSEO",            importe: 428.75, mes: 1 },
+    { id: "es", nombre: "ESTUDIO IMPLANTOLOGICO",  importe: 400.00, mes: 1 },
+    { id: "co", nombre: "CORONA SOBRE IMPLANTE",   importe: 828.75, mes: 4 },
+    { id: "li", nombre: "LIMPIEZA BUCAL",          importe: 182.75, mes: 6 },
+  ];
+  const plan = {
+    nMeses: 6, modo: "cuotas",
+    entrega: 2000, nCuotas: 5, importeCuota: 426.74, mesInicioCuotas: 2,
+  };
+
+  test("el presupuesto suma 3.368,55 €", () => {
+    assert.equal(totalTratamientos(tratamientos), 3368.55);
+  });
+
+  test("la cuota sugerida sería 273,71 €, muy por debajo de la real", () => {
+    assert.equal(cuotaSugerida(3368.55, 2000, 5), 273.71);
+  });
+
+  test("el motor respeta la cuota escrita a mano, no la recalcula", () => {
+    const r = calcPlan({ ...plan, tratamientos });
+    assert.deepEqual(r.porMes, [2000, 426.74, 426.74, 426.74, 426.74, 426.74]);
+  });
+
+  test("el plan cobra 4.133,70 €: 765,15 € por encima del presupuesto", () => {
+    const r = calcPlan({ ...plan, tratamientos });
+    assert.equal(r.totalPlan, 4133.70);
+    assert.equal(r.totalTratamiento, 3368.55);
+    assert.equal(r.diferencia, 765.15);
+  });
+
+  test("con todo en el mes 1 hay un descubierto de 357,05 €", () => {
+    const r = calcPlan({ ...plan, tratamientos });
+    // en el mes 1 solo se ha cobrado la entrega
+    assert.equal(r.cobradoAcum[0], 2000);
+    assert.equal(r.ejecutadoAcum[0], 2357.05);
+    assert.deepEqual(r.descubiertos, [{ mes: 1, falta: 357.05 }]);
+    assert.equal(r.peorDescubierto, 357.05);
+  });
+
+  test("moviendo el estudio de 400 € al mes 2 desaparece el descubierto", () => {
+    const movido = tratamientos.map(t => t.id === "es" ? { ...t, mes: 2 } : t);
+    const r = calcPlan({ ...plan, tratamientos: movido });
+    assert.equal(r.ejecutadoAcum[0], 1957.05);   // contra 2000 cobrados
+    assert.equal(r.ejecutadoAcum[1], 2357.05);   // contra 2426,74 cobrados
+    assert.deepEqual(r.descubiertos, []);
+    assert.equal(r.peorDescubierto, 0);
+  });
+
+  test("mover el tratamiento no cambia el total del plan ni la diferencia", () => {
+    const movido = tratamientos.map(t => t.id === "es" ? { ...t, mes: 2 } : t);
+    const r = calcPlan({ ...plan, tratamientos: movido });
+    assert.equal(r.totalPlan, 4133.70);
+    assert.equal(r.diferencia, 765.15);
+  });
+
+  test("los acumulados no arrastran error de coma flotante", () => {
+    const r = calcPlan({ ...plan, tratamientos });
+    assert.deepEqual(r.cobradoAcum, [2000, 2426.74, 2853.48, 3280.22, 3706.96, 4133.70]);
+    assert.deepEqual(r.ejecutadoAcum, [2357.05, 2357.05, 2357.05, 3185.80, 3185.80, 3368.55]);
+  });
+});
+
 // ─── minMeses (bloqueo del botón "−") ────────────────────────────────────────
 describe("calcPlan · minMeses", () => {
   test("no deja quitar el mes donde hay un tratamiento", () => {
