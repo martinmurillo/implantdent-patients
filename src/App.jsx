@@ -2,8 +2,8 @@
 import { supabase } from "./supabase";
 import { translateTreatment, setTranslationDict } from "./treatments";
 import { loadPdfJs } from "./pdfjs";
-import { calcPlan, cuotaSugerida, totalTratamientos } from "./planCalc";
-import { colocacionInicial } from "./pdfPlan";
+import { calcPlan, cuotaSugerida, totalTratamientos, cuotasDelPlan } from "./planCalc";
+import { colocacionInicial, parsePlanPDF, importeFila } from "./pdfPlan";
 import * as XLSX from "xlsx";
 
 const parsePDF = async (file) => {
@@ -428,7 +428,7 @@ function AppointmentRow({ appt, idx, treatments, allAppointments, onChange, onRe
 }
 
 // ─── PatientForm ──────────────────────────────────────────────────────────────
-function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaymentsChange=null, isNew=false }) {
+function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaymentsChange=null, isNew=false, onArmarPlan=null }) {
   const [p, setP] = useState(() => {
     const raw = patient.treatments;
     const items = Array.isArray(raw) ? raw : (raw?.items || []);
@@ -769,6 +769,11 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
             {exporting===lang?"⏳ Traduciendo...":`🖨 PDF ${lang.toUpperCase()}`}
           </button>
         ))}
+        {onArmarPlan && !isNew && p.treatments.length > 0 && (
+          <button onClick={()=>onArmarPlan(p)} style={{...s.btnDark, borderColor:"#c9a84c88"}}>
+            📆 Armar plan de pago
+          </button>
+        )}
         <div style={{flex:1}}/>
         <button onClick={onCancel} style={s.btnGhost}>Cancelar</button>
         <button onClick={async()=>{setSaving(true);await onSave(p);setSaving(false);}} disabled={saving}
@@ -3354,31 +3359,26 @@ function PresupuestosExcelPanel({ patients, onRefresh }) {
 // Es un componente controlado — el estado del plan lo tiene el padre, que es
 // quien lo persiste.
 const emptyPlan = () => ({
+  id: genId(),
   modo:"visita", entrega:"0", techoMes:"0",
   nCuotas:"5", importeCuota:"0", cuotaManual:false, mesInicioCuotas:"2",
   nMeses:6, colocacion:{},
+  fechaInicio: today(), notas:"", estado:"activo",
 });
 
 const eur0 = (n) => `${Math.round(n).toLocaleString("es-ES")} €`;
 const eur2 = (n) => `${n.toLocaleString("es-ES",{minimumFractionDigits:2,maximumFractionDigits:2})} €`;
 
-function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
-  const dragId = useRef(null);
-  const [hotMes, setHotMes] = useState(null);
-
-  const set = (campo, valor) => onPlanChange({ ...plan, [campo]: valor });
-  // Tocar la entrega o el nº de cuotas devuelve la cuota al cálculo automático
-  const setYRecalcula = (campo, valor) => onPlanChange({ ...plan, [campo]: valor, cuotaManual:false });
-
+// Todo lo que se deriva del plan y sus tratamientos. Lo usan el tablero (para
+// pintar) y el panel (para guardar), así que vive en un solo sitio.
+const planDerivado = (plan, tratamientos) => {
   const txConMes = tratamientos.map(t => ({ ...t, mes: plan.colocacion[t.id] || 1 }));
   const entrega  = parseFloat(plan.entrega) || 0;
   const nCuotas  = parseInt(plan.nCuotas) || 0;
   const inicioQ  = Math.max(1, parseInt(plan.mesInicioCuotas) || 1);
-  const total    = totalTratamientos(txConMes);
-  const sugerida = cuotaSugerida(total, entrega, nCuotas);
+  const sugerida = cuotaSugerida(totalTratamientos(txConMes), entrega, nCuotas);
   // El importe manual manda: lo fija la financiera con sus intereses del día
   const cuota    = plan.cuotaManual ? (parseFloat(plan.importeCuota) || 0) : sugerida;
-
   const calc = calcPlan({
     tratamientos: txConMes,
     nMeses: plan.nMeses,
@@ -3389,6 +3389,60 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
     importeCuota: cuota,
     mesInicioCuotas: inicioQ,
   });
+  return { txConMes, entrega, nCuotas, inicioQ, sugerida, cuota, calc };
+};
+
+// ─── Plan ⇄ fila de payment_plans ────────────────────────────────────────────
+const planDesdeFila = (row) => ({
+  id: row.id,
+  modo: row.modo || "visita",
+  entrega: String(row.entrega ?? "0"),
+  techoMes: String(row.techo_mes ?? "0"),
+  nCuotas: String(row.n_cuotas ?? "0"),
+  importeCuota: String(row.importe_cuota ?? "0"),
+  cuotaManual: !!row.cuota_manual,
+  mesInicioCuotas: String(row.mes_inicio_cuotas ?? "2"),
+  nMeses: row.n_meses || 6,
+  colocacion: Object.fromEntries((row.colocacion || []).map(c => [c.tx_id, c.mes])),
+  fechaInicio: row.fecha_inicio || today(),
+  notas: row.notas || "",
+  estado: row.estado || "activo",
+});
+
+const filaDesdePlan = (plan, patient, der) => ({
+  id: plan.id,
+  patient_id: patient.id,
+  patient_name: patient.name || "",
+  budget_no: patient.budget_no || "",
+  modo: plan.modo,
+  fecha_inicio: plan.fechaInicio,
+  n_meses: plan.nMeses,
+  entrega: der.entrega,
+  techo_mes: parseFloat(plan.techoMes) || 0,
+  n_cuotas: der.nCuotas,
+  importe_cuota: der.cuota,
+  cuota_manual: !!plan.cuotaManual,
+  mes_inicio_cuotas: der.inicioQ,
+  // se guardan nombre e importe además del id: si el presupuesto se reimporta
+  // y algún id ya no existe, el plan se puede re-vincular por ahí
+  colocacion: der.txConMes.map(t => ({
+    tx_id: t.id, nombre: t.nombre, importe: t.importe, mes: t.mes,
+  })),
+  total_presupuesto: der.calc.totalTratamiento,
+  estado: plan.estado || "activo",
+  notas: plan.notas || "",
+  updated_at: new Date().toISOString(),
+});
+
+function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
+  const dragId = useRef(null);
+  const [hotMes, setHotMes] = useState(null);
+
+  const set = (campo, valor) => onPlanChange({ ...plan, [campo]: valor });
+  // Tocar la entrega o el nº de cuotas devuelve la cuota al cálculo automático
+  const setYRecalcula = (campo, valor) => onPlanChange({ ...plan, [campo]: valor, cuotaManual:false });
+
+  const { txConMes, entrega, nCuotas, inicioQ, sugerida, cuota, calc } = planDerivado(plan, tratamientos);
 
   const mover = (txId, delta) => {
     const nuevo = Math.max(1, Math.min(60, (plan.colocacion[txId] || 1) + delta));
@@ -3620,22 +3674,76 @@ const txsParaPlan = (patient) => getTxItems(patient).map(t => ({
 const colocacionPara = (txs) =>
   Object.fromEntries(colocacionInicial(txs).map(t => [t.id, t.mes]));
 
-function PlanesPanel({ patients, presupuestoInicial = null }) {
+function PlanesPanel({ patients, plans = [], cuotas = [], onSavePlan, onDeletePlan, presupuestoInicial = null }) {
   const [tab,    setTab]    = useState(presupuestoInicial ? "tablero" : "pendientes");
   const [selId,  setSelId]  = useState(presupuestoInicial);
   const [filtro, setFiltro] = useState("");
   const [plan,   setPlan]   = useState(emptyPlan());
+  const [sueltos, setSueltos] = useState(null);   // tratamientos leídos de un PDF suelto
+  const [msg,    setMsg]    = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const fileRef = useRef();
 
   const paciente     = patients.find(p => p.id === selId) || null;
-  const tratamientos = paciente ? txsParaPlan(paciente) : [];
+  const tratamientos = sueltos ? sueltos : (paciente ? txsParaPlan(paciente) : []);
+  const planesDelPaciente = paciente ? plans.filter(pl => pl.patient_id === paciente.id) : [];
+  const yaGuardado = plans.some(pl => pl.id === plan.id);
 
+  // Arranca un plan nuevo sobre un presupuesto, o abre el que ya tenga
   const elegir = (p) => {
-    const txs = txsParaPlan(p);
-    const colocacion = colocacionPara(txs);
-    const ultimo = Math.max(1, ...Object.values(colocacion));
-    setSelId(p.id);
+    // Un plan ya guardado se abre para editar, no se rehace
+    const existente = plans.find(pl => pl.patient_id === p.id && pl.estado === "activo")
+                   || plans.find(pl => pl.patient_id === p.id);
+    setSelId(p.id); setSueltos(null); setMsg(""); setTab("tablero");
+    if (existente) { setPlan(planDesdeFila(existente)); return; }
+    const colocacion = colocacionPara(txsParaPlan(p));
+    const ultimo = Math.max(1, ...Object.values(colocacion), 1);
     setPlan({ ...emptyPlan(), colocacion, nMeses: Math.max(6, ultimo + 1) });
-    setTab("tablero");
+  };
+
+  const abrirPlan = (row) => { setPlan(planDesdeFila(row)); setSueltos(null); setMsg(""); setTab("tablero"); };
+
+  const nuevoPlan = () => {
+    if (!paciente) return;
+    const colocacion = colocacionPara(txsParaPlan(paciente));
+    const ultimo = Math.max(1, ...Object.values(colocacion), 1);
+    setPlan({ ...emptyPlan(), estado:"borrador", colocacion, nMeses: Math.max(6, ultimo + 1) });
+    setMsg("");
+  };
+
+  // Vía de respaldo: presupuestos que no están en el sistema
+  const importarPDF = async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    setMsg("Leyendo PDF...");
+    try {
+      const { paciente: nombre, filas } = await parsePlanPDF(file);
+      if (!filas.length) { setMsg("No encontré tratamientos en ese PDF."); e.target.value=""; return; }
+      const txs = filas.map(f => ({
+        id: genId(), nombre: f.nombre, importe: importeFila(f), pieza: f.pieza,
+      }));
+      const colocacion = colocacionPara(txs);
+      const ultimo = Math.max(1, ...Object.values(colocacion), 1);
+      setSelId(null); setSueltos(txs); setTab("tablero");
+      setPlan({ ...emptyPlan(), colocacion, nMeses: Math.max(6, ultimo + 1) });
+      setMsg(`✓ ${txs.length} tratamiento(s)${nombre ? ` — ${nombre}` : ""}`);
+    } catch (err) { setMsg("No pude leer el PDF: " + err.message); }
+    e.target.value = "";
+  };
+
+  const guardar = async () => {
+    if (!paciente) return;
+    setGuardando(true); setMsg("");
+    const der = planDerivado(plan, tratamientos);
+    const res = await onSavePlan(filaDesdePlan(plan, paciente, der), plan, der);
+    setGuardando(false);
+    setMsg(res?.error ? `Error al guardar: ${res.error}` : "✓ Plan guardado");
+  };
+
+  const borrar = async () => {
+    if (!confirm("¿Eliminar este plan de pago? Los cobros ya registrados en Cobros no se tocan.")) return;
+    await onDeletePlan(plan.id);
+    setMsg("Plan eliminado");
+    if (paciente) elegir(paciente); else setSelId(null);
   };
 
   const coincidencias = filtro.trim().length < 2 ? [] : patients.filter(p =>
@@ -3657,27 +3765,40 @@ function PlanesPanel({ patients, presupuestoInicial = null }) {
             </button>
           ))}
         </div>
-        {paciente && tab === "tablero" && (
+        {tab === "tablero" && (paciente || sueltos) && (
           <>
             <div style={{fontSize:13, color:"#555"}}>
-              <b style={{color:"#2c3250"}}>{paciente.name}</b>
-              {paciente.budget_no ? ` · #${paciente.budget_no}` : ""}
-              {paciente.hc ? ` · HC ${paciente.hc}` : ""}
+              {paciente ? (
+                <>
+                  <b style={{color:"#2c3250"}}>{paciente.name}</b>
+                  {paciente.budget_no ? ` · #${paciente.budget_no}` : ""}
+                  {paciente.hc ? ` · HC ${paciente.hc}` : ""}
+                </>
+              ) : <b style={{color:"#2c3250"}}>Presupuesto suelto (desde PDF)</b>}
             </div>
-            <button onClick={()=>{setSelId(null); setFiltro("");}} style={{...s.btnDark, padding:"5px 12px", fontSize:12}}>
+            <button onClick={()=>{setSelId(null); setSueltos(null); setFiltro(""); setMsg("");}}
+              style={{...s.btnDark, padding:"5px 12px", fontSize:12}}>
               Otro presupuesto
             </button>
           </>
+        )}
+        {msg && (
+          <span style={{fontSize:12.5, color: msg.startsWith("✓") ? "#2ecc71" : msg.startsWith("Error") || msg.startsWith("No pude") || msg.startsWith("No encontré") ? "#e74c3c" : "#555"}}>
+            {msg}
+          </span>
         )}
       </div>
 
       {tab === "pendientes" && (
         <div style={{textAlign:"center", color:"#888", padding:60, background:"#ffffff", borderRadius:10, fontSize:13}}>
-          El seguimiento de planes acordados llega en la próxima entrega.
+          <div style={{fontSize:15, color:"#2c3250", marginBottom:6}}>
+            {plans.filter(pl=>pl.estado==="activo").length} plan(es) activo(s) · {cuotas.filter(c=>!c.payment_id).length} cuota(s) por cobrar
+          </div>
+          El seguimiento — vencimientos, atrasos y avisos de cobertura — llega en la próxima entrega.
         </div>
       )}
 
-      {tab === "tablero" && !paciente && (
+      {tab === "tablero" && !paciente && !sueltos && (
         <div style={{...s.card, maxWidth:560, margin:"0 auto"}}>
           <label style={s.label}>Buscar presupuesto</label>
           <input autoFocus value={filtro} onChange={e=>setFiltro(e.target.value)}
@@ -3703,6 +3824,17 @@ function PlanesPanel({ patients, presupuestoInicial = null }) {
               );
             })}
           </div>
+
+          {/* Vía de respaldo: el camino normal es cargar desde la base */}
+          <div style={{marginTop:16, paddingTop:14, borderTop:"1px dashed #e2e5ed", display:"flex", alignItems:"center", gap:12}}>
+            <button onClick={()=>fileRef.current.click()} style={{...s.btnDark, fontSize:12, padding:"7px 14px"}}>
+              📄 Importar PDF
+            </button>
+            <input ref={fileRef} type="file" accept=".pdf" onChange={importarPDF} style={{display:"none"}}/>
+            <span style={{fontSize:12, color:"#888"}}>
+              Solo para presupuestos que no estén en el sistema. No se puede guardar: hace falta un presupuesto al que atarlo.
+            </span>
+          </div>
         </div>
       )}
 
@@ -3712,8 +3844,69 @@ function PlanesPanel({ patients, presupuestoInicial = null }) {
         </div>
       )}
 
-      {tab === "tablero" && paciente && tratamientos.length > 0 && (
-        <PlanDePagoBoard tratamientos={tratamientos} plan={plan} onPlanChange={setPlan}/>
+      {tab === "tablero" && tratamientos.length > 0 && (
+        <>
+          {/* ── Datos del plan y guardado ── */}
+          <div className="np" style={{...s.card, display:"flex", gap:12, alignItems:"flex-end", flexWrap:"wrap", marginBottom:14}}>
+            <div style={{minWidth:150}}>
+              <label style={{...s.label, fontSize:10}}>Fecha de inicio</label>
+              <input type="date" value={plan.fechaInicio}
+                onChange={e=>setPlan({...plan, fechaInicio:e.target.value})} style={s.smInput}/>
+            </div>
+            <div style={{minWidth:130}}>
+              <label style={{...s.label, fontSize:10}}>Estado</label>
+              <select value={plan.estado} onChange={e=>setPlan({...plan, estado:e.target.value})}
+                style={{...s.smInput, cursor:"pointer"}}>
+                <option value="activo">Activo</option>
+                <option value="borrador">Borrador</option>
+                <option value="terminado">Terminado</option>
+                <option value="cancelado">Cancelado</option>
+              </select>
+            </div>
+            <div style={{flex:1, minWidth:200}}>
+              <label style={{...s.label, fontSize:10}}>Notas</label>
+              <input value={plan.notas} onChange={e=>setPlan({...plan, notas:e.target.value})}
+                placeholder="Financiera, condiciones acordadas..." style={s.smInput}/>
+            </div>
+            {paciente ? (
+              <>
+                <button onClick={guardar} disabled={guardando}
+                  style={{...s.btnGold, opacity:guardando?0.6:1, whiteSpace:"nowrap"}}>
+                  {guardando ? "Guardando..." : yaGuardado ? "Guardar cambios" : "Guardar plan"}
+                </button>
+                {yaGuardado && (
+                  <button onClick={borrar}
+                    style={{...s.btnSm, background:"#fff0f0", border:"1px solid #e74c3c88", color:"#e74c3c", padding:"9px 14px"}}>
+                    Eliminar
+                  </button>
+                )}
+                <button onClick={nuevoPlan} style={{...s.btnDark, whiteSpace:"nowrap"}}>+ Otra alternativa</button>
+              </>
+            ) : (
+              <span style={{fontSize:12, color:"#888", paddingBottom:9, maxWidth:260}}>
+                Presupuesto suelto: se puede armar e imprimir, pero para guardarlo tiene que estar cargado en el sistema.
+              </span>
+            )}
+          </div>
+
+          {/* ── Otros planes de este presupuesto ── */}
+          {planesDelPaciente.length > 1 && (
+            <div className="np" style={{display:"flex", gap:6, flexWrap:"wrap", alignItems:"center", marginBottom:14}}>
+              <span style={{fontSize:11, color:"#888"}}>Planes de este presupuesto:</span>
+              {planesDelPaciente.map(pl => (
+                <button key={pl.id} onClick={()=>abrirPlan(pl)}
+                  style={{fontSize:11, padding:"4px 10px", borderRadius:6, cursor:"pointer",
+                    background: pl.id===plan.id ? "#c9a84c22" : "#ffffff",
+                    border:`1px solid ${pl.id===plan.id ? "#c9a84c" : "#dde4ef"}`,
+                    color: pl.id===plan.id ? "#c9a84c" : "#555", fontWeight: pl.id===plan.id ? 700 : 400}}>
+                  {pl.estado} · {fmtDate(pl.fecha_inicio)} · {pl.modo==="cuotas" ? `${pl.n_cuotas} cuotas` : "por visita"}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <PlanDePagoBoard tratamientos={tratamientos} plan={plan} onPlanChange={setPlan}/>
+        </>
       )}
     </div>
   );
@@ -3731,6 +3924,9 @@ export default function App() {
   const [translations,  setTranslations]  = useState([]);
   const [payments,      setPayments]      = useState([]);
   const [waClicks,      setWaClicks]      = useState([]);
+  const [plans,         setPlans]         = useState([]);
+  const [planCuotas,    setPlanCuotas]    = useState([]);
+  const [planPara,      setPlanPara]      = useState(null);   // presupuesto a abrir en el tablero
   const [viewHistory, setViewHistory] = useState(["dashboard"]);
   const view = viewHistory[viewHistory.length - 1];
   const navigate = (id) => setViewHistory(prev => prev[prev.length-1]===id ? prev : [...prev, id]);
@@ -3755,6 +3951,8 @@ export default function App() {
   const fetchTranslations = async () => { const {data,error}=await supabase.from("treatment_translations").select("*").order("name_es"); if(!error){setTranslations(data||[]);setTranslationDict(data||[]);} };
   const fetchPayments     = async () => { const {data}=await supabase.from("payments").select("*").order("date",{ascending:false}); setPayments(data||[]); };
   const fetchWaClicks     = async () => { const {data}=await supabase.from("wa_clicks").select("*"); setWaClicks(data||[]); };
+  const fetchPlans        = async () => { const {data}=await supabase.from("payment_plans").select("*").order("created_at",{ascending:false}); setPlans(data||[]); };
+  const fetchPlanCuotas   = async () => { const {data}=await supabase.from("payment_plan_cuotas").select("*").order("vence_el"); setPlanCuotas(data||[]); };
   const [clinicStats, setClinicStats] = useState([]);
   const fetchClinicStats = async () => { const {data}=await supabase.from("clinic_monthly_stats").select("*"); setClinicStats(data||[]); };
   const saveClinicStat = async (year, month, vals) => {
@@ -3793,7 +3991,7 @@ export default function App() {
   useEffect(()=>{
     if (!unlocked) return;
     setDbLoad(true);
-    Promise.all([fetchPatients(),fetchDoctors(),fetchItems(),fetchTemplates(),fetchTranslations(),fetchPayments(),fetchWaClicks()])
+    Promise.all([fetchPatients(),fetchDoctors(),fetchItems(),fetchTemplates(),fetchTranslations(),fetchPayments(),fetchWaClicks(),fetchPlans(),fetchPlanCuotas()])
       .then(() => autoSyncStatuses())
       .finally(()=>setDbLoad(false));
   },[unlocked]);
@@ -3879,6 +4077,37 @@ export default function App() {
     if (enCursoUpdates.length > 0) await fetchItems();
     await fetchPatients();
     if (archivedLoaded) await fetchArchived();
+  };
+
+  // Al reguardar un plan se regeneran las cuotas, pero las que ya tienen un
+  // cobro vinculado quedan intactas: son un hecho, no una previsión.
+  const savePlan = async (row, plan, der) => {
+    const { error } = await supabase.from("payment_plans").upsert([row]);
+    if (error) {
+      if (error.code === "23505") return { error: "ya hay otro plan activo para este presupuesto. Pasá ese a borrador o guardá éste como borrador." };
+      return { error: error.message };
+    }
+
+    const { data: previas } = await supabase.from("payment_plan_cuotas").select("*").eq("plan_id", row.id);
+    const numPagados = new Set((previas||[]).filter(c => c.payment_id).map(c => c.numero));
+    const impagas    = (previas||[]).filter(c => !c.payment_id).map(c => c.id);
+    if (impagas.length) await supabase.from("payment_plan_cuotas").delete().in("id", impagas);
+
+    const nuevas = cuotasDelPlan(row, der.calc)
+      .filter(c => !numPagados.has(c.numero))
+      .map(c => ({ ...c, id: genId(), plan_id: row.id, patient_id: row.patient_id }));
+    if (nuevas.length) {
+      const { error: errCuotas } = await supabase.from("payment_plan_cuotas").insert(nuevas);
+      if (errCuotas) return { error: errCuotas.message };
+    }
+    await Promise.all([fetchPlans(), fetchPlanCuotas()]);
+    return {};
+  };
+
+  const deletePlan = async (planId) => {
+    await supabase.from("payment_plan_cuotas").delete().eq("plan_id", planId);
+    await supabase.from("payment_plans").delete().eq("id", planId);
+    await Promise.all([fetchPlans(), fetchPlanCuotas()]);
   };
 
   const deletePatient = async (patient) => {
@@ -4382,7 +4611,8 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
               )}
             </div>
             <PatientForm patient={editing} onSave={savePatient} onCancel={()=>{goBack();setEditing(null);}} templates={templates}
-              payments={payments} onPaymentsChange={fetchPayments} isNew={!allPatients.some(x=>x.id===editing.id)}/>
+              payments={payments} onPaymentsChange={fetchPayments} isNew={!allPatients.some(x=>x.id===editing.id)}
+              onArmarPlan={(p)=>{ setPlanPara(p.id); navigate("planes"); }}/>
           </>
         )}
 
@@ -4575,7 +4805,8 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
         )}
 
         {!dbLoading && view==="planes" && (
-          <PlanesPanel patients={allPatients}/>
+          <PlanesPanel key={planPara || "libre"} patients={allPatients} plans={plans} cuotas={planCuotas}
+            onSavePlan={savePlan} onDeletePlan={deletePlan} presupuestoInicial={planPara}/>
         )}
 
         {!dbLoading && view==="clinica" && (
