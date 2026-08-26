@@ -25,6 +25,12 @@ export const addMeses = (iso, k) => {
   return `${ny}-${String(nm + 1).padStart(2, "0")}-${String(nd).padStart(2, "0")}`;
 };
 
+// Días de "desde" a "hasta". Negativo si ya pasó.
+export const diasEntre = (desde, hasta) => {
+  const p = (s) => { const [y, m, d] = String(s).split("-").map(Number); return Date.UTC(y, m - 1, d); };
+  return Math.round((p(hasta) - p(desde)) / 86400000);
+};
+
 export const sumarDias = (iso, n) => {
   const [y, m, d] = String(iso).split("-").map(Number);
   const t = new Date(Date.UTC(y, m - 1, d + n));
@@ -207,7 +213,7 @@ export const estadoCuota = (cuota, pagos = [], hoy) => {
 };
 
 // ─── Seguimiento de un plan acordado ─────────────────────────────────────────
-export function resumenPlan({ plan, cuotas = [], pagos = [], hoy }) {
+export function resumenPlan({ plan, cuotas = [], pagos = [], pagosPaciente = null, hoy }) {
   const conEstado = [...cuotas]
     .sort((a, b) => a.vence_el.localeCompare(b.vence_el) || a.numero - b.numero)
     .map(c => ({ ...c, estado: estadoCuota(c, pagos, hoy) }));
@@ -225,16 +231,60 @@ export function resumenPlan({ plan, cuotas = [], pagos = [], hoy }) {
   else if (vencidas.length > 0) estado = "atrasado";
   else estado = "al día";
 
+  const proxima = conEstado.find(c => c.estado !== "pagado") || null;
+
+  // Lo que le toca abonar ahora. No es el importe de la cuota a secas: es el
+  // acumulado que debería llevar pagado hasta ella, menos lo que lleva pagado
+  // de verdad. Así arrastra solo lo que un mes haya quedado corto.
+  const totalPagado = pagosPaciente
+    ? round2(pagosPaciente.reduce((s, p) => s + (Number(p.amount) || 0), 0))
+    : cobrado;
+  let aCobrarAhora = 0;
+  if (proxima) {
+    const esperado = conEstado
+      .filter(c => c.vence_el <= proxima.vence_el)
+      .reduce((s, c) => s + (Number(c.importe) || 0), 0);
+    aCobrarAhora = round2(Math.max(0, esperado - totalPagado));
+  }
+  const arrastre = proxima ? round2(Math.max(0, aCobrarAhora - (Number(proxima.importe) || 0))) : 0;
+
   return {
     cuotas: conEstado,
     pagadas: pagadas.length,
     totalCuotas: conEstado.length,
     vencidas,
-    proxima: conEstado.find(c => c.estado !== "pagado") || null,
+    proxima,
+    diasParaProxima: proxima ? diasEntre(hoy, proxima.vence_el) : null,
+    aCobrarAhora,
+    arrastre,          // lo que viene de cuotas anteriores pagadas de menos
+    totalPagado,
     total, cobrado,
     restante: round2(total - cobrado),
     estado,
   };
+}
+
+// Reparte los pagos del paciente sobre las cuotas en orden: una cuota se da por
+// cobrada cuando el acumulado pagado llega a cubrir el acumulado esperado hasta
+// ella. Devuelve [{cuotaId, paymentId}] solo para las que hay que marcar.
+// Nunca desmarca: si algo ya se dio por cobrado, se respeta.
+export function conciliarCuotas({ cuotas = [], pagosPaciente = [] }) {
+  const orden = [...cuotas].sort((a, b) => a.vence_el.localeCompare(b.vence_el) || a.numero - b.numero);
+  const pagos = [...pagosPaciente].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const marcar = [];
+  let esperado = 0;
+  let i = 0, acumPagado = 0;
+  for (const c of orden) {
+    esperado += Number(c.importe) || 0;
+    while (acumPagado < esperado - 0.005 && i < pagos.length) {
+      acumPagado += Number(pagos[i].amount) || 0;
+      i++;
+    }
+    if (acumPagado >= esperado - 0.005 && !c.payment_id && i > 0) {
+      marcar.push({ cuotaId: c.id, paymentId: pagos[i - 1].id });
+    }
+  }
+  return marcar;
 }
 
 // Tratamientos caros que se hacen pronto y que lo cobrado todavía no cubre.

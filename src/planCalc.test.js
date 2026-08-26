@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   addMeses, sumarDias, cuotaSugerida, totalTratamientos,
   calcPlan, cuotasDelPlan, estadoCuota, resumenPlan, coberturaProxima,
+  diasEntre, conciliarCuotas,
 } from "./planCalc.js";
 
 // ─── Fechas ──────────────────────────────────────────────────────────────────
@@ -529,5 +530,117 @@ describe("coberturaProxima", () => {
   test("un plan sin colocación ni fecha no explota", () => {
     assert.deepEqual(coberturaProxima({ plan: {}, cuotas, pagos, hoy }), []);
     assert.deepEqual(coberturaProxima({ plan: { fecha_inicio:"2026-07-15" }, cuotas, pagos, hoy }), []);
+  });
+});
+
+// ─── Recordatorio de cuota: cuánto le toca abonar de verdad ─────────────────
+describe("diasEntre", () => {
+  test("cuenta días hacia adelante y hacia atrás", () => {
+    assert.equal(diasEntre("2026-08-26", "2026-08-31"), 5);
+    assert.equal(diasEntre("2026-08-26", "2026-08-26"), 0);
+    assert.equal(diasEntre("2026-08-26", "2026-08-20"), -6);
+  });
+
+  test("cruza meses y años sin errores de huso", () => {
+    assert.equal(diasEntre("2026-08-26", "2026-09-01"), 6);
+    assert.equal(diasEntre("2026-12-28", "2027-01-04"), 7);
+    assert.equal(diasEntre("2028-02-28", "2028-03-01"), 2);   // bisiesto
+  });
+});
+
+describe("resumenPlan · importe a recordar con arrastre", () => {
+  const hoy = "2026-08-26";
+  const plan = { id:"p1", estado:"activo" };
+  const cuotas = [
+    { id:"c1", numero:1, concepto:"cuota", mes:1, vence_el:"2026-06-30", importe:500, payment_id:"pg1" },
+    { id:"c2", numero:2, concepto:"cuota", mes:2, vence_el:"2026-07-31", importe:500, payment_id:"pg2" },
+    { id:"c3", numero:3, concepto:"cuota", mes:3, vence_el:"2026-09-30", importe:500, payment_id:null },
+  ];
+
+  test("si pagó todo al día, toca solo la cuota", () => {
+    const pagosPaciente = [{ id:"pg1", amount:500, date:"2026-06-30" }, { id:"pg2", amount:500, date:"2026-07-31" }];
+    const r = resumenPlan({ plan, cuotas, pagos: pagosPaciente, pagosPaciente, hoy });
+    assert.equal(r.aCobrarAhora, 500);
+    assert.equal(r.arrastre, 0);
+  });
+
+  test("si un mes pagó de menos, la próxima arrastra la diferencia", () => {
+    // en la segunda cuota abonó 350 en vez de 500
+    const pagosPaciente = [{ id:"pg1", amount:500, date:"2026-06-30" }, { id:"pg2", amount:350, date:"2026-07-31" }];
+    const r = resumenPlan({ plan, cuotas, pagos: pagosPaciente, pagosPaciente, hoy });
+    assert.equal(r.aCobrarAhora, 650);   // 500 de la cuota 3 + 150 que faltaron
+    assert.equal(r.arrastre, 150);
+  });
+
+  test("si pagó de más, la próxima cuota se descuenta", () => {
+    const pagosPaciente = [{ id:"pg1", amount:500, date:"2026-06-30" }, { id:"pg2", amount:800, date:"2026-07-31" }];
+    const r = resumenPlan({ plan, cuotas, pagos: pagosPaciente, pagosPaciente, hoy });
+    assert.equal(r.aCobrarAhora, 200);
+    assert.equal(r.arrastre, 0);
+  });
+
+  test("nunca pide un importe negativo", () => {
+    const pagosPaciente = [{ id:"pg1", amount:5000, date:"2026-06-30" }, { id:"pg2", amount:0, date:"2026-07-31" }];
+    const r = resumenPlan({ plan, cuotas, pagos: pagosPaciente, pagosPaciente, hoy });
+    assert.equal(r.aCobrarAhora, 0);
+  });
+
+  test("informa cuántos días faltan para el vencimiento", () => {
+    const pagosPaciente = [{ id:"pg1", amount:500, date:"2026-06-30" }, { id:"pg2", amount:500, date:"2026-07-31" }];
+    const r = resumenPlan({ plan, cuotas, pagos: pagosPaciente, pagosPaciente, hoy });
+    assert.equal(r.proxima.id, "c3");
+    assert.equal(r.diasParaProxima, 35);
+  });
+
+  test("días negativos cuando la cuota ya venció", () => {
+    const vencida = cuotas.map(c => c.id === "c3" ? { ...c, vence_el:"2026-08-20" } : c);
+    const pagosPaciente = [{ id:"pg1", amount:500, date:"2026-06-30" }, { id:"pg2", amount:500, date:"2026-07-31" }];
+    const r = resumenPlan({ plan, cuotas: vencida, pagos: pagosPaciente, pagosPaciente, hoy });
+    assert.equal(r.proxima.id, "c3");
+    assert.equal(r.diasParaProxima, -6);
+  });
+});
+
+describe("conciliarCuotas", () => {
+  const cuotas = [
+    { id:"c1", numero:1, vence_el:"2026-06-30", importe:500, payment_id:null },
+    { id:"c2", numero:2, vence_el:"2026-07-31", importe:500, payment_id:null },
+    { id:"c3", numero:3, vence_el:"2026-08-31", importe:500, payment_id:null },
+  ];
+
+  test("marca las cuotas que el acumulado pagado ya cubre", () => {
+    const pagosPaciente = [{ id:"pg1", amount:500, date:"2026-06-30" }, { id:"pg2", amount:500, date:"2026-07-31" }];
+    assert.deepEqual(conciliarCuotas({ cuotas, pagosPaciente }), [
+      { cuotaId:"c1", paymentId:"pg1" },
+      { cuotaId:"c2", paymentId:"pg2" },
+    ]);
+  });
+
+  test("un pago grande salda varias cuotas de una vez", () => {
+    const pagosPaciente = [{ id:"pg1", amount:1200, date:"2026-06-30" }];
+    const r = conciliarCuotas({ cuotas, pagosPaciente });
+    assert.deepEqual(r.map(x => x.cuotaId), ["c1","c2"]);
+    assert.equal(r[0].paymentId, "pg1");
+  });
+
+  test("un pago corto no da por cobrada la cuota", () => {
+    const pagosPaciente = [{ id:"pg1", amount:350, date:"2026-06-30" }];
+    assert.deepEqual(conciliarCuotas({ cuotas, pagosPaciente }), []);
+  });
+
+  test("no vuelve a marcar lo que ya estaba vinculado", () => {
+    const yaMarcada = cuotas.map(c => c.id === "c1" ? { ...c, payment_id:"viejo" } : c);
+    const pagosPaciente = [{ id:"pg1", amount:1000, date:"2026-06-30" }];
+    assert.deepEqual(conciliarCuotas({ cuotas: yaMarcada, pagosPaciente }).map(x => x.cuotaId), ["c2"]);
+  });
+
+  test("sin pagos no marca nada", () => {
+    assert.deepEqual(conciliarCuotas({ cuotas, pagosPaciente: [] }), []);
+  });
+
+  test("tolera centimos de redondeo", () => {
+    const c = [{ id:"c1", numero:1, vence_el:"2026-06-30", importe:426.74, payment_id:null }];
+    const pagosPaciente = [{ id:"pg1", amount:426.74, date:"2026-06-30" }];
+    assert.equal(conciliarCuotas({ cuotas: c, pagosPaciente }).length, 1);
   });
 });

@@ -3,7 +3,7 @@ import { supabase } from "./supabase";
 import { translateTreatment, setTranslationDict } from "./treatments";
 import { loadPdfJs } from "./pdfjs";
 import { calcPlan, cuotaSugerida, totalTratamientos, cuotasDelPlan,
-         resumenPlan, coberturaProxima } from "./planCalc";
+         resumenPlan, coberturaProxima, addMeses, conciliarCuotas } from "./planCalc";
 import { colocacionInicial, parsePlanPDF, importeFila } from "./pdfPlan";
 import { htmlPlanImpreso } from "./planPrint";
 import * as XLSX from "xlsx";
@@ -430,7 +430,7 @@ function AppointmentRow({ appt, idx, treatments, allAppointments, onChange, onRe
 }
 
 // ─── PatientForm ──────────────────────────────────────────────────────────────
-function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaymentsChange=null, isNew=false, onArmarPlan=null }) {
+function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaymentsChange=null, isNew=false, onArmarPlan=null, onPagoAplicado=null }) {
   const [p, setP] = useState(() => {
     const raw = patient.treatments;
     const items = Array.isArray(raw) ? raw : (raw?.items || []);
@@ -507,6 +507,7 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
       amount: parseFloat(payAmount), date: payDate || today(), note: payNote.trim() || ""
     }]);
     setPayAmount(""); setPayNote("");
+    if (onPagoAplicado) await onPagoAplicado(p.id);
     if (onPaymentsChange) await onPaymentsChange();
     setPayL(false);
   };
@@ -2655,7 +2656,7 @@ function ClinicaPanel({ doctors, templates, translations, onRefreshDoctors, onRe
 }
 
 // ─── PagosExcelPanel ─────────────────────────────────────────────────────────
-function PagosExcelPanel({ patients, payments, onPaymentsChange, onDebtCleared }) {
+function PagosExcelPanel({ patients, payments, onPaymentsChange, onDebtCleared, onPagoAplicado }) {
   const [list1,   setList1]   = useState(null);  // agrupado por Nº presupuesto
   const [list2,   setList2]   = useState(null);  // coincidencias por nombre
   const [list3,   setList3]   = useState(null);  // sin ninguna coincidencia
@@ -2787,12 +2788,17 @@ function PagosExcelPanel({ patients, payments, onPaymentsChange, onDebtCleared }
         .reduce((s, pay) => s + (parseFloat(pay.amount) || 0), 0);
       if (prevPaid + entry.totalAmt >= grand) {
         await supabase.from("patients").update({ status: "cerrado sin deuda", closed: true }).eq("id", entry.patient.id);
+        if (onPagoAplicado) await onPagoAplicado(entry.patient.id);
         if (onDebtCleared) await onDebtCleared(entry.patient);
         setAdded1(prev => new Set([...prev, key]));
         setLoading(prev => { const s = new Set(prev); s.delete(key); return s; });
         return;
       }
     }
+
+    // Si el presupuesto tiene plan de pago, el importe se reparte sobre sus
+    // cuotas en vez de quedar como un pago suelto
+    if (onPagoAplicado) await onPagoAplicado(entry.patient.id);
 
     setAdded1(prev => new Set([...prev, key]));
     setLoading(prev => { const s = new Set(prev); s.delete(key); return s; });
@@ -3565,6 +3571,11 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
                   color: importe < 0.5 ? "#dde4ef" : alto ? "#e74c3c" : "#2c3250"}}>
                   {importe < 0.5 ? "—" : (plan.modo === "cuotas" ? eur2(importe) : eur0(importe))}
                 </div>
+                {plan.fechaInicio && (
+                  <div style={{fontSize:11.5, color:"#0e3b3e", fontWeight:700}}>
+                    {fmtDate(addMeses(plan.fechaInicio, mes - 1))}
+                  </div>
+                )}
                 {sub && <div style={{fontSize:10.5, color:"#888"}}>{sub}</div>}
               </div>
 
@@ -3626,19 +3637,19 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
       </div>
 
       {/* ── Resumen para el paciente ── */}
-      <div style={{background:"#2c3250", color:"#fff", borderRadius:12, padding:"17px 19px", marginTop:14}}>
-        <p style={{margin:0, fontSize:17, lineHeight:1.5}}>
+      <div style={{background:"#ffffff", color:"#1a1a1a", border:"2px solid #c9a84c", borderRadius:12, padding:"20px 22px", marginTop:14}}>
+        <p style={{margin:0, fontSize:24, lineHeight:1.35, fontWeight:600}}>
           {plan.modo === "cuotas"
-            ? <>Entrega de <b style={{fontSize:21, color:"#e4c86a"}}>{eur0(entrega)}</b> y {nCuotas} cuotas de <b style={{fontSize:21, color:"#e4c86a"}}>{eur2(cuota)}</b>.</>
-            : <>Empieza pagando <b style={{fontSize:21, color:"#e4c86a"}}>{eur0(calc.porMes[0]||0)}</b> y después paga cada vez que viene.</>}
+            ? <>Entrega de <b style={{fontSize:30, fontWeight:800}}>{eur0(entrega)}</b> y {nCuotas} cuotas de <b style={{fontSize:30, fontWeight:800}}>{eur2(cuota)}</b>.</>
+            : <>Empieza pagando <b style={{fontSize:30, fontWeight:800}}>{eur0(calc.porMes[0]||0)}</b> y después paga cada vez que viene.</>}
         </p>
-        <div style={{fontSize:13, opacity:0.82, marginTop:9, lineHeight:1.65}}>
+        <div style={{fontSize:16, color:"#333", marginTop:12, lineHeight:1.6}}>
           {meses.map(mes => {
             const nombres = [...new Set(txConMes.filter(t=>t.mes===mes).map(t=>t.nombre))];
             if (!nombres.length) return null;
-            return <div key={mes}><b style={{fontSize:13}}>Mes {mes}</b> — {nombres.join(", ")}</div>;
+            return <div key={mes}><b>Mes {mes}</b> — {nombres.join(", ")}</div>;
           })}
-          <div style={{opacity:0.7, marginTop:4}}>
+          <div style={{color:"#666", marginTop:8, fontSize:15}}>
             Tratamiento {eur2(calc.totalTratamiento)}
             {plan.modo === "cuotas" && ` · Plan ${eur2(calc.totalPlan)}`}
           </div>
@@ -3681,10 +3692,21 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
 // ─── PendientesDePago ────────────────────────────────────────────────────────
 // Seguimiento de los planes ya acordados. No es la agenda ni los recordatorios
 // de visita: esto es un compromiso económico.
-function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobrar }) {
+function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobrar, waClicks = [], onWaClick = () => {} }) {
   const [filtro, setFiltro] = useState("todos");
   const [cobrando, setCobrando] = useState(null);
   const hoy = today();
+
+  // Cómo de urgente es, en palabras
+  const textoVencimiento = (dias) =>
+    dias === 0 ? "vence HOY"
+    : dias === 1 ? "vence MAÑANA"
+    : dias > 0  ? `faltan ${dias} días`
+    : dias === -1 ? "venció AYER"
+    : `venció hace ${Math.abs(dias)} días`;
+
+  const colorVencimiento = (dias) =>
+    dias < 0 ? "#e74c3c" : dias <= 1 ? "#e67e22" : dias <= 5 ? "#c9a84c" : "#555";
 
   // Se listan todos, incluidos borradores y cancelados: si no, un plan al que
   // le cambiás el estado se vuelve inalcanzable, porque esta es la única
@@ -3695,9 +3717,13 @@ function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobra
       const paciente = patients.find(p => p.id === pl.patient_id);
       if (!paciente) return null;
       const propias = cuotas.filter(c => c.plan_id === pl.id);
-      const resumen = resumenPlan({ plan: pl, cuotas: propias, pagos, hoy });
+      const pagosPaciente = pagos.filter(pg => pg.patient_id === pl.patient_id);
+      const resumen = resumenPlan({ plan: pl, cuotas: propias, pagos, pagosPaciente, hoy });
       const avisos  = coberturaProxima({ plan: pl, cuotas: propias, pagos, hoy });
-      return { plan: pl, paciente, resumen, avisos };
+      const proxCita = (paciente.appointments || [])
+        .filter(a => a.date && a.date >= hoy)
+        .sort((a, b) => a.date.localeCompare(b.date))[0] || null;
+      return { plan: pl, paciente, resumen, avisos, proxCita };
     })
     .filter(Boolean)
     .filter(f => filtro === "todos" ? f.resumen.estado !== "cancelado" : f.resumen.estado === filtro)
@@ -3737,7 +3763,7 @@ function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobra
         </div>
       )}
 
-      {filas.map(({ plan, paciente, resumen, avisos }) => {
+      {filas.map(({ plan, paciente, resumen, avisos, proxCita }) => {
         // Un borrador o un cancelado se listan para poder abrirlos, pero no son
         // dinero comprometido: no se les reclama nada.
         const comprometido = resumen.estado !== "borrador" && resumen.estado !== "cancelado";
@@ -3788,26 +3814,70 @@ function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobra
             </div>
           </div>
 
-          {comprometido && resumen.proxima && (
-            <div style={{marginTop:10, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap",
-              background: resumen.proxima.estado === "vencido" ? "#fbedea" : "#f0f2f7",
-              borderRadius:8, padding:"8px 12px"}}>
-              <span style={{fontSize:12.5, color: resumen.proxima.estado === "vencido" ? "#7a2a18" : "#555"}}>
-                {resumen.proxima.estado === "vencido" ? "⚠ Cuota vencida sin cobrar" : "Próxima cuota"}
-                {": "}
-                <b>{resumen.proxima.concepto === "entrega" ? "Entrega"
-                  : resumen.proxima.concepto === "visita" ? `Pago del mes ${resumen.proxima.mes}`
-                  : `Cuota ${resumen.proxima.numero} de ${plan.n_cuotas || resumen.totalCuotas}`}</b>
-                {" · "}{fmtEur(resumen.proxima.importe)}
-                {" · vence "}{fmtDate(resumen.proxima.vence_el)}
-              </span>
-              <div style={{flex:1}}/>
-              <button onClick={()=>cobrar(plan, resumen.proxima)} disabled={cobrando === resumen.proxima.id}
-                style={{...s.btnGold, padding:"5px 14px", fontSize:12, opacity: cobrando === resumen.proxima.id ? 0.6 : 1}}>
-                {cobrando === resumen.proxima.id ? "Registrando..." : "Marcar cobrada"}
-              </button>
-            </div>
-          )}
+          {comprometido && resumen.proxima && (() => {
+            const q = resumen.proxima;
+            const dias = resumen.diasParaProxima;
+            const etiqueta = q.concepto === "entrega" ? "Entrega"
+              : q.concepto === "visita" ? `Pago del mes ${q.mes}`
+              : `Cuota ${q.numero} de ${plan.n_cuotas || resumen.totalCuotas}`;
+            const waKey  = `plancuota_${plan.id}_${q.numero}`;
+            const enviados = (waClicks.find(c => c.patient_id === paciente.id && c.button_key === waKey)?.count) || 0;
+            const nombre = ((paciente.name||"").trim().split(/\s+/)[0] || "")
+              .replace(/^./, c => c.toUpperCase()).replace(/(?<=^.).*/, t => t.toLowerCase());
+            const tel = paciente.phone ? (n => /^[6789]\d{8}$/.test(n) ? "34"+n : n)(paciente.phone.replace(/\D/g,"")) : null;
+
+            const msg = `Hola ${nombre} 😊\n\nSoy Martín de Clínica Dental IMPLANTDENT.\n\n`
+              + `Te escribo para recordarte que el ${fmtDate(q.vence_el)} `
+              + `${dias < 0 ? "venció" : "vence"} ${etiqueta.toLowerCase()} de tu plan de pago, `
+              + `por un importe de ${fmtEur(resumen.aCobrarAhora)}.`
+              + (resumen.arrastre > 0
+                  ? `\n\nEn ese importe están incluidos ${fmtEur(resumen.arrastre)} que quedaron pendientes de la cuota anterior.`
+                  : "")
+              + (proxCita ? `\n\nAdemás te recuerdo que tienes cita el ${fmtDate(proxCita.date)}.` : "")
+              + `\n\nCualquier cosa que necesites, me lo dices por aquí.\n\nUn saludo y que tengas un buen día ${nombre}`;
+
+            return (
+              <div style={{marginTop:10, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap",
+                background: dias < 0 ? "#fbedea" : dias <= 5 ? "#fdf4e3" : "#f0f2f7",
+                borderRadius:8, padding:"8px 12px"}}>
+                <span style={{fontSize:12.5, color:"#444"}}>
+                  <b>{etiqueta}</b>{" · "}{fmtEur(resumen.aCobrarAhora)}
+                  {resumen.arrastre > 0 && (
+                    <span style={{color:"#e74c3c"}}> (incluye {fmtEur(resumen.arrastre)} de atraso)</span>
+                  )}
+                  {" · vence "}{fmtDate(q.vence_el)}{" · "}
+                  <b style={{color:colorVencimiento(dias)}}>{textoVencimiento(dias)}</b>
+                </span>
+                <span style={{fontSize:12, color: proxCita ? "#3498db" : "#999", fontWeight:600}}>
+                  {proxCita ? `🗓 cita ${fmtDate(proxCita.date)}` : "sin cita agendada"}
+                </span>
+                <div style={{flex:1}}/>
+                {tel && (
+                  <div style={{position:"relative", display:"inline-flex"}}>
+                    <a href={`whatsapp://send?phone=${tel}&text=${encodeURIComponent(msg)}`}
+                      onClick={()=>onWaClick(paciente.id, waKey)}
+                      style={{fontSize:12, padding:"5px 12px", borderRadius:6, textDecoration:"none", fontWeight:600,
+                        background: enviados > 0 ? "#eeeeee" : "#25d36618",
+                        border:`1px solid ${enviados > 0 ? "#ccc" : "#25d36688"}`,
+                        color: enviados > 0 ? "#888" : "#25a244", whiteSpace:"nowrap"}}>
+                      {enviados > 0 ? "✓ recordatorio enviado" : "💬 recordar pago"}
+                    </a>
+                    {enviados > 0 && (
+                      <span style={{position:"absolute", top:-7, right:-7, background:"#25a244", color:"#fff",
+                        borderRadius:"50%", minWidth:16, height:16, fontSize:10, fontWeight:800,
+                        display:"flex", alignItems:"center", justifyContent:"center", padding:"0 3px", lineHeight:1}}>
+                        {enviados}
+                      </span>
+                    )}
+                  </div>
+                )}
+                <button onClick={()=>cobrar(plan, q)} disabled={cobrando === q.id}
+                  style={{...s.btnGold, padding:"5px 14px", fontSize:12, opacity: cobrando === q.id ? 0.6 : 1}}>
+                  {cobrando === q.id ? "Registrando..." : "Marcar cobrada"}
+                </button>
+              </div>
+            );
+          })()}
 
           {comprometido && resumen.vencidas.length > 1 && (
             <div style={{marginTop:6, fontSize:12, color:"#e74c3c"}}>
@@ -3832,8 +3902,21 @@ function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobra
 // ─── PlanesPanel ─────────────────────────────────────────────────────────────
 // Contenedor de la pestaña. "Pendientes de pago" es la pantalla de uso diario;
 // al tablero se llega casi siempre desde el botón del presupuesto.
-const txsParaPlan = (patient) => getTxItems(patient).map(t => ({
-  id: t.id, nombre: t.name || "", importe: parseFloat(t.value) || 0, pieza: "",
+// Factor del descuento del presupuesto (el selector 10/15/20/25%), para que el
+// plan trabaje con los mismos importes que el paciente ve en su presupuesto.
+const factorDescuento = (patient) => {
+  const items = getTxItems(patient);
+  const sub = items.reduce((a, t) => a + (parseFloat(t.value) || 0), 0);
+  const pct = getTxDiscountPct(patient);
+  if (!sub || !pct) return 1;
+  return applyDiscount(sub, pct, isPdfPriced(patient)).grand / sub;
+};
+
+// factor 1 = precio de tarifa. Pagando por visita el paciente pierde el
+// descuento, así que ahí se pasa 1 y no el factor del presupuesto.
+const txsParaPlan = (patient, factor = 1) => getTxItems(patient).map(t => ({
+  id: t.id, nombre: t.name || "", pieza: "",
+  importe: Math.round((parseFloat(t.value) || 0) * factor * 100) / 100,
 }));
 
 const colocacionPara = (txs) =>
@@ -3850,7 +3933,8 @@ const planParaPresupuesto = (patient, plans) => {
   return { ...emptyPlan(), colocacion, nMeses: Math.max(6, ultimo + 1) };
 };
 
-function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], onSavePlan, onDeletePlan, onCobrarCuota, presupuestoInicial = null }) {
+function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], waClicks = [], onWaClick = () => {},
+                       onSavePlan, onDeletePlan, onCobrarCuota, presupuestoInicial = null }) {
   const [tab,    setTab]    = useState(presupuestoInicial ? "tablero" : "pendientes");
   const [selId,  setSelId]  = useState(presupuestoInicial);
   const [filtro, setFiltro] = useState("");
@@ -3863,8 +3947,13 @@ function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], onSavePlan
   const [guardando, setGuardando] = useState(false);
   const fileRef = useRef();
 
-  const paciente     = patients.find(p => p.id === selId) || null;
-  const tratamientos = sueltos ? sueltos : (paciente ? txsParaPlan(paciente) : []);
+  const paciente = patients.find(p => p.id === selId) || null;
+  // Pagando por visita se pierde el descuento del presupuesto: los importes
+  // vuelven a tarifa. En modo cuotas se respeta el descuento acordado.
+  const descPct  = paciente ? getTxDiscountPct(paciente) : 0;
+  const pierdeDesc = plan.modo === "visita" && descPct > 0;
+  const factor   = !paciente || pierdeDesc ? 1 : factorDescuento(paciente);
+  const tratamientos = sueltos ? sueltos : (paciente ? txsParaPlan(paciente, factor) : []);
   const planesDelPaciente = paciente ? plans.filter(pl => pl.patient_id === paciente.id) : [];
   const yaGuardado = plans.some(pl => pl.id === plan.id);
 
@@ -3966,7 +4055,8 @@ function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], onSavePlan
 
       {tab === "pendientes" && (
         <PendientesDePago plans={plans} cuotas={cuotas} pagos={pagos} patients={patients}
-          onAbrirPlan={abrirPlan} onCobrar={onCobrarCuota}/>
+          onAbrirPlan={abrirPlan} onCobrar={onCobrarCuota}
+          waClicks={waClicks} onWaClick={onWaClick}/>
       )}
 
       {tab === "tablero" && !paciente && !sueltos && (
@@ -4077,6 +4167,17 @@ function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], onSavePlan
                   {pl.estado} · {fmtDate(pl.fecha_inicio)} · {pl.modo==="cuotas" ? `${pl.n_cuotas} cuotas` : "por visita"}
                 </button>
               ))}
+            </div>
+          )}
+
+          {descPct > 0 && (
+            <div style={{marginBottom:12, padding:"10px 14px", borderRadius:8, fontSize:13,
+              background: pierdeDesc ? "#fdf4e3" : "#e9f4ee",
+              color: pierdeDesc ? "#6e4c0c" : "#1c523b",
+              borderLeft:`3px solid ${pierdeDesc ? "#c8891b" : "#2ecc71"}`}}>
+              {pierdeDesc
+                ? <>Pagando <b>por visita</b> el paciente pierde el <b>{descPct}%</b> de descuento del presupuesto: los importes están a tarifa.</>
+                : <>Importes con el <b>{descPct}%</b> de descuento del presupuesto ya aplicado.</>}
             </div>
           )}
 
@@ -4291,6 +4392,23 @@ export default function App() {
     if (error) return;
     await supabase.from("payment_plan_cuotas").update({ payment_id: payId }).eq("id", cuota.id);
     await Promise.all([fetchPayments(), fetchPlanCuotas()]);
+  };
+
+  // Tras registrar pagos (a mano o desde el Excel diario) se reparten sobre las
+  // cuotas del plan del paciente. Sin esto un pago importado quedaría suelto y
+  // la cuota seguiría figurando como impaga aunque ya esté cobrada.
+  const conciliarPagosDePlan = async (patientId) => {
+    const activos = plans.filter(pl => pl.patient_id === patientId && pl.estado === "activo");
+    if (!activos.length) return;
+    const { data: pagosPac } = await supabase.from("payments").select("*").eq("patient_id", patientId);
+    for (const pl of activos) {
+      const { data: cuotasPl } = await supabase.from("payment_plan_cuotas").select("*").eq("plan_id", pl.id);
+      const marcar = conciliarCuotas({ cuotas: cuotasPl || [], pagosPaciente: pagosPac || [] });
+      for (const m of marcar) {
+        await supabase.from("payment_plan_cuotas").update({ payment_id: m.paymentId }).eq("id", m.cuotaId);
+      }
+    }
+    await fetchPlanCuotas();
   };
 
   const deletePlan = async (planId) => {
@@ -4803,7 +4921,8 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
             </div>
             <PatientForm patient={editing} onSave={savePatient} onCancel={()=>{goBack();setEditing(null);}} templates={templates}
               payments={payments} onPaymentsChange={fetchPayments} isNew={!allPatients.some(x=>x.id===editing.id)}
-              onArmarPlan={(p)=>{ ensureArchived(); setPlanPara(p.id); navigate("planes"); }}/>
+              onArmarPlan={(p)=>{ ensureArchived(); setPlanPara(p.id); navigate("planes"); }}
+              onPagoAplicado={conciliarPagosDePlan}/>
           </>
         )}
 
@@ -4974,6 +5093,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
 
         {!dbLoading && view==="pagos" && (
           <PagosExcelPanel patients={[...patients,...archivedPatients]} payments={payments} onPaymentsChange={fetchPayments}
+            onPagoAplicado={conciliarPagosDePlan}
             onDebtCleared={async (patient) => {
               await insertTreatmentItems({...patient, status:"cerrado sin deuda", closed:true});
               await Promise.all([fetchItems(), fetchPayments(), fetchPatients()]);
@@ -4997,6 +5117,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
 
         {!dbLoading && view==="planes" && (
           <PlanesPanel key={planPara || "libre"} patients={allPatients} plans={plans} cuotas={planCuotas} pagos={payments}
+            waClicks={waClicks} onWaClick={incWaClick}
             onSavePlan={savePlan} onDeletePlan={deletePlan} onCobrarCuota={cobrarCuota} presupuestoInicial={planPara}/>
         )}
 

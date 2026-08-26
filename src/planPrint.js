@@ -6,6 +6,8 @@
 // Es lo que se le entrega al paciente en mano, así que va sin ningún control y
 // con cuerpo de letra grande: se lee en la silla, no en una pantalla.
 
+import { addMeses as addMesesISO } from "./planCalc.js";
+
 const eur0 = (n) => `${Math.round(n).toLocaleString("es-ES")} €`;
 const eur2 = (n) => `${n.toLocaleString("es-ES",{minimumFractionDigits:2,maximumFractionDigits:2})} €`;
 const fecha = (s) => { if (!s) return ""; const [y,m,d] = String(s).split("-"); return `${d}/${m}/${y}`; };
@@ -18,37 +20,39 @@ export const estilosPlanImpreso = `
   @page{size:A4 landscape;margin:7mm;}
   *{box-sizing:border-box;}
   body{font-family:'DM Sans','Segoe UI',sans-serif;font-size:13pt;color:#12211f;margin:0;}
-  .top{display:flex;align-items:center;gap:14px;border-bottom:3px solid #c9a84c;padding-bottom:2.5mm;margin-bottom:3mm;}
+  .top{display:flex;align-items:center;gap:14px;border-bottom:3px solid #c9a84c;padding-bottom:2mm;margin-bottom:2.5mm;}
   .top img{width:74px;height:auto;}
-  .top h1{font-size:26pt;margin:0;letter-spacing:.04em;text-transform:uppercase;line-height:1;}
-  .top .who{font-size:13.5pt;color:#444;margin-top:1mm;}
+  .top h1{font-size:23pt;margin:0;letter-spacing:.04em;text-transform:uppercase;line-height:1;}
+  .top .who{font-size:12.5pt;color:#444;margin-top:1mm;}
   .board{display:grid;grid-template-columns:repeat(6,1fr);gap:2.5mm;}
   .col{border:1.5px solid #b8b8b8;border-radius:6px;display:flex;flex-direction:column;break-inside:avoid;}
   .ch{padding:2mm 2.5mm;border-bottom:1.5px solid #d8d8d8;}
   .ch .m{font-size:12.5pt;letter-spacing:.03em;text-transform:uppercase;color:#555;font-weight:700;}
-  .ch .t{font-size:29pt;font-weight:800;line-height:1.05;}
+  .ch .t{font-size:26pt;font-weight:800;line-height:1.05;}
   .ch .t.zero{color:#ccc;}
-  .ch .k{font-size:12.5pt;color:#555;font-weight:600;}
-  .bd{padding:2mm;display:flex;flex-direction:column;gap:1.5mm;flex:1;}
+  .ch .v{font-size:12.5pt;color:#0e3b3e;font-weight:800;line-height:1.25;}
+  .ch .k{font-size:12pt;color:#555;font-weight:600;}
+  .bd{padding:1.8mm;display:flex;flex-direction:column;gap:1.2mm;flex:1;}
   .chip{background:#f2efe9;border-radius:5px;padding:1.5mm 2mm;line-height:1.18;}
-  .chip b{display:block;font-weight:700;font-size:14pt;}
-  .chip i{font-style:normal;color:#444;font-size:14pt;font-weight:700;}
+  .chip b{display:block;font-weight:700;font-size:13pt;}
+  .chip i{font-style:normal;color:#444;font-size:13pt;font-weight:700;}
   .st{margin-top:auto;padding:1.5mm 2mm;border-radius:5px;font-size:14pt;font-weight:800;
       display:flex;justify-content:space-between;gap:4px;
       -webkit-print-color-adjust:exact;print-color-adjust:exact;}
   .st span{white-space:nowrap;}
   .st.ok{background:#d9ede2;color:#155c3d;}
   .st.bad{background:#f9dcd6;color:#8c2d16;}
-  .say{background:#2c3250;color:#fff;border-radius:8px;padding:2.5mm 3.5mm;margin-top:2.5mm;
+  .say{background:#fff;color:#111;border:2.5px solid #c9a84c;border-radius:8px;
+       padding:2.5mm 3.5mm;margin-top:2.5mm;
        -webkit-print-color-adjust:exact;print-color-adjust:exact;}
-  .say p{margin:0;font-size:21pt;line-height:1.2;}
+  .say p{margin:0;font-size:20pt;line-height:1.2;font-weight:600;}
   /* solo los importes del titular van en grande: si esto alcanza a los "Mes N"
      del resumen, la hoja se va a dos páginas */
-  .say p b{font-size:27pt;color:#e4c86a;font-weight:800;}
+  .say p b{font-size:25pt;font-weight:800;}
   /* a dos columnas: el detalle por mes repite lo que ya muestra el tablero,
      así que no puede comerse media hoja */
-  .say .sub{font-size:13pt;opacity:.92;margin-top:1.5mm;line-height:1.3;column-count:2;column-gap:8mm;}
-  .say .sub b{color:#e4c86a;font-weight:700;}
+  .say .sub{font-size:12.5pt;color:#222;margin-top:1.5mm;line-height:1.3;column-count:2;column-gap:8mm;}
+  .say .sub b{font-weight:700;}
   .say .sub>div{break-inside:avoid;}
   .avisos{display:flex;gap:2.5mm;align-items:stretch;margin-top:2mm;break-inside:avoid;}
   .avisos>*{flex:1;}
@@ -70,18 +74,20 @@ export function htmlPlanImpreso({ plan, paciente, der, logoUrl = "" }) {
       if (mes === 1 && entrega > 0) sub = "Entrega";
       else if (mes >= inicioQ && mes < inicioQ + nCuotas) sub = `Cuota ${mes-inicioQ+1} de ${nCuotas}`;
     }
-    const dif = items.length ? calc.ejecutadoAcum[mes-1] - calc.cobradoAcum[mes-1] : null;
+    // En la hoja del paciente solo se avisa de lo que falta. El "Cubierto" es
+    // información de gestión interna y no aporta nada a quien la recibe.
+    const falta = items.length ? calc.ejecutadoAcum[mes-1] - calc.cobradoAcum[mes-1] : 0;
+    // Fecha real de vencimiento: es lo que compromete al paciente a un día
+    const vence = plan.fechaInicio ? fecha(addMesesISO(plan.fechaInicio, mes - 1)) : "";
     return `<div class="col">
       <div class="ch">
         <div class="m">${mes === 1 ? "Hoy · Mes 1" : `Mes ${mes}`}</div>
         <div class="t${importe < 0.5 ? " zero" : ""}">${importe < 0.5 ? "—" : eur0(importe)}</div>
-        ${sub ? `<div class="k">${sub}</div>` : ""}
+        ${vence || sub ? `<div class="v">${vence}${vence && sub ? ` · <span class="k">${sub}</span>` : sub}</div>` : ""}
       </div>
       <div class="bd">
         ${items.map(t => `<div class="chip"><b>${esc(t.nombre)}${t.pieza ? ` · ${esc(t.pieza)}` : ""}</b><i>${eur0(t.importe)}</i></div>`).join("")}
-        ${dif === null ? "" : `<div class="st ${dif > 0.5 ? "bad" : "ok"}">
-          <span>${dif > 0.5 ? "Faltan" : "Cubierto"}</span><span>${dif > 0.5 ? eur0(dif) : `+${eur0(-dif)}`}</span>
-        </div>`}
+        ${falta > 0.5 ? `<div class="st bad"><span>Faltan</span><span>${eur0(falta)}</span></div>` : ""}
       </div>
     </div>`;
   }).join("");
