@@ -35,9 +35,8 @@ const parsePDF = async (file) => {
   const rx = /(\d{4})\s+\d+\s+(.+?)\s+([\d]+[.,]\d{2})\s*€\s+([\d]+[.,]\d{2})\s*€\s+(\d+)%\s+([\d]+[.,]\d{2})\s*€/g;
   let m;
   while ((m = rx.exec(txt)) !== null) {
-    const base  = parseFloat(m[6].replace(",","."));
-    const value = parseFloat((base * 1.1).toFixed(2));
-    treatments.push({ id:genId(), name:m[2].trim(), value:String(value), discount:"0" });
+    const value = parseFloat(m[6].replace(",","."));
+    treatments.push({ id:genId(), name:m[2].trim(), value:String(value), discount:m[5] });
   }
   const phone = get(/Móv\.?\s*[\/]\s*Tel[eé]f\.?\s*:?\s*([\d\s\+\(\)\-\.]{6,})/i).replace(/[\s\.]/g,"").replace(/\/$/, "");
   return { hc, name, dni, budgetNo, date, time:"", phone, treatments };
@@ -171,16 +170,35 @@ const getTxDiscountPct = (patient) => {
   const raw = patient.treatments;
   return Array.isArray(raw) ? 0 : (parseInt(raw?.discountPct) || 0);
 };
-const applyDiscount = (subtotal, pct) => {
+// Presupuestos viejos: los importes se guardaban inflados ×1.1 y el "descuento 10%"
+// los devolvía al precio del PDF. Los nuevos (priceMode "pdf") guardan el importe tal
+// cual viene del PDF, así que el descuento se resta de forma directa.
+const isPdfPriced = (patient) => {
+  const raw = patient?.treatments;
+  return !Array.isArray(raw) && raw?.priceMode === "pdf";
+};
+const applyDiscount = (subtotal, pct, pdfPriced = false) => {
   if (pct === 0 || subtotal === 0) return { discAmt: 0, grand: subtotal };
-  const discAmt = parseFloat((subtotal - (subtotal / 1.1) * (1 - Math.max(0, pct - 10) / 100)).toFixed(2));
+  const discAmt = pdfPriced
+    ? parseFloat((subtotal * pct / 100).toFixed(2))
+    : parseFloat((subtotal - (subtotal / 1.1) * (1 - Math.max(0, pct - 10) / 100)).toFixed(2));
   return { discAmt, grand: parseFloat((subtotal - discAmt).toFixed(2)) };
 };
 const patientGrand = (patient) => {
   const items = getTxItems(patient);
   const pct   = getTxDiscountPct(patient);
   const sub   = items.reduce((a, t) => a + (parseFloat(t.value) || 0), 0);
-  return applyDiscount(sub, pct).grand;
+  return applyDiscount(sub, pct, isPdfPriced(patient)).grand;
+};
+// % de descuento que ya trae aplicado el PDF, por línea
+const getPdfDiscountPcts = (patient) => {
+  const pcts = getTxItems(patient).map(t => parseInt(t.discount) || 0).filter(n => n > 0);
+  return [...new Set(pcts)].sort((a, b) => a - b);
+};
+const pdfDiscountLabel = (patient) => {
+  const pcts = getPdfDiscountPcts(patient);
+  if (pcts.length === 0) return null;
+  return pcts.length === 1 ? `${pcts[0]}%` : `${pcts[0]}–${pcts[pcts.length-1]}%`;
 };
 const fmtDate  = (s) => { if(!s) return ""; const [y,mo,d]=s.split("-"); return `${d}/${mo}/${y}`; };
 const ordinal  = (n, lang) => {
@@ -258,7 +276,8 @@ const exportToPDF = async (patient, lang, setExporting, patPayments=[], template
   }
   const t     = T[lang];
   const subtotal   = treatments.reduce((a,tr)=>a+(parseFloat(tr.value)||0),0);
-  const { discAmt, grand } = applyDiscount(subtotal, discPct);
+  const pdfPriced  = patient.pdfPriced !== undefined ? patient.pdfPriced : isPdfPriced(patient);
+  const { discAmt, grand } = applyDiscount(subtotal, discPct, pdfPriced);
   const pdfFactor  = subtotal > 0 && discPct > 0 ? grand / subtotal : 1;
   const totalPaid  = (patPayments||[]).reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
   const remaining  = grand - totalPaid;
@@ -407,8 +426,12 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
   const [p, setP] = useState(() => {
     const raw = patient.treatments;
     const items = Array.isArray(raw) ? raw : (raw?.items || []);
-    const discountPct = Array.isArray(raw) ? "10" : (raw?.discountPct || "10");
-    return { ...patient, treatments: items, discountPct };
+    // solo modo "precio del PDF" si está marcado, o si es un presupuesto realmente vacío
+    const pdfPriced = isPdfPriced(patient) || (isNew && items.length === 0);
+    const storedPct = Array.isArray(raw) ? undefined : raw?.discountPct;
+    const discountPct = (storedPct === undefined || storedPct === null || storedPct === "")
+      ? (pdfPriced ? "0" : "10") : String(storedPct);
+    return { ...patient, treatments: items, discountPct, pdfPriced };
   });
   const [msg, setMsg]       = useState("");
   const [loading, setL]     = useState(false);
@@ -460,8 +483,9 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
 
   const subtotal   = p.treatments.reduce((a,t)=>a+(parseFloat(t.value)||0),0);
   const discPct    = parseInt(p.discountPct)||0;
-  const { discAmt, grand } = applyDiscount(subtotal, discPct);
+  const { discAmt, grand } = applyDiscount(subtotal, discPct, p.pdfPriced);
   const discFactor = subtotal > 0 && discPct > 0 ? grand / subtotal : 1;
+  const pdfDiscLabel = pdfDiscountLabel({ treatments: p.treatments });
 
   const patPayments = payments.filter(pay => pay.patient_id === p.id);
   const totalPaid   = patPayments.reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
@@ -493,7 +517,10 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
       setP(prev=>({...prev, name:parsed.name||prev.name, hc:parsed.hc||prev.hc,
         dni:parsed.dni||prev.dni, budgetNo:parsed.budgetNo||prev.budgetNo, date:parsed.date||prev.date,
         phone:parsed.phone||prev.phone,
-        treatments:parsed.treatments.length?parsed.treatments:prev.treatments }));
+        treatments:parsed.treatments.length?parsed.treatments:prev.treatments,
+        // los importes importados son los del PDF: descuento directo, sin inflar
+        pdfPriced:parsed.treatments.length?true:prev.pdfPriced,
+        discountPct:parsed.treatments.length?"0":prev.discountPct }));
       setMsg(`✓ ${parsed.treatments.length} tratamiento(s) importados`);
     } catch(e) { setMsg("Error al leer el PDF — completá manualmente"); }
     setL(false); e.target.value="";
@@ -594,6 +621,12 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
           <option value="20">Descuento 20%</option>
           <option value="25">Descuento 25%</option>
         </select>
+        {pdfDiscLabel && (
+          <span title="Descuento que ya trae aplicado el PDF importado"
+            style={{fontSize:12,background:"#2ecc7118",border:"1px solid #2ecc7155",borderRadius:6,color:"#1e8449",fontWeight:600,padding:"6px 10px"}}>
+            El PDF ya trae {pdfDiscLabel} de dto.
+          </span>
+        )}
       </div>
       {tab==="treatments" && (
         <div style={{marginBottom:16}}>
@@ -767,6 +800,7 @@ function AlertCard({ patient, onOpen }) {
 // ─── PatientCard ──────────────────────────────────────────────────────────────
 function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[], onOpen=null, templates=[], waClicks=[], onWaClick=()=>{} }) {
   const grand = patientGrand(patient);
+  const pdfDisc = pdfDiscountLabel(patient);
   const totalPaid = patientPayments.reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
   const hasPending = patientPayments.length > 0 && totalPaid < grand;
   const days = daysDiff(patient.last_contact);
@@ -848,6 +882,7 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
           <span>{upcomingCount} cita(s)</span>
           {nextAppt && <span style={{color:"#3498db",fontWeight:600}}>· 🗓 Próx: {fmtDate(nextAppt.date)}{nextAppt.label?` — ${nextAppt.label}`:""}</span>}
           <span>· <span style={{color:"#c9a84c",fontWeight:600}}>{fmtEur(grand)}</span></span>
+          {pdfDisc && <span title="Descuento que ya trae aplicado el PDF" style={{background:"#2ecc7118",border:"1px solid #2ecc7155",borderRadius:5,color:"#1e8449",fontWeight:600,padding:"0 6px"}}>Dto. PDF {pdfDisc}</span>}
           {hasPending && <span style={{color:"#e74c3c",fontWeight:600}}>· Deuda: {fmtEur(grand-totalPaid)}</span>}
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-start",marginTop:8}}>
@@ -3402,7 +3437,7 @@ export default function App() {
     const payload = {
       name:p.name, hc:p.hc, dni:p.dni||"", budget_no:p.budgetNo||p.budget_no, date:p.date, time:p.time,
       phone:p.phone||"",
-      treatments:{ items: p.treatments, discountPct: p.discountPct||"0" },
+      treatments:{ items: p.treatments, discountPct: p.discountPct||"0", priceMode: p.pdfPriced ? "pdf" : "legacy" },
       appointments:p.appointments||[], reminders:p.reminders||[], notes:p.notes, history:p.history||[],
       status:p.status||"pendiente", last_contact:p.last_contact||today(), closed:isCerrado(p.status),
     };
@@ -3969,7 +4004,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
               )}
             </div>
             <PatientForm patient={editing} onSave={savePatient} onCancel={()=>{goBack();setEditing(null);}} templates={templates}
-              payments={payments} onPaymentsChange={fetchPayments} isNew={!patients.some(x=>x.id===editing.id)}/>
+              payments={payments} onPaymentsChange={fetchPayments} isNew={!allPatients.some(x=>x.id===editing.id)}/>
           </>
         )}
 
