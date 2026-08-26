@@ -1,20 +1,8 @@
 ﻿import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase";
 import { translateTreatment, setTranslationDict } from "./treatments";
+import { loadPdfJs } from "./pdfjs";
 import * as XLSX from "xlsx";
-
-// ─── PDF.js ───────────────────────────────────────────────────────────────────
-const loadPdfJs = () => new Promise((resolve) => {
-  if (window.pdfjsLib) { resolve(window.pdfjsLib); return; }
-  const s = document.createElement("script");
-  s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
-  s.onload = () => {
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-    resolve(window.pdfjsLib);
-  };
-  document.head.appendChild(s);
-});
 
 const parsePDF = async (file) => {
   const lib = await loadPdfJs();
