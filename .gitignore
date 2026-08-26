@@ -25,3 +25,6 @@ dist-ssr
 
 .vercel
 .env*.local
+
+# Caché del CLI de Supabase (incluye la URL de conexión a la base)
+supabase/.temp
