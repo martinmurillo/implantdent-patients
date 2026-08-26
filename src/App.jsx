@@ -42,6 +42,22 @@ const parsePDF = async (file) => {
   return { hc, name, dni, budgetNo, date, time:"", phone, treatments };
 };
 
+// Al reimportar un PDF hay que conservar el id de las líneas que ya existían:
+// appointments[].treatmentIds y los planes de pago apuntan a esos ids. Las líneas
+// repetidas (dos implantes del mismo importe) se reparten en orden de aparición.
+const reuseTxIds = (prevItems, newItems) => {
+  const key  = (t) => `${(t.name||"").trim().toLowerCase()}|${parseFloat(t.value)||0}`;
+  const pool = new Map();
+  for (const t of prevItems || []) {
+    if (!pool.has(key(t))) pool.set(key(t), []);
+    pool.get(key(t)).push(t.id);
+  }
+  return newItems.map(t => {
+    const q = pool.get(key(t));
+    return q && q.length ? { ...t, id: q.shift() } : t;
+  });
+};
+
 // ─── PIN AUTH ────────────────────────────────────────────────────────────────
 const PIN_HASH = "5409cbc4848a7d07b30a475b98165ea5b25a13fc0982eccab3fa679365ffa0ca";
 const hashPin  = async (pin) => {
@@ -318,7 +334,7 @@ const exportToPDF = async (patient, lang, setExporting, patPayments=[], template
   .sig-block{display:flex;align-items:flex-end;gap:10px;margin-bottom:28px}.sig-line{border-bottom:1px solid #1e2230;width:240px;height:44px}
   .sig-lbl{font-size:11px;color:#888;letter-spacing:1px}.legal{font-size:10px;color:#999;line-height:1.7;border-top:1px solid #eee;padding-top:12px}
   </style></head><body>
-  <div class="header"><img src="http://localhost:5173/logo.png" class="logo" alt="Logo"/>
+  <div class="header"><img src="${window.location.origin}/logo.png" class="logo" alt="Logo"/>
   <div class="header-center"><h1>${t.budget}</h1><p>${fmtDate(patient.date)}${patient.time?" · "+patient.time:""}</p></div>
   <div class="spacer"></div></div>
   <div class="info-grid">
@@ -517,7 +533,7 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
       setP(prev=>({...prev, name:parsed.name||prev.name, hc:parsed.hc||prev.hc,
         dni:parsed.dni||prev.dni, budgetNo:parsed.budgetNo||prev.budgetNo, date:parsed.date||prev.date,
         phone:parsed.phone||prev.phone,
-        treatments:parsed.treatments.length?parsed.treatments:prev.treatments,
+        treatments:parsed.treatments.length?reuseTxIds(prev.treatments, parsed.treatments):prev.treatments,
         // los importes importados son los del PDF: descuento directo, sin inflar
         pdfPriced:parsed.treatments.length?true:prev.pdfPriced,
         discountPct:parsed.treatments.length?"0":prev.discountPct }));
