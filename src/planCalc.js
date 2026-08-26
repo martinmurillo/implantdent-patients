@@ -47,6 +47,16 @@ export const tipoTratamiento = (nombre) => {
   return "otro";
 };
 
+// Deshace el descuento por línea del PDF: el importe guardado es el neto, y
+// esto devuelve el precio de tarifa. Es lo que se cobra cuando el paciente
+// paga según se va haciendo, porque ahí pierde el descuento.
+export const precioSinDescuento = (neto, dtoPct) => {
+  const n = Number(neto) || 0;
+  const d = Number(dtoPct) || 0;
+  if (d <= 0 || d >= 100) return round2(n);
+  return round2(n / (1 - d / 100));
+};
+
 // Los que conviene no empezar sin tenerlos cobrados
 export const esCaro = (nombre) => tipoTratamiento(nombre) !== "otro";
 

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   addMeses, sumarDias, cuotaSugerida, totalTratamientos,
   calcPlan, cuotasDelPlan, estadoCuota, resumenPlan, coberturaProxima,
-  diasEntre, conciliarCuotas,
+  diasEntre, conciliarCuotas, precioSinDescuento,
 } from "./planCalc.js";
 
 // ─── Fechas ──────────────────────────────────────────────────────────────────
@@ -642,5 +642,31 @@ describe("conciliarCuotas", () => {
     const c = [{ id:"c1", numero:1, vence_el:"2026-06-30", importe:426.74, payment_id:null }];
     const pagosPaciente = [{ id:"pg1", amount:426.74, date:"2026-06-30" }];
     assert.equal(conciliarCuotas({ cuotas: c, pagosPaciente }).length, 1);
+  });
+});
+
+describe("precioSinDescuento", () => {
+  test("deshace el descuento del PDF y devuelve el precio de tarifa", () => {
+    // caso real: corona con 10% de dto. guardada como 535,50
+    assert.equal(precioSinDescuento(535.5, 10), 595);
+    assert.equal(precioSinDescuento(45, 10), 50);
+    assert.equal(precioSinDescuento(445.5, 10), 495);
+  });
+
+  test("es la inversa exacta de aplicar el descuento", () => {
+    const tarifa = 764.15;
+    for (const dto of [5, 10, 15, 20, 25]) {
+      const neto = Math.round(tarifa * (1 - dto/100) * 100) / 100;
+      assert.ok(Math.abs(precioSinDescuento(neto, dto) - tarifa) < 0.02, `dto ${dto}`);
+    }
+  });
+
+  test("sin descuento devuelve el mismo importe", () => {
+    assert.equal(precioSinDescuento(535.5, 0), 535.5);
+    assert.equal(precioSinDescuento(535.5, null), 535.5);
+  });
+
+  test("no divide por cero con un descuento del 100%", () => {
+    assert.equal(precioSinDescuento(535.5, 100), 535.5);
   });
 });

@@ -3,7 +3,8 @@ import { supabase } from "./supabase";
 import { translateTreatment, setTranslationDict } from "./treatments";
 import { loadPdfJs } from "./pdfjs";
 import { calcPlan, cuotaSugerida, totalTratamientos, cuotasDelPlan,
-         resumenPlan, coberturaProxima, addMeses, conciliarCuotas } from "./planCalc";
+         resumenPlan, coberturaProxima, addMeses, conciliarCuotas,
+         precioSinDescuento } from "./planCalc";
 import { colocacionInicial, parsePlanPDF, importeFila } from "./pdfPlan";
 import { htmlPlanImpreso } from "./planPrint";
 import * as XLSX from "xlsx";
@@ -812,7 +813,7 @@ function AlertCard({ patient, onOpen }) {
 }
 
 // ─── PatientCard ──────────────────────────────────────────────────────────────
-function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[], onOpen=null, templates=[], waClicks=[], onWaClick=()=>{} }) {
+function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[], onOpen=null, templates=[], waClicks=[], onWaClick=()=>{}, plans=[], planCuotas=[] }) {
   const grand = patientGrand(patient);
   const pdfDisc = pdfDiscountLabel(patient);
   const totalPaid = patientPayments.reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
@@ -828,6 +829,21 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
   const hasOrtho   = txNames.some(n=>n.includes("ortodoncia"));
   const hasImplant = txNames.some(n=>n.includes("implante"));
   const historyEntries = [...(patient.history||[])].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,3);
+
+  // Resumen del plan de pago acordado, para no tener que abrirlo
+  const planResumen = (() => {
+    const pl = plans.find(x => x.patient_id === patient.id && x.estado === "activo");
+    if (!pl) return null;
+    const propias = planCuotas.filter(c => c.plan_id === pl.id);
+    const pagadas = propias.filter(c => c.payment_id).length;
+    const texto = pl.modo === "cuotas"
+      ? `Entrega ${fmtEur(pl.entrega)} y ${pl.n_cuotas} cuotas de ${fmtEur(pl.importe_cuota)}`
+      : `Paga según se va haciendo${parseFloat(pl.entrega) > 0 ? ` · entrega ${fmtEur(pl.entrega)}` : ""}`;
+    const detalle = propias.length
+      ? `${pagadas} de ${propias.length} cobradas · inicio ${fmtDate(pl.fecha_inicio)}`
+      : `inicio ${fmtDate(pl.fecha_inicio)}`;
+    return { texto, detalle };
+  })();
   const todayStr = new Date().toISOString().slice(0,10);
   const nextAppt = (patient.appointments||[])
     .filter(a=>a.date&&a.date>=todayStr)
@@ -940,6 +956,16 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
       </div>
       {/* ── History sidebar ── */}
       <div style={{flex:1,minWidth:0,borderLeft:"1px solid #e2e5ed",marginLeft:18,paddingLeft:16,display:"flex",flexDirection:"column",justifyContent:"flex-start",gap:6}}>
+        {planResumen && (
+          <div style={{background:"#f7f3e6",border:"1px solid #c9a84c66",borderLeft:"3px solid #c9a84c",
+            borderRadius:7,padding:"6px 9px",marginBottom:2}}>
+            <div style={{fontSize:10,color:"#a07830",letterSpacing:1,fontWeight:700}}>PLAN DE PAGO</div>
+            <div style={{fontSize:12.5,color:"#2c3250",fontWeight:600,lineHeight:1.35}}>{planResumen.texto}</div>
+            {planResumen.detalle && (
+              <div style={{fontSize:11.5,color:"#777",marginTop:1}}>{planResumen.detalle}</div>
+            )}
+          </div>
+        )}
         {historyEntries.length === 0
           ? <span style={{fontSize:12,color:"#ccc",fontStyle:"italic",marginTop:4}}>Sin historial</span>
           : historyEntries.map(e => (
@@ -3368,7 +3394,7 @@ function PresupuestosExcelPanel({ patients, onRefresh }) {
 // quien lo persiste.
 const emptyPlan = () => ({
   id: genId(),
-  modo:"visita", entrega:"0", techoMes:"0",
+  modo:"visita", entrega:"0", entregaVisita:"0", techoMes:"0",
   nCuotas:"5", importeCuota:"0", cuotaManual:false, mesInicioCuotas:"2",
   nMeses:6, colocacion:{},
   fechaInicio: today(), notas:"", estado:"activo",
@@ -3381,7 +3407,9 @@ const eur2 = (n) => `${n.toLocaleString("es-ES",{minimumFractionDigits:2,maximum
 // pintar) y el panel (para guardar), así que vive en un solo sitio.
 const planDerivado = (plan, tratamientos) => {
   const txConMes = tratamientos.map(t => ({ ...t, mes: plan.colocacion[t.id] || 1 }));
-  const entrega  = parseFloat(plan.entrega) || 0;
+  // Cada modo tiene su propia entrega: al comparar las dos opciones con el
+  // paciente, borrarla en una no puede borrarla en la otra.
+  const entrega  = parseFloat(plan.modo === "visita" ? plan.entregaVisita : plan.entrega) || 0;
   const nCuotas  = parseInt(plan.nCuotas) || 0;
   const inicioQ  = Math.max(1, parseInt(plan.mesInicioCuotas) || 1);
   const sugerida = cuotaSugerida(totalTratamientos(txConMes), entrega, nCuotas);
@@ -3404,7 +3432,8 @@ const planDerivado = (plan, tratamientos) => {
 const planDesdeFila = (row) => ({
   id: row.id,
   modo: row.modo || "visita",
-  entrega: String(row.entrega ?? "0"),
+  entrega:       row.modo === "visita" ? "0" : String(row.entrega ?? "0"),
+  entregaVisita: row.modo === "visita" ? String(row.entrega ?? "0") : "0",
   techoMes: String(row.techo_mes ?? "0"),
   nCuotas: String(row.n_cuotas ?? "0"),
   importeCuota: String(row.importe_cuota ?? "0"),
@@ -3508,7 +3537,7 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
       <div className="np" style={{...s.card, display:"flex", gap:10, flexWrap:"wrap", alignItems:"flex-end", marginBottom:14}}>
         {plan.modo === "visita" ? (
           <>
-            {campo("Entrega hoy", plan.entrega, v=>set("entrega",v), {props:{step:50, min:0}})}
+            {campo("Entrega hoy", plan.entregaVisita, v=>set("entregaVisita",v), {props:{step:50, min:0}})}
             {campo("Techo por mes", plan.techoMes, v=>set("techoMes",v), {props:{step:25, min:0}})}
             <div style={{flex:2, minWidth:180, fontSize:12, color:"#777", paddingBottom:9}}>
               La entrega se descuenta de los primeros meses. El techo marca en rojo los meses que lo superan.
@@ -3912,12 +3941,21 @@ const factorDescuento = (patient) => {
   return applyDiscount(sub, pct, isPdfPriced(patient)).grand / sub;
 };
 
-// factor 1 = precio de tarifa. Pagando por visita el paciente pierde el
-// descuento, así que ahí se pasa 1 y no el factor del presupuesto.
-const txsParaPlan = (patient, factor = 1) => getTxItems(patient).map(t => ({
-  id: t.id, nombre: t.name || "", pieza: "",
-  importe: Math.round((parseFloat(t.value) || 0) * factor * 100) / 100,
-}));
+// El importe guardado es el NETO: ya trae aplicado el descuento por línea del
+// PDF (discount) y el value es lo que quedó tras esa rebaja.
+//
+// sinDescuento deshace esa rebaja y devuelve el precio de tarifa — es lo que
+// pasa cuando el paciente paga según se va haciendo, que pierde el descuento.
+// factor aplica además el descuento del selector del presupuesto, si lo hay.
+const txsParaPlan = (patient, { sinDescuento = false, factor = 1 } = {}) =>
+  getTxItems(patient).map(t => {
+    const neto = parseFloat(t.value) || 0;
+    const base = sinDescuento ? precioSinDescuento(neto, parseInt(t.discount) || 0) : neto;
+    return {
+      id: t.id, nombre: t.name || "", pieza: "",
+      importe: Math.round(base * factor * 100) / 100,
+    };
+  });
 
 const colocacionPara = (txs) =>
   Object.fromEntries(colocacionInicial(txs).map(t => [t.id, t.mes]));
@@ -3950,10 +3988,14 @@ function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], waClicks =
   const paciente = patients.find(p => p.id === selId) || null;
   // Pagando por visita se pierde el descuento del presupuesto: los importes
   // vuelven a tarifa. En modo cuotas se respeta el descuento acordado.
-  const descPct  = paciente ? getTxDiscountPct(paciente) : 0;
-  const pierdeDesc = plan.modo === "visita" && descPct > 0;
-  const factor   = !paciente || pierdeDesc ? 1 : factorDescuento(paciente);
-  const tratamientos = sueltos ? sueltos : (paciente ? txsParaPlan(paciente, factor) : []);
+  const descPct   = paciente ? getTxDiscountPct(paciente) : 0;          // selector del presupuesto
+  const dtoPdf    = paciente ? pdfDiscountLabel(paciente) : null;       // descuento por línea del PDF
+  const esVisita  = plan.modo === "visita";
+  const pierdeDesc = esVisita && (dtoPdf !== null || descPct > 0);
+  const tratamientos = sueltos ? sueltos : (paciente ? txsParaPlan(paciente, {
+    sinDescuento: esVisita,
+    factor: esVisita ? 1 : factorDescuento(paciente),
+  }) : []);
   const planesDelPaciente = paciente ? plans.filter(pl => pl.patient_id === paciente.id) : [];
   const yaGuardado = plans.some(pl => pl.id === plan.id);
 
@@ -4170,14 +4212,20 @@ function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], waClicks =
             </div>
           )}
 
-          {descPct > 0 && (
+          {(dtoPdf !== null || descPct > 0) && (
             <div style={{marginBottom:12, padding:"10px 14px", borderRadius:8, fontSize:13,
               background: pierdeDesc ? "#fdf4e3" : "#e9f4ee",
               color: pierdeDesc ? "#6e4c0c" : "#1c523b",
               borderLeft:`3px solid ${pierdeDesc ? "#c8891b" : "#2ecc71"}`}}>
               {pierdeDesc
-                ? <>Pagando <b>por visita</b> el paciente pierde el <b>{descPct}%</b> de descuento del presupuesto: los importes están a tarifa.</>
-                : <>Importes con el <b>{descPct}%</b> de descuento del presupuesto ya aplicado.</>}
+                ? <>Pagando <b>según se va haciendo</b> el paciente pierde el descuento
+                    {dtoPdf !== null && <> del <b>{dtoPdf}</b> del presupuesto</>}
+                    {descPct > 0 && <> y el <b>{descPct}%</b> adicional</>}
+                    : los importes están a <b>precio de tarifa</b>.</>
+                : <>Importes con el descuento
+                    {dtoPdf !== null && <> del <b>{dtoPdf}</b> del presupuesto</>}
+                    {descPct > 0 && <> y el <b>{descPct}%</b> adicional</>}
+                    {" "}ya aplicado.</>}
             </div>
           )}
 
@@ -5000,6 +5048,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
                         templates={templates}
                         waClicks={waClicks.filter(c=>c.patient_id===p.id)}
                         onWaClick={(key)=>incWaClick(p.id,key)}
+                        plans={plans} planCuotas={planCuotas}
                       />
                     );
                     if (!isSearching && activeTab.id === "frío" && tabList.length > 0) {
