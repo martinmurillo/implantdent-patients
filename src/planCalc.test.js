@@ -452,6 +452,14 @@ describe("resumenPlan", () => {
     assert.equal(r.estado, "cancelado");
   });
 
+  test("un borrador tampoco: todavía no es un compromiso de cobro", () => {
+    const r = resumenPlan({ plan: { ...plan, estado:"borrador" }, cuotas, pagos, hoy });
+    assert.equal(r.estado, "borrador");
+    // pero sus importes se siguen calculando, para poder mostrarlos
+    assert.equal(r.cobrado, 2426.74);
+    assert.equal(r.restante, 853.48);
+  });
+
   test("si el pago vinculado se borró desde Cobros, la cuota vuelve a contar", () => {
     const r = resumenPlan({ plan, cuotas, pagos: [{ id:"pg1", amount:2000 }], hoy });
     assert.equal(r.pagadas, 1);

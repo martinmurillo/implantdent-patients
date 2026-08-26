@@ -217,8 +217,10 @@ export function resumenPlan({ plan, cuotas = [], pagos = [], hoy }) {
   const total    = round2(conEstado.reduce((s, c) => s + (Number(c.importe) || 0), 0));
   const cobrado  = round2(pagadas.reduce((s, c) => s + (Number(c.importe) || 0), 0));
 
+  // Un borrador o un cancelado no son un compromiso de cobro: no se juzgan
+  // por sus vencimientos.
   let estado;
-  if (plan.estado === "cancelado") estado = "cancelado";
+  if (plan.estado === "cancelado" || plan.estado === "borrador") estado = plan.estado;
   else if (conEstado.length > 0 && pagadas.length === conEstado.length) estado = "terminado";
   else if (vencidas.length > 0) estado = "atrasado";
   else estado = "al día";

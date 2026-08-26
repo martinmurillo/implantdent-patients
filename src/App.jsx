@@ -3435,6 +3435,114 @@ const filaDesdePlan = (plan, patient, der) => ({
   updated_at: new Date().toISOString(),
 });
 
+// ─── Impresión del plan ──────────────────────────────────────────────────────
+// A4 apaisado en una sola hoja, seis columnas por fila. Es lo que se le entrega
+// al paciente, así que no lleva ningún control: ni flechas, ni botones.
+// Se abre en ventana aparte, igual que exportToPDF y la agenda semanal, en vez
+// de imprimir el DOM de la app.
+const imprimirPlan = ({ plan, paciente, der }) => {
+  const { txConMes, entrega, nCuotas, inicioQ, cuota, calc } = der;
+  const esc = (t) => String(t ?? "").replace(/[<>&]/g, c => ({ "<":"&lt;", ">":"&gt;", "&":"&amp;" }[c]));
+  const meses = Array.from({ length: plan.nMeses }, (_, i) => i + 1);
+
+  const columnas = meses.map(mes => {
+    const items = txConMes.filter(t => t.mes === mes);
+    const importe = calc.porMes[mes-1] || 0;
+    let sub = "";
+    if (plan.modo === "cuotas") {
+      if (mes === 1 && entrega > 0) sub = "Entrega";
+      else if (mes >= inicioQ && mes < inicioQ + nCuotas) sub = `Cuota ${mes-inicioQ+1} de ${nCuotas}`;
+    }
+    const dif = items.length ? calc.ejecutadoAcum[mes-1] - calc.cobradoAcum[mes-1] : null;
+    return `<div class="col">
+      <div class="ch">
+        <div class="m">${mes === 1 ? "Hoy · Mes 1" : `Mes ${mes}`}</div>
+        <div class="t${importe < 0.5 ? " zero" : ""}">${importe < 0.5 ? "—" : (plan.modo === "cuotas" ? eur2(importe) : eur0(importe))}</div>
+        ${sub ? `<div class="k">${sub}</div>` : ""}
+      </div>
+      <div class="bd">
+        ${items.map(t => `<div class="chip"><b>${esc(t.nombre)}${t.pieza ? ` · ${esc(t.pieza)}` : ""}</b><i>${eur0(t.importe)}</i></div>`).join("")}
+        ${dif === null ? "" : `<div class="st ${dif > 0.5 ? "bad" : "ok"}">
+          <span>${dif > 0.5 ? "Faltan" : "Cubierto"}</span><span>${dif > 0.5 ? eur0(dif) : `+${eur0(-dif)}`}</span>
+        </div>`}
+      </div>
+    </div>`;
+  }).join("");
+
+  const pasos = meses.map(mes => {
+    const nombres = [...new Set(txConMes.filter(t => t.mes === mes).map(t => t.nombre))];
+    return nombres.length ? `<div><b>Mes ${mes}</b> — ${esc(nombres.join(", "))}</div>` : "";
+  }).join("");
+
+  const titular = plan.modo === "cuotas"
+    ? `Entrega de <b>${eur0(entrega)}</b> y ${nCuotas} cuotas de <b>${eur2(cuota)}</b>.`
+    : `Empieza pagando <b>${eur0(calc.porMes[0] || 0)}</b> y después paga cada vez que viene.`;
+
+  const avisos = [
+    calc.descubiertos.length
+      ? `<div class="warn">En ${calc.descubiertos.map(d=>`el mes ${d.mes}`).join(", ")} se hace más tratamiento del que está pagado. La diferencia mayor es de <b>${eur0(calc.peorDescubierto)}</b>.</div>`
+      : "",
+    plan.modo === "cuotas" && Math.abs(calc.diferencia) > 1
+      ? `<div class="info">El plan ${calc.diferencia > 0 ? `cobra <b>${eur2(calc.diferencia)}</b> por encima` : `queda <b>${eur2(-calc.diferencia)}</b> por debajo`} del presupuesto (${eur2(calc.totalTratamiento)}).</div>`
+      : "",
+  ].join("");
+
+  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"/>
+<title>Plan de pago — ${esc(paciente?.name || "")}</title>
+<style>
+  @page{size:A4 landscape;margin:7mm;}
+  *{box-sizing:border-box;}
+  body{font-family:'DM Sans','Segoe UI',sans-serif;font-size:9pt;color:#12211f;margin:0;}
+  .top{display:flex;align-items:center;gap:12px;border-bottom:2px solid #c9a84c;padding-bottom:4mm;margin-bottom:4mm;}
+  .top img{width:54px;height:auto;}
+  .top h1{font-size:14pt;margin:0;letter-spacing:.06em;text-transform:uppercase;}
+  .top .who{font-size:9pt;color:#555;margin-top:1mm;}
+  .board{display:grid;grid-template-columns:repeat(6,1fr);gap:3mm;}
+  .col{border:1px solid #cfcfcf;border-radius:6px;display:flex;flex-direction:column;break-inside:avoid;}
+  .ch{padding:5px 7px;border-bottom:1px solid #e0e0e0;}
+  .ch .m{font-size:7pt;letter-spacing:.1em;text-transform:uppercase;color:#777;}
+  .ch .t{font-size:13pt;font-weight:700;line-height:1.15;}
+  .ch .t.zero{color:#ccc;}
+  .ch .k{font-size:6.5pt;color:#777;}
+  .bd{padding:5px;display:flex;flex-direction:column;gap:3px;flex:1;}
+  .chip{background:#f2efe9;border-radius:5px;padding:4px 5px;font-size:7.5pt;line-height:1.25;}
+  .chip b{display:block;font-weight:500;}
+  .chip i{font-style:normal;color:#777;font-size:7pt;}
+  .st{margin-top:auto;padding:4px 6px;border-radius:5px;font-size:7pt;display:flex;justify-content:space-between;gap:5px;
+      -webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .st.ok{background:#e9f4ee;color:#1c523b;}
+  .st.bad{background:#fbedea;color:#7a2a18;}
+  .say{background:#2c3250;color:#fff;border-radius:8px;padding:4mm;margin-top:4mm;
+       -webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .say p{margin:0;font-size:11pt;}
+  .say b{font-size:13pt;color:#e4c86a;}
+  .say .sub{font-size:8pt;opacity:.85;margin-top:2mm;line-height:1.6;}
+  .warn,.info{font-size:8pt;padding:3mm;border-radius:5px;margin-top:2mm;
+              -webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .warn{background:#fbedea;color:#7a2a18;border-left:3px solid #c2482f;}
+  .info{background:#fdf4e3;color:#6e4c0c;border-left:3px solid #c8891b;}
+</style></head><body>
+  <div class="top">
+    <img src="${window.location.origin}/logo.png" alt=""/>
+    <div>
+      <h1>Plan de pago</h1>
+      <div class="who">${esc(paciente?.name || "")}${paciente?.budget_no ? ` · Presupuesto ${esc(paciente.budget_no)}` : ""}${plan.fechaInicio ? ` · Inicio ${fmtDate(plan.fechaInicio)}` : ""}</div>
+    </div>
+  </div>
+  <div class="board">${columnas}</div>
+  <div class="say">
+    <p>${titular}</p>
+    <div class="sub">${pasos}<div style="opacity:.7;margin-top:1mm">Tratamiento ${eur2(calc.totalTratamiento)}${plan.modo === "cuotas" ? ` · Plan ${eur2(calc.totalPlan)}` : ""}</div></div>
+  </div>
+  ${avisos}
+</body></html>`;
+
+  const win = window.open("", "_blank");
+  win.document.write(html); win.document.close();
+  win.document.title = `Plan de pago — ${paciente?.name || ""}`;
+  setTimeout(() => win.print(), 800);
+};
+
 function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
   const dragId = useRef(null);
   const [hotMes, setHotMes] = useState(null);
@@ -3673,8 +3781,10 @@ function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobra
   const [cobrando, setCobrando] = useState(null);
   const hoy = today();
 
+  // Se listan todos, incluidos borradores y cancelados: si no, un plan al que
+  // le cambiás el estado se vuelve inalcanzable, porque esta es la única
+  // pantalla desde donde se llega sin buscar el presupuesto a mano.
   const filas = plans
-    .filter(pl => pl.estado === "activo" || pl.estado === "terminado")
     .map(pl => {
       // Sin FK a patients: si el paciente ya no está, el plan se ignora en vez de romper
       const paciente = patients.find(p => p.id === pl.patient_id);
@@ -3685,18 +3795,16 @@ function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobra
       return { plan: pl, paciente, resumen, avisos };
     })
     .filter(Boolean)
-    .filter(f => filtro === "todos"
-      || (filtro === "atrasado"  && f.resumen.estado === "atrasado")
-      || (filtro === "aldia"     && f.resumen.estado === "al día")
-      || (filtro === "terminado" && f.resumen.estado === "terminado"))
-    // el vencimiento más próximo primero; los terminados al final
+    .filter(f => filtro === "todos" ? f.resumen.estado !== "cancelado" : f.resumen.estado === filtro)
+    // el vencimiento más próximo primero; sin próxima cuota, al final
     .sort((a, b) => {
       const va = a.resumen.proxima?.vence_el || "9999-12-31";
       const vb = b.resumen.proxima?.vence_el || "9999-12-31";
       return va.localeCompare(vb);
     });
 
-  const COLOR = { "atrasado":"#e74c3c", "al día":"#2ecc71", "terminado":"#3498db", "cancelado":"#7f8c8d" };
+  const COLOR = { "atrasado":"#e74c3c", "al día":"#2ecc71", "terminado":"#3498db",
+                  "borrador":"#8e44ad", "cancelado":"#7f8c8d" };
 
   const cobrar = async (plan, cuota) => {
     setCobrando(cuota.id);
@@ -3707,7 +3815,8 @@ function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobra
   return (
     <div>
       <div style={{display:"flex", gap:6, marginBottom:14, flexWrap:"wrap"}}>
-        {[["todos","Todos"],["atrasado","Atrasados"],["aldia","Al día"],["terminado","Terminados"]].map(([id,label])=>(
+        {[["todos","Todos"],["atrasado","Atrasados"],["al día","Al día"],
+          ["terminado","Terminados"],["borrador","Borradores"],["cancelado","Cancelados"]].map(([id,label])=>(
           <button key={id} onClick={()=>setFiltro(id)}
             style={{background:filtro===id?"#c9a84c22":"#ffffff", border:`1px solid ${filtro===id?"#c9a84c":"#dde4ef"}`,
               borderRadius:6, color:filtro===id?"#c9a84c":"#555", padding:"5px 12px", cursor:"pointer",
@@ -3723,7 +3832,11 @@ function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobra
         </div>
       )}
 
-      {filas.map(({ plan, paciente, resumen, avisos }) => (
+      {filas.map(({ plan, paciente, resumen, avisos }) => {
+        // Un borrador o un cancelado se listan para poder abrirlos, pero no son
+        // dinero comprometido: no se les reclama nada.
+        const comprometido = resumen.estado !== "borrador" && resumen.estado !== "cancelado";
+        return (
         <div key={plan.id} style={{...s.card, borderLeft:`4px solid ${COLOR[resumen.estado]||"#dde4ef"}`}}>
           <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", gap:10, flexWrap:"wrap"}}>
             <div>
@@ -3741,26 +3854,36 @@ function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobra
               </div>
             </div>
             <div style={{display:"flex", gap:18, alignItems:"center", flexWrap:"wrap"}}>
-              <div style={{textAlign:"right"}}>
-                <div style={{fontSize:10, color:"#888", letterSpacing:1}}>COBRADO</div>
-                <div style={{fontSize:15, fontWeight:700, color:"#2ecc71"}}>
-                  {fmtEur(resumen.cobrado)} <span style={{color:"#bbb", fontWeight:400}}>/ {fmtEur(resumen.total)}</span>
+              {comprometido ? (
+                <>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:10, color:"#888", letterSpacing:1}}>COBRADO</div>
+                    <div style={{fontSize:15, fontWeight:700, color:"#2ecc71"}}>
+                      {fmtEur(resumen.cobrado)} <span style={{color:"#bbb", fontWeight:400}}>/ {fmtEur(resumen.total)}</span>
+                    </div>
+                    <div style={{fontSize:11, color:"#888"}}>{resumen.pagadas} de {resumen.totalCuotas} cuotas</div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:10, color:"#888", letterSpacing:1}}>QUEDA</div>
+                    <div style={{fontSize:15, fontWeight:700, color:resumen.restante > 0 ? "#c9a84c" : "#2ecc71"}}>
+                      {fmtEur(resumen.restante)}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontSize:10, color:"#888", letterSpacing:1}}>TOTAL DEL PLAN</div>
+                  <div style={{fontSize:15, fontWeight:700, color:"#888"}}>{fmtEur(resumen.total)}</div>
+                  <div style={{fontSize:11, color:"#888"}}>sin compromiso de cobro</div>
                 </div>
-                <div style={{fontSize:11, color:"#888"}}>{resumen.pagadas} de {resumen.totalCuotas} cuotas</div>
-              </div>
-              <div style={{textAlign:"right"}}>
-                <div style={{fontSize:10, color:"#888", letterSpacing:1}}>QUEDA</div>
-                <div style={{fontSize:15, fontWeight:700, color:resumen.restante > 0 ? "#c9a84c" : "#2ecc71"}}>
-                  {fmtEur(resumen.restante)}
-                </div>
-              </div>
+              )}
               <button onClick={()=>onAbrirPlan(plan)} style={{...s.btnDark, padding:"5px 12px", fontSize:12}}>
                 Ver plan
               </button>
             </div>
           </div>
 
-          {resumen.proxima && (
+          {comprometido && resumen.proxima && (
             <div style={{marginTop:10, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap",
               background: resumen.proxima.estado === "vencido" ? "#fbedea" : "#f0f2f7",
               borderRadius:8, padding:"8px 12px"}}>
@@ -3781,13 +3904,13 @@ function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobra
             </div>
           )}
 
-          {resumen.vencidas.length > 1 && (
+          {comprometido && resumen.vencidas.length > 1 && (
             <div style={{marginTop:6, fontSize:12, color:"#e74c3c"}}>
               Hay {resumen.vencidas.length} cuotas vencidas sin cobrar, por {fmtEur(resumen.vencidas.reduce((a,c)=>a+(parseFloat(c.importe)||0),0))} en total.
             </div>
           )}
 
-          {avisos.map(av => (
+          {comprometido && avisos.map(av => (
             <div key={av.tx_id || av.nombre + av.fecha} style={{marginTop:8, background:"#fdf4e3", color:"#6e4c0c",
               borderLeft:"3px solid #c8891b", padding:"8px 12px", borderRadius:7, fontSize:12.5}}>
               🦷 <b>{av.nombre}</b> está previsto para el {fmtDate(av.fecha)} (mes {av.mes}) y todavía faltan{" "}
@@ -3795,7 +3918,8 @@ function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobra
             </div>
           ))}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -4010,6 +4134,10 @@ function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], onSavePlan
               <input value={plan.notas} onChange={e=>setPlan({...plan, notas:e.target.value})}
                 placeholder="Financiera, condiciones acordadas..." style={s.smInput}/>
             </div>
+            <button onClick={()=>imprimirPlan({ plan, paciente, der: planDerivado(plan, tratamientos) })}
+              style={{...s.btnDark, whiteSpace:"nowrap"}}>
+              🖨 Imprimir
+            </button>
             {paciente ? (
               <>
                 <button onClick={guardar} disabled={guardando}
