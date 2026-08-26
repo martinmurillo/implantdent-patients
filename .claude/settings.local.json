@@ -17,7 +17,21 @@
       "Bash(npm install *)",
       "Bash(Get-ChildItem -Recurse -Filter \"*App*\" -Include \"*.jsx\", \"*.js\", \"*.tsx\", \"*.ts\")",
       "Bash(Select-Object -First 20)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(firebase --version)",
+      "Bash(firebase projects:list)",
+      "Bash(npx vite *)",
+      "PowerShell(npx vite build 2>&1 | Select-Object -Last 20)",
+      "PowerShell(Get-Content package.json; echo \"--- VERCEL/CI ---\"; Get-ChildItem -Force -Name | Where-Object { $_ -match 'vercel|netlify|github|\\\\.env' })",
+      "PowerShell(node --version)",
+      "PowerShell(node --test src/planCalc.test.js 2>&1 | Select-Object -Last 45)",
+      "PowerShell(npx eslint src/App.jsx src/planCalc.js src/pdfPlan.js src/pdfjs.js 2>&1 | Select-Object -Last 30)",
+      "PowerShell(npm run *)",
+      "PowerShell($c = Get-Command supabase -ErrorAction SilentlyContinue; if \\($c\\) { \"supabase CLI: $\\($c.Source\\)\" } else { \"supabase CLI: no instalado\" }; $p = Get-Command psql -ErrorAction SilentlyContinue; if \\($p\\) { \"psql: $\\($p.Source\\)\" } else { \"psql: no instalado\" }; \"--- env tokens ---\"; Get-ChildItem env: | Where-Object { $_.Name -match 'SUPABASE|POSTGRES|DATABASE' } | Select-Object Name)",
+      "PowerShell(supabase db *)",
+      "PowerShell(Get-ChildItem supabase -Recurse -Force -File | ForEach-Object { \"$\\($_.FullName.Replace\\($PWD.Path+'\\\\',''\\)\\) [$\\($_.Length\\) b]\" })",
+      "PowerShell(git check-ignore *)",
+      "PowerShell(git diff .claude/settings.local.json; \"=== docs/ ===\"; Get-ChildItem docs -Recurse -File | ForEach-Object { \"$\\($_.FullName.Replace\\($PWD.Path+'\\\\',''\\)\\) [$\\([math]::Round\\($_.Length/1kb,1\\)\\) kb]\" })"
     ]
   }
 }
