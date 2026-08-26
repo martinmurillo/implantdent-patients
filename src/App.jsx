@@ -2,6 +2,8 @@
 import { supabase } from "./supabase";
 import { translateTreatment, setTranslationDict } from "./treatments";
 import { loadPdfJs } from "./pdfjs";
+import { calcPlan, cuotaSugerida, totalTratamientos } from "./planCalc";
+import { colocacionInicial } from "./pdfPlan";
 import * as XLSX from "xlsx";
 
 const parsePDF = async (file) => {
@@ -3346,6 +3348,377 @@ function PresupuestosExcelPanel({ patients, onRefresh }) {
   );
 }
 
+// ─── PlanDePagoBoard ─────────────────────────────────────────────────────────
+// Tablero para armar el plan junto al paciente. Todo el cálculo vive en
+// planCalc.js: acá solo se pinta y se mueven tratamientos entre meses.
+// Es un componente controlado — el estado del plan lo tiene el padre, que es
+// quien lo persiste.
+const emptyPlan = () => ({
+  modo:"visita", entrega:"0", techoMes:"0",
+  nCuotas:"5", importeCuota:"0", cuotaManual:false, mesInicioCuotas:"2",
+  nMeses:6, colocacion:{},
+});
+
+const eur0 = (n) => `${Math.round(n).toLocaleString("es-ES")} €`;
+const eur2 = (n) => `${n.toLocaleString("es-ES",{minimumFractionDigits:2,maximumFractionDigits:2})} €`;
+
+function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
+  const dragId = useRef(null);
+  const [hotMes, setHotMes] = useState(null);
+
+  const set = (campo, valor) => onPlanChange({ ...plan, [campo]: valor });
+  // Tocar la entrega o el nº de cuotas devuelve la cuota al cálculo automático
+  const setYRecalcula = (campo, valor) => onPlanChange({ ...plan, [campo]: valor, cuotaManual:false });
+
+  const txConMes = tratamientos.map(t => ({ ...t, mes: plan.colocacion[t.id] || 1 }));
+  const entrega  = parseFloat(plan.entrega) || 0;
+  const nCuotas  = parseInt(plan.nCuotas) || 0;
+  const inicioQ  = Math.max(1, parseInt(plan.mesInicioCuotas) || 1);
+  const total    = totalTratamientos(txConMes);
+  const sugerida = cuotaSugerida(total, entrega, nCuotas);
+  // El importe manual manda: lo fija la financiera con sus intereses del día
+  const cuota    = plan.cuotaManual ? (parseFloat(plan.importeCuota) || 0) : sugerida;
+
+  const calc = calcPlan({
+    tratamientos: txConMes,
+    nMeses: plan.nMeses,
+    modo: plan.modo,
+    entrega,
+    techoMes: parseFloat(plan.techoMes) || 0,
+    nCuotas,
+    importeCuota: cuota,
+    mesInicioCuotas: inicioQ,
+  });
+
+  const mover = (txId, delta) => {
+    const nuevo = Math.max(1, Math.min(60, (plan.colocacion[txId] || 1) + delta));
+    onPlanChange({
+      ...plan,
+      colocacion: { ...plan.colocacion, [txId]: nuevo },
+      nMeses: Math.max(plan.nMeses, nuevo),
+    });
+  };
+  const soltarEn = (mes) => {
+    if (dragId.current) {
+      onPlanChange({ ...plan, colocacion: { ...plan.colocacion, [dragId.current]: mes } });
+      dragId.current = null;
+    }
+    setHotMes(null);
+  };
+
+  const campo = (label, valor, onChange, extra={}) => (
+    <div style={{flex:1, minWidth:110}}>
+      <label style={{...s.label, fontSize:10}}>{label}</label>
+      <input type="number" value={valor} onChange={e=>onChange(e.target.value)}
+        style={{...s.smInput, fontSize:16, ...(extra.style||{})}} {...(extra.props||{})}/>
+    </div>
+  );
+
+  const meses = Array.from({length: plan.nMeses}, (_, i) => i + 1);
+
+  return (
+    <div>
+      {/* ── Selector de modo ── */}
+      <div className="np" style={{display:"flex", background:"#ffffff", borderRadius:10, padding:4, gap:4, marginBottom:12}}>
+        {[["visita","Paga cada vez que viene"],["cuotas","Entrega + cuotas fijas"]].map(([id,label])=>(
+          <button key={id} onClick={()=>set("modo",id)}
+            style={{flex:1, background:plan.modo===id?"#c9a84c":"transparent", border:"none", borderRadius:8,
+              color:plan.modo===id?"#fff":"#555", padding:"10px 8px", cursor:"pointer",
+              fontSize:13, fontWeight:plan.modo===id?700:400, transition:"all 0.15s"}}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Controles ── */}
+      <div className="np" style={{...s.card, display:"flex", gap:10, flexWrap:"wrap", alignItems:"flex-end", marginBottom:14}}>
+        {plan.modo === "visita" ? (
+          <>
+            {campo("Entrega hoy", plan.entrega, v=>set("entrega",v), {props:{step:50, min:0}})}
+            {campo("Techo por mes", plan.techoMes, v=>set("techoMes",v), {props:{step:25, min:0}})}
+            <div style={{flex:2, minWidth:180, fontSize:12, color:"#777", paddingBottom:9}}>
+              La entrega se descuenta de los primeros meses. El techo marca en rojo los meses que lo superan.
+            </div>
+          </>
+        ) : (
+          <>
+            {campo("Entrega hoy", plan.entrega, v=>setYRecalcula("entrega",v), {props:{step:100, min:0}})}
+            {campo("Nº de cuotas", plan.nCuotas, v=>setYRecalcula("nCuotas",v), {props:{step:1, min:1, max:60}})}
+            <div style={{flex:1, minWidth:110}}>
+              <label style={{...s.label, fontSize:10, display:"flex", justifyContent:"space-between", alignItems:"center"}}>
+                <span>Cuota</span>
+                {plan.cuotaManual
+                  ? <button onClick={()=>set("cuotaManual",false)}
+                      style={{background:"none",border:"none",color:"#c9a84c",cursor:"pointer",fontSize:10,padding:0,textDecoration:"underline"}}>
+                      auto
+                    </button>
+                  : <span style={{color:"#777",fontSize:9,letterSpacing:0}}>calculada</span>}
+              </label>
+              <input type="number" step="0.01" min="0"
+                value={plan.cuotaManual ? plan.importeCuota : sugerida}
+                onChange={e=>onPlanChange({...plan, importeCuota:e.target.value, cuotaManual:true})}
+                style={{...s.smInput, fontSize:16,
+                  background: plan.cuotaManual ? "#ffffff" : "#f0f4f8",
+                  color: plan.cuotaManual ? "#2c3250" : "#5a6b8c"}}/>
+            </div>
+            {campo("Empiezan en mes", plan.mesInicioCuotas, v=>set("mesInicioCuotas",v), {props:{step:1, min:1, max:60}})}
+          </>
+        )}
+      </div>
+
+      {/* ── Tablero ── */}
+      <div className="board" style={{display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(158px,1fr))", gap:8, alignItems:"stretch"}}>
+        {meses.map(mes => {
+          const items   = txConMes.filter(t => t.mes === mes);
+          const importe = calc.porMes[mes-1] || 0;
+          const alto    = calc.sobreTecho.some(x => x.mes === mes);
+          const caliente = hotMes === mes;
+          let sub = "";
+          if (plan.modo === "cuotas") {
+            if (mes === 1 && entrega > 0) sub = "Entrega";
+            else if (mes >= inicioQ && mes < inicioQ + nCuotas) sub = `Cuota ${mes-inicioQ+1} de ${nCuotas}`;
+          }
+          const dif = items.length ? calc.ejecutadoAcum[mes-1] - calc.cobradoAcum[mes-1] : null;
+
+          return (
+            <div key={mes}
+              onDragOver={e=>{e.preventDefault(); setHotMes(mes);}}
+              onDragLeave={()=>setHotMes(h => h===mes ? null : h)}
+              onDrop={e=>{e.preventDefault(); soltarEn(mes);}}
+              style={{background:"#ffffff", border:`1px solid ${caliente?"#c9a84c":"#e2e5ed"}`, borderRadius:10,
+                display:"flex", flexDirection:"column", minHeight:132,
+                boxShadow: caliente ? "0 0 0 3px #c9a84c33" : "none", transition:"all 0.12s"}}>
+
+              <div style={{padding:"8px 10px 7px", borderBottom:"1px solid #e2e5ed"}}>
+                <div style={{fontSize:10, letterSpacing:1.4, textTransform:"uppercase", color:"#888", fontWeight:600}}>
+                  {mes === 1 ? "Hoy · Mes 1" : `Mes ${mes}`}
+                </div>
+                <div style={{fontSize:20, fontWeight:700, lineHeight:1.15, marginTop:1,
+                  color: importe < 0.5 ? "#dde4ef" : alto ? "#e74c3c" : "#2c3250"}}>
+                  {importe < 0.5 ? "—" : (plan.modo === "cuotas" ? eur2(importe) : eur0(importe))}
+                </div>
+                {sub && <div style={{fontSize:10.5, color:"#888"}}>{sub}</div>}
+              </div>
+
+              <div style={{padding:7, display:"flex", flexDirection:"column", gap:5, flex:1}}>
+                {items.map(t => (
+                  <div key={t.id} draggable
+                    onDragStart={()=>{dragId.current = t.id;}}
+                    onDragEnd={()=>{dragId.current = null; setHotMes(null);}}
+                    style={{background:"#f0f2f7", borderRadius:7, padding:"6px 7px", fontSize:11.8, lineHeight:1.3,
+                      display:"flex", alignItems:"center", gap:6, cursor:"grab", border:"1px solid transparent"}}>
+                    <div style={{flex:1, minWidth:0}}>
+                      <div style={{fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+                        {t.nombre}{t.pieza ? ` · ${t.pieza}` : ""}
+                      </div>
+                      <div style={{color:"#888", fontSize:11.5}}>{eur0(t.importe)}</div>
+                    </div>
+                    <div className="np" style={{display:"flex", gap:1}}>
+                      {[["‹",-1],["›",1]].map(([txt,d])=>(
+                        <button key={txt} onClick={()=>mover(t.id, d)}
+                          style={{width:21, height:23, background:"#ffffff", border:"1px solid #dde4ef",
+                            fontSize:13, lineHeight:1, color:"#c9a84c", padding:0, borderRadius:5, cursor:"pointer"}}>
+                          {txt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                {items.length === 0 && (
+                  <div className="np" style={{color:"#dde4ef", fontSize:12, textAlign:"center", padding:"14px 0", fontStyle:"italic"}}>
+                    sin tratamiento
+                  </div>
+                )}
+                {dif !== null && (
+                  <div style={{marginTop:"auto", padding:"7px 9px", borderRadius:8, fontSize:11.5,
+                    display:"flex", justifyContent:"space-between", gap:6,
+                    background: dif > 0.5 ? "#fbedea" : "#e9f4ee", color: dif > 0.5 ? "#7a2a18" : "#1c523b"}}>
+                    <span>{dif > 0.5 ? "Faltan" : "Cubierto"}</span>
+                    <span style={{fontWeight:700}}>{dif > 0.5 ? eur0(dif) : `+${eur0(-dif)}`}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Agregar / quitar meses ── */}
+      <div className="np" style={{display:"flex", gap:8, marginTop:10, alignItems:"center"}}>
+        <button onClick={()=>set("nMeses", plan.nMeses-1)} disabled={plan.nMeses <= calc.minMeses}
+          title={plan.nMeses <= calc.minMeses ? "El último mes tiene tratamientos o cuotas" : "Quitar el último mes"}
+          style={{width:38, height:34, background:"#ffffff", border:"1px solid #dde4ef", color:"#c9a84c",
+            fontSize:19, lineHeight:1, borderRadius:8, cursor: plan.nMeses <= calc.minMeses ? "not-allowed" : "pointer",
+            opacity: plan.nMeses <= calc.minMeses ? 0.35 : 1}}>−</button>
+        <button onClick={()=>set("nMeses", Math.min(60, plan.nMeses+1))}
+          title="Agregar un mes"
+          style={{width:38, height:34, background:"#ffffff", border:"1px solid #dde4ef", color:"#c9a84c",
+            fontSize:19, lineHeight:1, borderRadius:8, cursor:"pointer"}}>+</button>
+        <span style={{fontSize:12.5, color:"#888"}}>{plan.nMeses} meses</span>
+      </div>
+
+      {/* ── Resumen para el paciente ── */}
+      <div style={{background:"#2c3250", color:"#fff", borderRadius:12, padding:"17px 19px", marginTop:14}}>
+        <p style={{margin:0, fontSize:17, lineHeight:1.5}}>
+          {plan.modo === "cuotas"
+            ? <>Entrega de <b style={{fontSize:21, color:"#e4c86a"}}>{eur0(entrega)}</b> y {nCuotas} cuotas de <b style={{fontSize:21, color:"#e4c86a"}}>{eur2(cuota)}</b>.</>
+            : <>Empieza pagando <b style={{fontSize:21, color:"#e4c86a"}}>{eur0(calc.porMes[0]||0)}</b> y después paga cada vez que viene.</>}
+        </p>
+        <div style={{fontSize:13, opacity:0.82, marginTop:9, lineHeight:1.65}}>
+          {meses.map(mes => {
+            const nombres = [...new Set(txConMes.filter(t=>t.mes===mes).map(t=>t.nombre))];
+            if (!nombres.length) return null;
+            return <div key={mes}><b style={{fontSize:13}}>Mes {mes}</b> — {nombres.join(", ")}</div>;
+          })}
+          <div style={{opacity:0.7, marginTop:4}}>
+            Tratamiento {eur2(calc.totalTratamiento)}
+            {plan.modo === "cuotas" && ` · Plan ${eur2(calc.totalPlan)}`}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Avisos ── */}
+      {calc.descubiertos.length > 0 && (
+        <div style={{background:"#fbedea", color:"#7a2a18", borderLeft:"3px solid #e74c3c",
+          padding:"10px 13px", borderRadius:7, fontSize:13.5, marginTop:10}}>
+          En {calc.descubiertos.map(d=>`el mes ${d.mes}`).join(", ")} se hace más tratamiento del que está
+          pagado. La diferencia mayor es de <b>{eur0(calc.peorDescubierto)}</b>. Movés esos tratamientos más
+          adelante, subís la entrega o achicás el plazo.
+        </div>
+      )}
+      {plan.modo === "cuotas" && Math.abs(calc.diferencia) > 1 && (
+        <div style={{background:"#fdf4e3", color:"#6e4c0c", borderLeft:"3px solid #c8891b",
+          padding:"10px 13px", borderRadius:7, fontSize:13.5, marginTop:10}}>
+          El plan {calc.diferencia > 0
+            ? <>cobra <b>{eur2(calc.diferencia)}</b> por encima del presupuesto</>
+            : <>queda <b>{eur2(-calc.diferencia)}</b> por debajo del presupuesto</>} ({eur2(calc.totalTratamiento)}).
+        </div>
+      )}
+      {calc.cuotasFueraDeTablero && (
+        <div className="np" style={{background:"#fdf4e3", color:"#6e4c0c", borderLeft:"3px solid #c8891b",
+          padding:"10px 13px", borderRadius:7, fontSize:13.5, marginTop:10}}>
+          Las cuotas siguen más allá del último mes del tablero. Agregá meses con el botón +.
+        </div>
+      )}
+      {calc.sobreTecho.length > 0 && (
+        <div className="np" style={{background:"#fdf4e3", color:"#6e4c0c", borderLeft:"3px solid #c8891b",
+          padding:"10px 13px", borderRadius:7, fontSize:13.5, marginTop:10}}>
+          {calc.sobreTecho.map(x=>`El mes ${x.mes} (${eur0(x.importe)})`).join(", ")} supera el techo de {eur0(parseFloat(plan.techoMes)||0)}.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── PlanesPanel ─────────────────────────────────────────────────────────────
+// Contenedor de la pestaña. "Pendientes de pago" es la pantalla de uso diario;
+// al tablero se llega casi siempre desde el botón del presupuesto.
+const txsParaPlan = (patient) => getTxItems(patient).map(t => ({
+  id: t.id, nombre: t.name || "", importe: parseFloat(t.value) || 0, pieza: "",
+}));
+
+const colocacionPara = (txs) =>
+  Object.fromEntries(colocacionInicial(txs).map(t => [t.id, t.mes]));
+
+function PlanesPanel({ patients, presupuestoInicial = null }) {
+  const [tab,    setTab]    = useState(presupuestoInicial ? "tablero" : "pendientes");
+  const [selId,  setSelId]  = useState(presupuestoInicial);
+  const [filtro, setFiltro] = useState("");
+  const [plan,   setPlan]   = useState(emptyPlan());
+
+  const paciente     = patients.find(p => p.id === selId) || null;
+  const tratamientos = paciente ? txsParaPlan(paciente) : [];
+
+  const elegir = (p) => {
+    const txs = txsParaPlan(p);
+    const colocacion = colocacionPara(txs);
+    const ultimo = Math.max(1, ...Object.values(colocacion));
+    setSelId(p.id);
+    setPlan({ ...emptyPlan(), colocacion, nMeses: Math.max(6, ultimo + 1) });
+    setTab("tablero");
+  };
+
+  const coincidencias = filtro.trim().length < 2 ? [] : patients.filter(p =>
+    (p.name||"").toLowerCase().includes(filtro.toLowerCase()) ||
+    (p.budget_no||"").includes(filtro) ||
+    (p.hc||"").includes(filtro)
+  ).slice(0, 12);
+
+  return (
+    <div>
+      <div className="np" style={{display:"flex", gap:12, marginBottom:16, alignItems:"center", flexWrap:"wrap"}}>
+        <div style={{display:"flex", background:"#ffffff", borderRadius:10, padding:4}}>
+          {[["pendientes","Pendientes de pago"],["tablero","Armar plan"]].map(([id,label])=>(
+            <button key={id} onClick={()=>setTab(id)}
+              style={{background:tab===id?"#dce8fa":"none", border:"none", borderRadius:8,
+                color:tab===id?"#c9a84c":"#555", padding:"8px 20px", cursor:"pointer",
+                fontSize:13, fontWeight:tab===id?700:400}}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {paciente && tab === "tablero" && (
+          <>
+            <div style={{fontSize:13, color:"#555"}}>
+              <b style={{color:"#2c3250"}}>{paciente.name}</b>
+              {paciente.budget_no ? ` · #${paciente.budget_no}` : ""}
+              {paciente.hc ? ` · HC ${paciente.hc}` : ""}
+            </div>
+            <button onClick={()=>{setSelId(null); setFiltro("");}} style={{...s.btnDark, padding:"5px 12px", fontSize:12}}>
+              Otro presupuesto
+            </button>
+          </>
+        )}
+      </div>
+
+      {tab === "pendientes" && (
+        <div style={{textAlign:"center", color:"#888", padding:60, background:"#ffffff", borderRadius:10, fontSize:13}}>
+          El seguimiento de planes acordados llega en la próxima entrega.
+        </div>
+      )}
+
+      {tab === "tablero" && !paciente && (
+        <div style={{...s.card, maxWidth:560, margin:"0 auto"}}>
+          <label style={s.label}>Buscar presupuesto</label>
+          <input autoFocus value={filtro} onChange={e=>setFiltro(e.target.value)}
+            placeholder="Nombre del paciente, nº de presupuesto o HC..." style={s.input}/>
+          <div style={{marginTop:10}}>
+            {filtro.trim().length >= 2 && coincidencias.length === 0 && (
+              <div style={{color:"#888", fontSize:13, padding:"10px 2px"}}>Sin resultados.</div>
+            )}
+            {coincidencias.map(p => {
+              const n = getTxItems(p).length;
+              return (
+                <div key={p.id} onClick={()=>elegir(p)}
+                  style={{display:"flex", justifyContent:"space-between", alignItems:"center", gap:10,
+                    padding:"9px 10px", borderRadius:8, cursor:"pointer", borderBottom:"1px solid #e2e5ed"}}>
+                  <div>
+                    <div style={{fontWeight:600, color:"#2c3250", fontSize:14}}>{p.name||"Sin nombre"}</div>
+                    <div style={{fontSize:12, color:"#888"}}>
+                      #{p.budget_no||"—"} · HC {p.hc||"—"} · {fmtDate(p.date)} · {n} tratamiento(s)
+                    </div>
+                  </div>
+                  <span style={{color:"#c9a84c", fontWeight:700, fontSize:14, whiteSpace:"nowrap"}}>{fmtEur(patientGrand(p))}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {tab === "tablero" && paciente && tratamientos.length === 0 && (
+        <div style={{textAlign:"center", color:"#888", padding:40, background:"#ffffff", borderRadius:10, fontSize:13}}>
+          Este presupuesto no tiene tratamientos cargados.
+        </div>
+      )}
+
+      {tab === "tablero" && paciente && tratamientos.length > 0 && (
+        <PlanDePagoBoard tratamientos={tratamientos} plan={plan} onPlanChange={setPlan}/>
+      )}
+    </div>
+  );
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [unlocked,       setUnlocked]       = useState(false);
@@ -3722,6 +4095,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
         <NavBtn id="pagos"     label="Cobros"/>
         <NavBtn id="citas"         label="Citas"/>
         <NavBtn id="presupuestos"  label="N° Presupuestos"/>
+        <NavBtn id="planes"        label="Planes de pago"/>
         <NavBtn id="clinica"       label="Clínica"/>
         <NavBtn id="stats"     label="Estadísticas" badge={0}/>
 
@@ -4198,6 +4572,10 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
 
         {!dbLoading && view==="presupuestos" && (
           <PresupuestosExcelPanel patients={[...patients,...archivedPatients]} onRefresh={fetchPatients}/>
+        )}
+
+        {!dbLoading && view==="planes" && (
+          <PlanesPanel patients={allPatients}/>
         )}
 
         {!dbLoading && view==="clinica" && (
