@@ -4531,6 +4531,18 @@ export default function App() {
     setTimeout(()=>win.print(),600);
   };
 
+  // Cuotas que reclaman atención hoy: vencidas, o que vencen dentro de 5 días.
+  // Es el aviso que pedía verse sin entrar a buscarlo.
+  const cuotasQueAvisan = (() => {
+    const hoyStr = today();
+    return plans.filter(pl => pl.estado === "activo").filter(pl => {
+      const propias = planCuotas.filter(c => c.plan_id === pl.id);
+      if (!propias.length) return false;
+      const r = resumenPlan({ plan: pl, cuotas: propias, pagos: payments, hoy: hoyStr });
+      return r.proxima && r.diasParaProxima !== null && r.diasParaProxima <= 5;
+    }).length;
+  })();
+
   const pendingDebtPatients = patients.filter(p=>{
     const hasPayments = payments.some(pay=>pay.patient_id===p.id);
     if (!hasPayments) return false;
@@ -4633,7 +4645,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
         <NavBtn id="presupuestos"  label="N° Presupuestos"/>
         {/* los planes de pacientes ya cerrados viven en la lista archivada,
             que se carga bajo demanda: sin esto Pendientes los saltearía */}
-        <NavBtn id="planes"        label="Planes de pago" onSelect={ensureArchived}/>
+        <NavBtn id="planes"        label="Planes de pago" badge={cuotasQueAvisan} onSelect={ensureArchived}/>
         <NavBtn id="clinica"       label="Clínica"/>
         <NavBtn id="stats"     label="Estadísticas" badge={0}/>
 
