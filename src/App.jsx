@@ -7,6 +7,9 @@ import { calcPlan, cuotaSugerida, totalTratamientos, cuotasDelPlan,
          precioSinDescuento } from "./planCalc";
 import { colocacionInicial, parsePlanPDF, importeFila } from "./pdfPlan";
 import { htmlPlanImpreso } from "./planPrint";
+import { PLAZOS as FRAG_PLAZOS, financiable, motivoNoFinanciable,
+         comisionFragmenta, calcFragmenta, lineaDeTiempo, fraseTramos,
+         etiquetaMes } from "./fragmenta";
 import * as XLSX from "xlsx";
 
 const parsePDF = async (file) => {
@@ -3397,6 +3400,7 @@ const emptyPlan = () => ({
   modo:"visita", entrega:"0", entregaVisita:"0", techoMes:"0",
   nCuotas:"5", importeCuota:"0", cuotaManual:false, mesInicioCuotas:"2",
   nMeses:6, colocacion:{},
+  fragmentaPlazo:0, fragmentaComision:"",   // 0 = la entrega no se financia
   fechaInicio: today(), notas:"", estado:"activo",
 });
 
@@ -3425,7 +3429,22 @@ const planDerivado = (plan, tratamientos) => {
     importeCuota: cuota,
     mesInicioCuotas: inicioQ,
   });
-  return { txConMes, entrega, nCuotas, inicioQ, sugerida, cuota, calc };
+  // Fragmenta financia la entrega. La clínica la cobra igual, así que no toca
+  // nada del plan: solo cambia lo que el paciente desembolsa cada mes.
+  const frag = plan.fragmentaPlazo
+    ? calcFragmenta({ importe: entrega, plazo: plan.fragmentaPlazo, comision: plan.fragmentaComision })
+    : null;
+  const nMesesLinea = Math.min(24, Math.max(plan.nMeses, frag ? frag.plazo : 0));
+  // Si la entrega se financia, el paciente no la paga en clínica el mes 1
+  const porMesClinica = Array.from({ length: nMesesLinea }, (_, i) => {
+    const v = calc.porMes[i] || 0;
+    return i === 0 && frag ? Math.max(0, Math.round((v - entrega) * 100) / 100) : v;
+  });
+  const linea = lineaDeTiempo({ porMesClinica, fragmenta: frag, nMeses: nMesesLinea });
+
+  return { txConMes, entrega, nCuotas, inicioQ, sugerida, cuota, calc,
+           frag, linea, nMesesLinea,
+           desembolsoTotal: Math.round((calc.totalPlan + (frag ? frag.comision : 0)) * 100) / 100 };
 };
 
 // ─── Plan ⇄ fila de payment_plans ────────────────────────────────────────────
@@ -3438,6 +3457,9 @@ const planDesdeFila = (row) => ({
   nCuotas: String(row.n_cuotas ?? "0"),
   importeCuota: String(row.importe_cuota ?? "0"),
   cuotaManual: !!row.cuota_manual,
+  fragmentaPlazo:    row.fragmenta_plazo || 0,
+  // se conserva la comisión firmada, no la tarifa de hoy
+  fragmentaComision: row.fragmenta_plazo ? String(row.fragmenta_comision ?? "") : "",
   mesInicioCuotas: String(row.mes_inicio_cuotas ?? "2"),
   nMeses: row.n_meses || 6,
   colocacion: Object.fromEntries((row.colocacion || []).map(c => [c.tx_id, c.mes])),
@@ -3459,6 +3481,8 @@ const filaDesdePlan = (plan, patient, der) => ({
   n_cuotas: der.nCuotas,
   importe_cuota: der.cuota,
   cuota_manual: !!plan.cuotaManual,
+  fragmenta_plazo:    plan.fragmentaPlazo || 0,
+  fragmenta_comision: der.frag ? der.frag.comision : 0,
   mes_inicio_cuotas: der.inicioQ,
   // se guardan nombre e importe además del id: si el presupuesto se reimporta
   // y algún id ya no existe, el plan se puede re-vincular por ahí
@@ -3491,7 +3515,55 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
   // Tocar la entrega o el nº de cuotas devuelve la cuota al cálculo automático
   const setYRecalcula = (campo, valor) => onPlanChange({ ...plan, [campo]: valor, cuotaManual:false });
 
-  const { txConMes, entrega, nCuotas, inicioQ, sugerida, cuota, calc } = planDerivado(plan, tratamientos);
+  const { txConMes, entrega, nCuotas, inicioQ, sugerida, cuota, calc,
+          frag, linea, nMesesLinea, desembolsoTotal } = planDerivado(plan, tratamientos);
+
+  // ── Fragmenta: financiar la entrega ──
+  const puedeFinanciar = financiable(entrega);
+  const motivoFrag     = motivoNoFinanciable(entrega);
+  const setPlazoFrag   = (n) => onPlanChange({
+    ...plan, fragmentaPlazo: n,
+    // al cambiar el plazo se coge la tarifa vigente; solo se conserva a mano
+    fragmentaComision: n ? String(comisionFragmenta(entrega, n) ?? "") : "",
+  });
+
+  const controlFragmenta = (
+    <div style={{flex:"1 1 100%", display:"flex", gap:10, alignItems:"center", flexWrap:"wrap",
+      borderTop:"1px dashed #dde4ef", paddingTop:10, marginTop:2}}>
+      <label style={{display:"flex", alignItems:"center", gap:7, fontSize:13,
+        cursor: puedeFinanciar ? "pointer" : "not-allowed", opacity: puedeFinanciar ? 1 : 0.5}}>
+        <input type="checkbox" disabled={!puedeFinanciar}
+          checked={!!plan.fragmentaPlazo}
+          onChange={e => setPlazoFrag(e.target.checked ? 12 : 0)}
+          style={{width:16, height:16, cursor:"inherit"}}/>
+        Financiar la entrega con <b>Fragmenta</b>
+      </label>
+      {!puedeFinanciar && motivoFrag && (
+        <span style={{fontSize:12, color:"#c0392b"}}>{motivoFrag} — entrega actual {fmtEur(entrega)}</span>
+      )}
+      {puedeFinanciar && !!plan.fragmentaPlazo && (
+        <>
+          <div style={{display:"flex", gap:4}}>
+            {FRAG_PLAZOS.map(n => (
+              <button key={n} onClick={()=>setPlazoFrag(n)}
+                style={{fontSize:12, padding:"5px 12px", borderRadius:6, cursor:"pointer", fontWeight:600,
+                  background: plan.fragmentaPlazo===n ? "#c9a84c" : "#ffffff",
+                  border:`1px solid ${plan.fragmentaPlazo===n ? "#c9a84c" : "#dde4ef"}`,
+                  color: plan.fragmentaPlazo===n ? "#fff" : "#555"}}>
+                {n} cuotas
+              </button>
+            ))}
+          </div>
+          {frag && (
+            <span style={{fontSize:12.5, color:"#555"}}>
+              Comisión <b>{fmtEur(frag.comision)}</b> · 1ª cuota <b>{fmtEur(frag.primera)}</b>
+              {frag.plazo > 1 && <> · resto <b>{fmtEur(frag.base)}</b></>}
+            </span>
+          )}
+        </>
+      )}
+    </div>
+  );
 
   const mover = (txId, delta) => {
     const nuevo = Math.max(1, Math.min(60, (plan.colocacion[txId] || 1) + delta));
@@ -3542,6 +3614,7 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
             <div style={{flex:2, minWidth:180, fontSize:12, color:"#777", paddingBottom:9}}>
               La entrega se descuenta de los primeros meses. El techo marca en rojo los meses que lo superan.
             </div>
+            {controlFragmenta}
           </>
         ) : (
           <>
@@ -3565,6 +3638,7 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
                   color: plan.cuotaManual ? "#2c3250" : "#5a6b8c"}}/>
             </div>
             {campo("Empiezan en mes", plan.mesInicioCuotas, v=>set("mesInicioCuotas",v), {props:{step:1, min:1, max:60}})}
+            {controlFragmenta}
           </>
         )}
       </div>
@@ -3664,6 +3738,49 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
             fontSize:19, lineHeight:1, borderRadius:8, cursor:"pointer"}}>+</button>
         <span style={{fontSize:12.5, color:"#888"}}>{plan.nMeses} meses</span>
       </div>
+
+      {/* ── Línea de tiempo: la carga real mes a mes ──
+          Fragmenta arranca el mes 1 (la primera cuota se cobra al firmar) y la
+          clínica en el mes que diga el plan, así que hay meses con las dos. */}
+      {frag && (
+        <div style={{marginTop:14, background:"#ffffff", border:"1px solid #e2e5ed", borderRadius:12, padding:"14px 16px"}}>
+          <div style={{fontSize:11, color:"#c9a84c", letterSpacing:2, fontWeight:700, marginBottom:10}}>
+            LO QUE PAGA CADA MES
+          </div>
+          <div style={{overflowX:"auto"}}>
+            <table style={{borderCollapse:"collapse", width:"100%", minWidth: nMesesLinea * 62}}>
+              <tbody>
+                {[
+                  ["", linea.map(f => etiquetaMes(plan.fechaInicio, f.mes)), "#888", 11, 600],
+                  ["Fragmenta", linea.map(f => f.fragmenta), "#8e44ad", 12.5, 600],
+                  ["Clínica",   linea.map(f => f.clinica),   "#3498db", 12.5, 600],
+                  ["Total",     linea.map(f => f.total),     "#2c3250", 14,   800],
+                ].map(([etiqueta, valores, color, size, weight], fila) => (
+                  <tr key={etiqueta || "meses"} style={{borderTop: fila === 3 ? "2px solid #e2e5ed" : "none"}}>
+                    <td style={{fontSize:11, color:"#888", fontWeight:700, letterSpacing:.5,
+                      textTransform:"uppercase", paddingRight:12, whiteSpace:"nowrap"}}>{etiqueta}</td>
+                    {valores.map((v, i) => (
+                      <td key={i} style={{textAlign:"center", padding:"5px 4px", fontSize:size, color,
+                        fontWeight:weight, whiteSpace:"nowrap",
+                        background: fila === 3 && v > 0.005 ? "#f7f3e6" : "transparent",
+                        opacity: typeof v === "number" && v < 0.005 ? 0.25 : 1}}>
+                        {typeof v === "number" ? (v < 0.005 ? "—" : eur0(v)) : v}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{marginTop:12, fontSize:16, color:"#1a1a1a", fontWeight:600, lineHeight:1.45}}>
+            {fraseTramos(linea)}
+          </div>
+          <div style={{marginTop:6, fontSize:13, color:"#666"}}>
+            Desembolso real total <b style={{color:"#2c3250"}}>{fmtEur(desembolsoTotal)}</b>
+            {" "}— tratamiento {fmtEur(calc.totalPlan)} + comisión Fragmenta {fmtEur(frag.comision)}
+          </div>
+        </div>
+      )}
 
       {/* ── Resumen para el paciente ── */}
       <div style={{background:"#ffffff", color:"#1a1a1a", border:"2px solid #c9a84c", borderRadius:12, padding:"20px 22px", marginTop:14}}>

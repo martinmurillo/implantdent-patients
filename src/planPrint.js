@@ -7,6 +7,7 @@
 // con cuerpo de letra grande: se lee en la silla, no en una pantalla.
 
 import { addMeses as addMesesISO } from "./planCalc.js";
+import { fraseTramos, etiquetaMes } from "./fragmenta.js";
 
 const eur0 = (n) => `${Math.round(n).toLocaleString("es-ES")} €`;
 const eur2 = (n) => `${n.toLocaleString("es-ES",{minimumFractionDigits:2,maximumFractionDigits:2})} €`;
@@ -20,20 +21,20 @@ export const estilosPlanImpreso = `
   @page{size:A4 landscape;margin:7mm;}
   *{box-sizing:border-box;}
   body{font-family:'DM Sans','Segoe UI',sans-serif;font-size:13pt;color:#12211f;margin:0;}
-  .top{display:flex;align-items:center;gap:14px;border-bottom:3px solid #c9a84c;padding-bottom:2mm;margin-bottom:2.5mm;}
-  .top img{width:74px;height:auto;}
-  .top h1{font-size:23pt;margin:0;letter-spacing:.04em;text-transform:uppercase;line-height:1;}
+  .top{display:flex;align-items:center;gap:12px;border-bottom:3px solid #c9a84c;padding-bottom:1.5mm;margin-bottom:2mm;}
+  .top img{width:60px;height:auto;}
+  .top h1{font-size:21pt;margin:0;letter-spacing:.04em;text-transform:uppercase;line-height:1;}
   .top .who{font-size:12.5pt;color:#444;margin-top:1mm;}
   .board{display:grid;grid-template-columns:repeat(6,1fr);gap:2.5mm;}
   .col{border:1.5px solid #b8b8b8;border-radius:6px;display:flex;flex-direction:column;break-inside:avoid;}
-  .ch{padding:2mm 2.5mm;border-bottom:1.5px solid #d8d8d8;}
-  .ch .m{font-size:12.5pt;letter-spacing:.03em;text-transform:uppercase;color:#555;font-weight:700;}
-  .ch .t{font-size:26pt;font-weight:800;line-height:1.05;}
+  .ch{padding:1.5mm 2mm;border-bottom:1.5px solid #d8d8d8;}
+  .ch .m{font-size:11.5pt;letter-spacing:.03em;text-transform:uppercase;color:#555;font-weight:700;}
+  .ch .t{font-size:23pt;font-weight:800;line-height:1.02;}
   .ch .t.zero{color:#ccc;}
-  .ch .v{font-size:12.5pt;color:#0e3b3e;font-weight:800;line-height:1.25;}
+  .ch .v{font-size:11.5pt;color:#0e3b3e;font-weight:800;line-height:1.2;}
   .ch .k{font-size:12pt;color:#555;font-weight:600;}
   .bd{padding:1.8mm;display:flex;flex-direction:column;gap:1.2mm;flex:1;}
-  .chip{background:#f2efe9;border-radius:5px;padding:1.5mm 2mm;line-height:1.18;}
+  .chip{background:#f2efe9;border-radius:5px;padding:1.2mm 1.8mm;line-height:1.15;}
   .chip b{display:block;font-weight:700;font-size:13pt;}
   .chip i{font-style:normal;color:#444;font-size:13pt;font-weight:700;}
   .st{margin-top:auto;padding:1.5mm 2mm;border-radius:5px;font-size:14pt;font-weight:800;
@@ -43,20 +44,33 @@ export const estilosPlanImpreso = `
   .st.ok{background:#d9ede2;color:#155c3d;}
   .st.bad{background:#f9dcd6;color:#8c2d16;}
   .say{background:#fff;color:#111;border:2.5px solid #c9a84c;border-radius:8px;
-       padding:2.5mm 3.5mm;margin-top:2.5mm;
+       padding:2mm 3mm;margin-top:2mm;
        -webkit-print-color-adjust:exact;print-color-adjust:exact;}
-  .say p{margin:0;font-size:20pt;line-height:1.2;font-weight:600;}
+  .say p{margin:0;font-size:17pt;line-height:1.15;font-weight:600;}
   /* solo los importes del titular van en grande: si esto alcanza a los "Mes N"
      del resumen, la hoja se va a dos páginas */
-  .say p b{font-size:25pt;font-weight:800;}
+  .say p b{font-size:20pt;font-weight:800;}
   /* a dos columnas: el detalle por mes repite lo que ya muestra el tablero,
      así que no puede comerse media hoja */
+  /* con la línea de tiempo abajo, el detalle por mes se omite: el tablero de
+     arriba ya lo dice, y la hoja tiene que seguir siendo una */
   .say .sub{font-size:12.5pt;color:#222;margin-top:1.5mm;line-height:1.3;column-count:2;column-gap:8mm;}
   .say .sub b{font-weight:700;}
   .say .sub>div{break-inside:avoid;}
-  .avisos{display:flex;gap:2.5mm;align-items:stretch;margin-top:2mm;break-inside:avoid;}
+  .linea{margin-top:1.5mm;border:1.5px solid #b8b8b8;border-radius:6px;padding:1.5mm 2mm;break-inside:avoid;}
+  .linea h2{font-size:11pt;margin:0 0 1.5mm;letter-spacing:.08em;text-transform:uppercase;color:#a07830;}
+  .linea table{border-collapse:collapse;width:100%;}
+  .linea td{text-align:center;padding:0.4mm 0.5mm;white-space:nowrap;font-size:10pt;}
+  .linea td.et{text-align:left;font-size:8.5pt;color:#666;text-transform:uppercase;
+               font-weight:700;padding-right:2mm;letter-spacing:.04em;}
+  .linea tr.mes td{font-size:9pt;color:#666;font-weight:700;}
+  .linea tr.tot td{font-size:12pt;font-weight:800;border-top:1.5px solid #d8d8d8;}
+  .linea tr.tot td.on{background:#f7f3e6;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .linea .frase{font-size:12pt;font-weight:700;margin-top:1mm;line-height:1.22;}
+  .linea .desglose{font-size:10.5pt;color:#555;margin-top:0.8mm;}
+  .avisos{display:flex;gap:2.5mm;align-items:stretch;margin-top:1.2mm;break-inside:avoid;}
   .avisos>*{flex:1;}
-  .warn,.info{font-size:13pt;padding:2mm 2.5mm;border-radius:5px;line-height:1.28;
+  .warn,.info{font-size:10.5pt;padding:1.5mm 2mm;border-radius:5px;line-height:1.25;
               -webkit-print-color-adjust:exact;print-color-adjust:exact;}
   .warn{background:#f9dcd6;color:#8c2d16;border-left:4px solid #c2482f;}
   .info{background:#fbeed3;color:#6e4c0c;border-left:4px solid #c8891b;}
@@ -110,6 +124,29 @@ export function htmlPlanImpreso({ plan, paciente, der, logoUrl = "" }) {
       : "",
   ].join("");
 
+  // Lo que realmente desembolsa el paciente cada mes cuando la entrega va
+  // financiada: durante unos meses paga la cuota de Fragmenta y la de clínica.
+  const { frag, linea, desembolsoTotal } = der;
+  const fila = (clase, etiqueta, valores, marcar = false) =>
+    `<tr class="${clase}"><td class="et">${etiqueta}</td>` +
+    valores.map(v => {
+      const num = typeof v === "number";
+      const on = marcar && num && v > 0.005;
+      return `<td class="${on ? "on" : ""}">${num ? (v < 0.005 ? "—" : eur0(v)) : v}</td>`;
+    }).join("") + `</tr>`;
+
+  const lineaHtml = !frag ? "" : `<div class="linea">
+    <h2>Lo que paga cada mes</h2>
+    <table><tbody>
+      ${fila("mes", "", linea.map(f => etiquetaMes(plan.fechaInicio, f.mes)))}
+      ${fila("", "Fragmenta", linea.map(f => f.fragmenta))}
+      ${fila("", "Clínica",   linea.map(f => f.clinica))}
+      ${fila("tot", "Total",  linea.map(f => f.total), true)}
+    </tbody></table>
+    <div class="frase">${fraseTramos(linea)}</div>
+    <div class="desglose">Desembolso real total <b>${eur2(desembolsoTotal)}</b> — tratamiento ${eur2(der.calc.totalPlan)} + comisión Fragmenta ${eur2(frag.comision)}</div>
+  </div>`;
+
   return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"/>
 <title>Plan de pago — ${esc(paciente?.name || "")}</title>
 <style>${estilosPlanImpreso}</style></head><body>
@@ -123,8 +160,9 @@ export function htmlPlanImpreso({ plan, paciente, der, logoUrl = "" }) {
   <div class="board">${columnas}</div>
   <div class="say">
     <p>${titular}</p>
-    <div class="sub">${pasos}<div style="opacity:.75;margin-top:1.5mm">Tratamiento ${eur2(calc.totalTratamiento)}${plan.modo === "cuotas" ? ` · Plan ${eur2(calc.totalPlan)}` : ""}</div></div>
+    <div class="sub">${frag ? "" : pasos}<div style="opacity:.75;margin-top:1.5mm">Tratamiento ${eur2(calc.totalTratamiento)}${plan.modo === "cuotas" ? ` · Plan ${eur2(calc.totalPlan)}` : ""}</div></div>
   </div>
+  ${lineaHtml}
   ${avisos ? `<div class="avisos">${avisos}</div>` : ""}
 </body></html>`;
 }

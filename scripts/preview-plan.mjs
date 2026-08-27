@@ -5,6 +5,7 @@
 import { writeFileSync } from "node:fs";
 import { calcPlan } from "../src/planCalc.js";
 import { htmlPlanImpreso } from "../src/planPrint.js";
+import { calcFragmenta, lineaDeTiempo } from "../src/fragmenta.js";
 
 const tx = [
   ["IMPLANTE ESTANDAR", 764.15, 1], ["IMPLANTE ESTANDAR", 764.15, 1], ["INJERTO OSEO", 428.75, 1],
@@ -22,10 +23,21 @@ const calc = calcPlan({
   entrega, techoMes: 0, nCuotas, importeCuota: cuota, mesInicioCuotas: inicioQ,
 });
 
+// entrega de 2.000 financiada con Fragmenta a 12 cuotas
+const frag = calcFragmenta({ importe: entrega, plazo: 12 });
+const nMesesLinea = Math.min(24, Math.max(plan.nMeses, frag.plazo));
+const porMesClinica = Array.from({ length: nMesesLinea }, (_, i) => {
+  const v = calc.porMes[i] || 0;
+  return i === 0 ? Math.max(0, Math.round((v - entrega) * 100) / 100) : v;
+});
+const linea = lineaDeTiempo({ porMesClinica, fragmenta: frag, nMeses: nMesesLinea });
+const desembolsoTotal = Math.round((calc.totalPlan + frag.comision) * 100) / 100;
+
 const html = htmlPlanImpreso({
   plan,
   paciente: { name: "ROSA ISABEL GOMEZ FLORES", budget_no: "74085" },
-  der: { txConMes: tx, entrega, nCuotas, inicioQ, cuota, calc },
+  der: { txConMes: tx, entrega, nCuotas, inicioQ, cuota, calc,
+         frag, linea, nMesesLinea, desembolsoTotal },
 });
 
 const salida = process.argv[2] || "preview-plan.html";
