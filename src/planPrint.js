@@ -7,7 +7,7 @@
 // con cuerpo de letra grande: se lee en la silla, no en una pantalla.
 
 import { addMeses as addMesesISO } from "./planCalc.js";
-import { fraseTramos, etiquetaMes } from "./fragmenta.js";
+import { fraseTramos, etiquetaMes } from "./frakmenta.js";
 import { TITULO_LEGAL, parrafosLegales, CAMPOS_FIRMA, CLINICA } from "./legalPlan.js";
 
 const eur0 = (n) => `${Math.round(n).toLocaleString("es-ES")} €`;
@@ -156,7 +156,7 @@ export function htmlPlanImpreso({ plan, paciente, der, logoUrl = "" }) {
   ].join("");
 
   // Lo que realmente desembolsa el paciente cada mes cuando la entrega va
-  // financiada: durante unos meses paga la cuota de Fragmenta y la de clínica.
+  // financiada: durante unos meses paga la cuota de Frakmenta y la de clínica.
   const { frag, linea, desembolsoTotal } = der;
   const fila = (clase, etiqueta, valores, marcar = false) =>
     `<tr class="${clase}"><td class="et">${etiqueta}</td>` +
@@ -170,12 +170,12 @@ export function htmlPlanImpreso({ plan, paciente, der, logoUrl = "" }) {
     <h2>Lo que paga cada mes</h2>
     <table><tbody>
       ${fila("mes", "", linea.map(f => etiquetaMes(plan.fechaInicio, f.mes)))}
-      ${fila("", "Fragmenta", linea.map(f => f.fragmenta))}
+      ${fila("", "Frakmenta", linea.map(f => f.frakmenta))}
       ${fila("", "Clínica",   linea.map(f => f.clinica))}
       ${fila("tot", "Total",  linea.map(f => f.total), true)}
     </tbody></table>
     <div class="frase">${fraseTramos(linea)}</div>
-    <div class="desglose">Desembolso real total <b>${eur2(desembolsoTotal)}</b> — tratamiento ${eur2(der.calc.totalPlan)} + comisión Fragmenta ${eur2(frag.comision)}</div>
+    <div class="desglose">Desembolso real total <b>${eur2(desembolsoTotal)}</b> — tratamiento ${eur2(der.calc.totalPlan)} + comisión Frakmenta ${eur2(frag.comision)}</div>
   </div>`;
 
   return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"/>
@@ -197,7 +197,7 @@ export function htmlPlanImpreso({ plan, paciente, der, logoUrl = "" }) {
   ${avisos ? `<div class="avisos">${avisos}</div>` : ""}
   <div class="legal">
     <h3>${TITULO_LEGAL}</h3>
-    ${parrafosLegales({ conFragmenta: !!frag }).map(t => `<p>${t}</p>`).join("")}
+    ${parrafosLegales({ conFrakmenta: !!frag }).map(t => `<p>${t}</p>`).join("")}
     <div class="firma">
       ${CAMPOS_FIRMA.map(c => `<div style="flex:${c.ancho}">
         <div class="linea-f"></div><div class="lbl">${c.etiqueta}</div>

@@ -5,7 +5,7 @@
 import { writeFileSync } from "node:fs";
 import { calcPlan } from "../src/planCalc.js";
 import { htmlPlanImpreso } from "../src/planPrint.js";
-import { calcFragmenta, lineaDeTiempo } from "../src/fragmenta.js";
+import { calcFrakmenta, lineaDeTiempo } from "../src/frakmenta.js";
 
 const tx = [
   ["IMPLANTE ESTANDAR", 764.15, 1], ["IMPLANTE ESTANDAR", 764.15, 1], ["INJERTO OSEO", 428.75, 1],
@@ -23,14 +23,14 @@ const calc = calcPlan({
   entrega, techoMes: 0, nCuotas, importeCuota: cuota, mesInicioCuotas: inicioQ,
 });
 
-// entrega de 2.000 financiada con Fragmenta a 12 cuotas
-const frag = calcFragmenta({ importe: entrega, plazo: 12 });
+// entrega de 2.000 financiada con Frakmenta a 12 cuotas
+const frag = calcFrakmenta({ importe: entrega, plazo: 12 });
 const nMesesLinea = Math.min(24, Math.max(plan.nMeses, frag.plazo));
 const porMesClinica = Array.from({ length: nMesesLinea }, (_, i) => {
   const v = calc.porMes[i] || 0;
   return i === 0 ? Math.max(0, Math.round((v - entrega) * 100) / 100) : v;
 });
-const linea = lineaDeTiempo({ porMesClinica, fragmenta: frag, nMeses: nMesesLinea });
+const linea = lineaDeTiempo({ porMesClinica, frakmenta: frag, nMeses: nMesesLinea });
 const desembolsoTotal = Math.round((calc.totalPlan + frag.comision) * 100) / 100;
 
 const html = htmlPlanImpreso({

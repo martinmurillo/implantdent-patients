@@ -2,35 +2,35 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
   TARIFAS, PLAZOS, IMPORTE_MIN, IMPORTE_MAX,
-  financiable, motivoNoFinanciable, comisionFragmenta, calcFragmenta,
+  financiable, motivoNoFinanciable, comisionFrakmenta, calcFrakmenta,
   lineaDeTiempo, tramosDePago, fraseTramos, etiquetaMes,
-} from "./fragmenta.js";
+} from "./frakmenta.js";
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  TARIFAS VIGENTES
-//  Los números de ESTE bloque son la tabla de hoy. Si Fragmenta cambia sus
-//  comisiones, se edita src/fragmenta.js y se actualizan estos valores.
+//  Los números de ESTE bloque son la tabla de hoy. Si Frakmenta cambia sus
+//  comisiones, se edita src/frakmenta.js y se actualizan estos valores.
 //  El resto del archivo deriva la comisión de la tabla, así que no hay que
 //  tocar nada más.
 // ═══════════════════════════════════════════════════════════════════════════
-describe("comisionFragmenta · tabla de tarifas vigente", () => {
+describe("comisionFrakmenta · tabla de tarifas vigente", () => {
   test("el caso real: 2.000 € a 12 cuotas son 105 € de comisión", () => {
-    assert.equal(comisionFragmenta(2000, 12), 105);
+    assert.equal(comisionFrakmenta(2000, 12), 105);
   });
 
   test("los tramos cortan donde dice la tabla", () => {
-    assert.equal(comisionFragmenta(400, 12), 15);      // último del primer tramo
-    assert.equal(comisionFragmenta(400.01, 12), 30);   // primero del segundo
-    assert.equal(comisionFragmenta(550, 10), 20);
-    assert.equal(comisionFragmenta(550.01, 10), 30);
-    assert.equal(comisionFragmenta(1000, 3), 30);
-    assert.equal(comisionFragmenta(1000.01, 3), 35);
+    assert.equal(comisionFrakmenta(400, 12), 15);      // último del primer tramo
+    assert.equal(comisionFrakmenta(400.01, 12), 30);   // primero del segundo
+    assert.equal(comisionFrakmenta(550, 10), 20);
+    assert.equal(comisionFrakmenta(550.01, 10), 30);
+    assert.equal(comisionFrakmenta(1000, 3), 30);
+    assert.equal(comisionFrakmenta(1000.01, 3), 35);
   });
 
   test("a 3 cuotas los tramos bajos no llevan comisión", () => {
-    assert.equal(comisionFragmenta(400, 3), 0);
-    assert.equal(comisionFragmenta(850, 3), 0);
-    assert.equal(comisionFragmenta(850.01, 3), 30);
+    assert.equal(comisionFrakmenta(400, 3), 0);
+    assert.equal(comisionFrakmenta(850, 3), 0);
+    assert.equal(comisionFrakmenta(850.01, 3), 30);
   });
 
   test("la tabla cubre los 8 tramos y los 4 plazos, sin huecos", () => {
@@ -43,13 +43,13 @@ describe("comisionFragmenta · tabla de tarifas vigente", () => {
   });
 
   test("fuera de rango no hay comisión", () => {
-    assert.equal(comisionFragmenta(58, 12), null);
-    assert.equal(comisionFragmenta(2000.01, 12), null);
+    assert.equal(comisionFrakmenta(58, 12), null);
+    assert.equal(comisionFrakmenta(2000.01, 12), null);
   });
 
-  test("un plazo que Fragmenta no ofrece se rechaza", () => {
-    assert.equal(comisionFragmenta(1000, 6), null);
-    assert.equal(comisionFragmenta(1000, 24), null);
+  test("un plazo que Frakmenta no ofrece se rechaza", () => {
+    assert.equal(comisionFrakmenta(1000, 6), null);
+    assert.equal(comisionFrakmenta(1000, 24), null);
   });
 });
 
@@ -68,9 +68,9 @@ describe("financiable", () => {
   });
 });
 
-describe("calcFragmenta · el ejemplo que hay que clavar", () => {
+describe("calcFrakmenta · el ejemplo que hay que clavar", () => {
   // 2.000 € a 12 cuotas → comisión 105 → cuota 1 = 271,67 y 2 a 12 = 166,67
-  const f = calcFragmenta({ importe: 2000, plazo: 12, comision: 105 });
+  const f = calcFrakmenta({ importe: 2000, plazo: 12, comision: 105 });
 
   test("comisión, cuota base y primera cuota", () => {
     assert.equal(f.comision, 105);
@@ -89,72 +89,72 @@ describe("calcFragmenta · el ejemplo que hay que clavar", () => {
   });
 
   test("a 3 cuotas sin comisión, las tres son iguales", () => {
-    const t = calcFragmenta({ importe: 600, plazo: 3 });
+    const t = calcFrakmenta({ importe: 600, plazo: 3 });
     assert.equal(t.comision, 0);
     assert.deepEqual(t.cuotas, [200, 200, 200]);
     assert.equal(t.total, 600);
   });
 
   test("respeta una comisión firmada distinta de la tarifa de hoy", () => {
-    const viejo = calcFragmenta({ importe: 2000, plazo: 12, comision: 90 });
+    const viejo = calcFrakmenta({ importe: 2000, plazo: 12, comision: 90 });
     assert.equal(viejo.comision, 90);
     assert.equal(viejo.primera, 256.67);
     assert.equal(viejo.total, 2090);
   });
 
   test("fuera de rango o con plazo inválido devuelve null", () => {
-    assert.equal(calcFragmenta({ importe: 2500, plazo: 12 }), null);
-    assert.equal(calcFragmenta({ importe: 50, plazo: 12 }), null);
-    assert.equal(calcFragmenta({ importe: 1000, plazo: 7 }), null);
-    assert.equal(calcFragmenta({ importe: 1000, plazo: 0 }), null);
+    assert.equal(calcFrakmenta({ importe: 2500, plazo: 12 }), null);
+    assert.equal(calcFrakmenta({ importe: 50, plazo: 12 }), null);
+    assert.equal(calcFrakmenta({ importe: 1000, plazo: 7 }), null);
+    assert.equal(calcFrakmenta({ importe: 1000, plazo: 0 }), null);
   });
 });
 
 describe("lineaDeTiempo · el solape que hay que enseñar", () => {
   // Entrega de 2.000 financiada a 12, y 5 cuotas de 426,74 en clínica
-  // desde el mes 2. Fragmenta arranca el mes 1; la clínica el 2.
+  // desde el mes 2. Frakmenta arranca el mes 1; la clínica el 2.
   // comisión fijada a mano: aquí se prueba el solape, no la tabla de tarifas
-  const fragmenta = calcFragmenta({ importe: 2000, plazo: 12, comision: 105 });
+  const frakmenta = calcFrakmenta({ importe: 2000, plazo: 12, comision: 105 });
   const porMesClinica = [0, 426.74, 426.74, 426.74, 426.74, 426.74];
-  const filas = lineaDeTiempo({ porMesClinica, fragmenta, nMeses: 12 });
+  const filas = lineaDeTiempo({ porMesClinica, frakmenta, nMeses: 12 });
 
-  test("el mes 1 es solo Fragmenta, con la comisión dentro", () => {
-    assert.deepEqual(filas[0], { mes: 1, fragmenta: 271.67, clinica: 0, total: 271.67 });
+  test("el mes 1 es solo Frakmenta, con la comisión dentro", () => {
+    assert.deepEqual(filas[0], { mes: 1, frakmenta: 271.67, clinica: 0, total: 271.67 });
   });
 
   test("los meses 2 a 6 llevan las dos cuotas a la vez", () => {
     for (let m = 2; m <= 6; m++) {
       const f = filas[m - 1];
-      assert.equal(f.fragmenta, 166.67);
+      assert.equal(f.frakmenta, 166.67);
       assert.equal(f.clinica, 426.74);
       assert.equal(f.total, 593.41);
     }
   });
 
-  test("acabadas las cuotas de clínica queda solo Fragmenta", () => {
+  test("acabadas las cuotas de clínica queda solo Frakmenta", () => {
     for (let m = 7; m <= 12; m++) {
       assert.equal(filas[m - 1].clinica, 0);
       assert.equal(filas[m - 1].total, 166.67);
     }
   });
 
-  test("pasado el plazo de Fragmenta no queda nada", () => {
-    const largo = lineaDeTiempo({ porMesClinica, fragmenta, nMeses: 14 });
+  test("pasado el plazo de Frakmenta no queda nada", () => {
+    const largo = lineaDeTiempo({ porMesClinica, frakmenta, nMeses: 14 });
     assert.equal(largo[12].total, 0);
     assert.equal(largo[13].total, 0);
   });
 
-  test("sin Fragmenta la línea es solo la clínica", () => {
-    const sin = lineaDeTiempo({ porMesClinica, fragmenta: null, nMeses: 6 });
+  test("sin Frakmenta la línea es solo la clínica", () => {
+    const sin = lineaDeTiempo({ porMesClinica, frakmenta: null, nMeses: 6 });
     assert.deepEqual(sin.map(f => f.total), [0, 426.74, 426.74, 426.74, 426.74, 426.74]);
   });
 });
 
 describe("tramosDePago y fraseTramos", () => {
-  const fragmenta = calcFragmenta({ importe: 2000, plazo: 12, comision: 105 });
+  const frakmenta = calcFrakmenta({ importe: 2000, plazo: 12, comision: 105 });
   const filas = lineaDeTiempo({
     porMesClinica: [0, 426.74, 426.74, 426.74, 426.74, 426.74],
-    fragmenta, nMeses: 12,
+    frakmenta, nMeses: 12,
   });
 
   test("agrupa los meses consecutivos que cuestan lo mismo", () => {
@@ -174,17 +174,17 @@ describe("tramosDePago y fraseTramos", () => {
   });
 
   test("un plan de una sola cuantía se dice en una frase corta", () => {
-    const planos = lineaDeTiempo({ porMesClinica: [100, 100, 100], fragmenta: null, nMeses: 3 });
+    const planos = lineaDeTiempo({ porMesClinica: [100, 100, 100], frakmenta: null, nMeses: 3 });
     assert.equal(fraseTramos(planos), "Durante los primeros 3 meses paga 100,00 € al mes.");
   });
 
   test("los meses a cero no se cuentan", () => {
-    const conCeros = lineaDeTiempo({ porMesClinica: [100, 0, 0], fragmenta: null, nMeses: 3 });
+    const conCeros = lineaDeTiempo({ porMesClinica: [100, 0, 0], frakmenta: null, nMeses: 3 });
     assert.equal(fraseTramos(conCeros), "El mes 1 paga 100,00 €.");
   });
 
   test("sin nada que pagar devuelve cadena vacía", () => {
-    assert.equal(fraseTramos(lineaDeTiempo({ porMesClinica: [], fragmenta: null, nMeses: 3 })), "");
+    assert.equal(fraseTramos(lineaDeTiempo({ porMesClinica: [], frakmenta: null, nMeses: 3 })), "");
   });
 });
 
@@ -218,22 +218,22 @@ describe("comisión firmada frente a comisión recalculada", () => {
   // que cambien los datos del préstamo: si cambia el importe, cambia el tramo
   // y la comisión hay que volver a pedirla a la tabla.
   test("con comisión guardada, editar la tabla no altera un plan firmado", () => {
-    const firmado = calcFragmenta({ importe: 2000, plazo: 12, comision: 105 });
+    const firmado = calcFrakmenta({ importe: 2000, plazo: 12, comision: 105 });
     assert.equal(firmado.primera, 271.67);
     assert.equal(firmado.total, 2105);
   });
 
   test("sin comisión guardada se coge la tarifa vigente", () => {
-    assert.equal(calcFragmenta({ importe: 2000, plazo: 12 }).comision,
-                 comisionFragmenta(2000, 12));
+    assert.equal(calcFrakmenta({ importe: 2000, plazo: 12 }).comision,
+                 comisionFrakmenta(2000, 12));
   });
 
   test("bajar la entrega cambia de tramo: 2.000 y 500 no pagan lo mismo", () => {
-    assert.notEqual(comisionFragmenta(2000, 12), comisionFragmenta(500, 12));
+    assert.notEqual(comisionFrakmenta(2000, 12), comisionFrakmenta(500, 12));
   });
 
   test("una comisión de 0 guardada se respeta y no se confunde con vacía", () => {
-    const f = calcFragmenta({ importe: 2000, plazo: 12, comision: 0 });
+    const f = calcFrakmenta({ importe: 2000, plazo: 12, comision: 0 });
     assert.equal(f.comision, 0);
     assert.equal(f.primera, 166.67);
     assert.equal(f.total, 2000);

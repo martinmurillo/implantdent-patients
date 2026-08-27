@@ -1,6 +1,6 @@
-// ─── Fragmenta ───────────────────────────────────────────────────────────────
+// ─── Frakmenta ───────────────────────────────────────────────────────────────
 // Financiación de la entrega inicial. La clínica cobra la entrega igual; lo que
-// cambia es que el paciente no la pone de una, sino que se la paga a Fragmenta.
+// cambia es que el paciente no la pone de una, sino que se la paga a Frakmenta.
 //
 // El interés es una COMISIÓN FIJA según importe y plazo, y se cobra entera en
 // la primera cuota.
@@ -37,12 +37,12 @@ export const financiable = (importe) => {
 // Por qué no se puede financiar, para poder enseñarlo en pantalla
 export const motivoNoFinanciable = (importe) => {
   const i = Number(importe) || 0;
-  if (i < IMPORTE_MIN) return `Fragmenta financia desde ${IMPORTE_MIN} €`;
-  if (i > IMPORTE_MAX) return `Fragmenta llega hasta ${IMPORTE_MAX} €`;
+  if (i < IMPORTE_MIN) return `Frakmenta financia desde ${IMPORTE_MIN} €`;
+  if (i > IMPORTE_MAX) return `Frakmenta llega hasta ${IMPORTE_MAX} €`;
   return null;
 };
 
-export const comisionFragmenta = (importe, plazo) => {
+export const comisionFrakmenta = (importe, plazo) => {
   const i = Number(importe) || 0;
   const n = Number(plazo) || 0;
   if (!financiable(i) || !PLAZOS.includes(n)) return null;
@@ -52,13 +52,13 @@ export const comisionFragmenta = (importe, plazo) => {
 
 // La comisión se puede pasar a mano para respetar la que se firmó: las tarifas
 // cambian y un plan viejo no puede recalcularse con las de hoy.
-export function calcFragmenta({ importe, plazo, comision = null }) {
+export function calcFrakmenta({ importe, plazo, comision = null }) {
   const imp = round2(Number(importe) || 0);
   const n   = Number(plazo) || 0;
   if (!financiable(imp) || !PLAZOS.includes(n)) return null;
 
   const com = (comision === null || comision === undefined || comision === "")
-    ? comisionFragmenta(imp, n)
+    ? comisionFrakmenta(imp, n)
     : round2(Number(comision) || 0);
   if (com === null) return null;
 
@@ -74,15 +74,15 @@ export function calcFragmenta({ importe, plazo, comision = null }) {
 }
 
 // ─── Línea de tiempo ─────────────────────────────────────────────────────────
-// Fragmenta arranca en el mes 1: la primera cuota se cobra al firmar.
+// Frakmenta arranca en el mes 1: la primera cuota se cobra al firmar.
 // La cuota de clínica arranca cuando diga el plan (normalmente el mes 2,
 // porque el mes 1 es la entrega). De ahí que se solapen unos meses.
-export function lineaDeTiempo({ porMesClinica = [], fragmenta = null, nMeses = 12 }) {
+export function lineaDeTiempo({ porMesClinica = [], frakmenta = null, nMeses = 12 }) {
   const filas = [];
   for (let m = 1; m <= nMeses; m++) {
-    const fr = fragmenta && m <= fragmenta.plazo ? fragmenta.cuotas[m - 1] : 0;
+    const fr = frakmenta && m <= frakmenta.plazo ? frakmenta.cuotas[m - 1] : 0;
     const cl = round2(porMesClinica[m - 1] || 0);
-    filas.push({ mes: m, fragmenta: round2(fr), clinica: cl, total: round2(fr + cl) });
+    filas.push({ mes: m, frakmenta: round2(fr), clinica: cl, total: round2(fr + cl) });
   }
   return filas;
 }
