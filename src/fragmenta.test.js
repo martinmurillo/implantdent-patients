@@ -6,7 +6,14 @@ import {
   lineaDeTiempo, tramosDePago, fraseTramos, etiquetaMes,
 } from "./fragmenta.js";
 
-describe("comisionFragmenta · tabla de tarifas", () => {
+// ═══════════════════════════════════════════════════════════════════════════
+//  TARIFAS VIGENTES
+//  Los números de ESTE bloque son la tabla de hoy. Si Fragmenta cambia sus
+//  comisiones, se edita src/fragmenta.js y se actualizan estos valores.
+//  El resto del archivo deriva la comisión de la tabla, así que no hay que
+//  tocar nada más.
+// ═══════════════════════════════════════════════════════════════════════════
+describe("comisionFragmenta · tabla de tarifas vigente", () => {
   test("el caso real: 2.000 € a 12 cuotas son 105 € de comisión", () => {
     assert.equal(comisionFragmenta(2000, 12), 105);
   });
@@ -63,7 +70,7 @@ describe("financiable", () => {
 
 describe("calcFragmenta · el ejemplo que hay que clavar", () => {
   // 2.000 € a 12 cuotas → comisión 105 → cuota 1 = 271,67 y 2 a 12 = 166,67
-  const f = calcFragmenta({ importe: 2000, plazo: 12 });
+  const f = calcFragmenta({ importe: 2000, plazo: 12, comision: 105 });
 
   test("comisión, cuota base y primera cuota", () => {
     assert.equal(f.comision, 105);
@@ -78,7 +85,7 @@ describe("calcFragmenta · el ejemplo que hay que clavar", () => {
   });
 
   test("el total pagado es el importe más la comisión", () => {
-    assert.equal(f.total, 2105);
+    assert.equal(f.total, 2000 + f.comision);
   });
 
   test("a 3 cuotas sin comisión, las tres son iguales", () => {
@@ -106,7 +113,8 @@ describe("calcFragmenta · el ejemplo que hay que clavar", () => {
 describe("lineaDeTiempo · el solape que hay que enseñar", () => {
   // Entrega de 2.000 financiada a 12, y 5 cuotas de 426,74 en clínica
   // desde el mes 2. Fragmenta arranca el mes 1; la clínica el 2.
-  const fragmenta = calcFragmenta({ importe: 2000, plazo: 12 });
+  // comisión fijada a mano: aquí se prueba el solape, no la tabla de tarifas
+  const fragmenta = calcFragmenta({ importe: 2000, plazo: 12, comision: 105 });
   const porMesClinica = [0, 426.74, 426.74, 426.74, 426.74, 426.74];
   const filas = lineaDeTiempo({ porMesClinica, fragmenta, nMeses: 12 });
 
@@ -143,7 +151,7 @@ describe("lineaDeTiempo · el solape que hay que enseñar", () => {
 });
 
 describe("tramosDePago y fraseTramos", () => {
-  const fragmenta = calcFragmenta({ importe: 2000, plazo: 12 });
+  const fragmenta = calcFragmenta({ importe: 2000, plazo: 12, comision: 105 });
   const filas = lineaDeTiempo({
     porMesClinica: [0, 426.74, 426.74, 426.74, 426.74, 426.74],
     fragmenta, nMeses: 12,
@@ -221,8 +229,7 @@ describe("comisión firmada frente a comisión recalculada", () => {
   });
 
   test("bajar la entrega cambia de tramo: 2.000 y 500 no pagan lo mismo", () => {
-    assert.equal(comisionFragmenta(2000, 12), 105);
-    assert.equal(comisionFragmenta(500, 12), 30);
+    assert.notEqual(comisionFragmenta(2000, 12), comisionFragmenta(500, 12));
   });
 
   test("una comisión de 0 guardada se respeta y no se confunde con vacía", () => {
