@@ -37,6 +37,14 @@ export const sumarDias = (iso, n) => {
   return t.toISOString().slice(0, 10);
 };
 
+// Reparte los meses del tablero en filas equilibradas. Con 13 meses y un
+// máximo de 7 por fila da 7+6, en vez de 6+6+1 con el último mes suelto.
+export const columnasTablero = (nMeses, maxCols = 7) => {
+  const n = Math.max(1, Number(nMeses) || 1);
+  const filas = Math.ceil(n / Math.max(1, maxCols));
+  return Math.ceil(n / filas);
+};
+
 // ─── Clasificación de tratamientos ───────────────────────────────────────────
 // Vive acá y no en el lector de PDF porque la usan tanto la colocación inicial
 // como las alertas de cobertura.

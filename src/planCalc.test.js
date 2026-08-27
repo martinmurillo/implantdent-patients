@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   addMeses, sumarDias, cuotaSugerida, totalTratamientos,
   calcPlan, cuotasDelPlan, estadoCuota, resumenPlan, coberturaProxima,
-  diasEntre, conciliarCuotas, precioSinDescuento,
+  diasEntre, conciliarCuotas, precioSinDescuento, columnasTablero,
 } from "./planCalc.js";
 
 // ─── Fechas ──────────────────────────────────────────────────────────────────
@@ -668,5 +668,32 @@ describe("precioSinDescuento", () => {
 
   test("no divide por cero con un descuento del 100%", () => {
     assert.equal(precioSinDescuento(535.5, 100), 535.5);
+  });
+});
+
+describe("columnasTablero", () => {
+  test("13 meses van 7+6, no 6+6+1 con el último suelto", () => {
+    assert.equal(columnasTablero(13), 7);
+  });
+
+  test("hasta 7 caben en una sola fila", () => {
+    for (let n = 1; n <= 7; n++) assert.equal(columnasTablero(n), n <= 7 ? n : 7);
+  });
+
+  test("reparte en filas equilibradas y nunca deja una fila de uno", () => {
+    for (let n = 1; n <= 24; n++) {
+      const cols = columnasTablero(n);
+      const filas = Math.ceil(n / cols);
+      const ultima = n - cols * (filas - 1);
+      assert.ok(cols <= 7, `n=${n} cols=${cols}`);
+      assert.ok(filas === 1 || ultima > 1, `n=${n} deja una fila de ${ultima}`);
+    }
+  });
+
+  test("casos concretos", () => {
+    assert.equal(columnasTablero(6), 6);
+    assert.equal(columnasTablero(12), 6);
+    assert.equal(columnasTablero(14), 7);
+    assert.equal(columnasTablero(24), 6);
   });
 });

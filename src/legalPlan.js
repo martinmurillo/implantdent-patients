@@ -44,6 +44,25 @@ export const DIRECCION_TEXTO = `${CLINICA.via}, ${CLINICA.cp} ${CLINICA.ciudad}`
 
 export const TITULO_LEGAL = "Compromiso de pago";
 
+// ─── Etiquetas de la línea de tiempo ─────────────────────────────────────────
+// Van en una columna estrecha, así que se parten en dos líneas en vez de
+// ensanchar la tabla.
+export const ETIQUETAS_LINEA = {
+  frakmenta: "Pago domiciliado con Frakmenta",
+  clinica:   "Pago en clínica · 0% interés",
+  total:     "Pago total por mes",
+};
+
+// ─── Datos de cobro ──────────────────────────────────────────────────────────
+export const PAGO = {
+  iban: "ES13 0049 2439 1723 1521 9830",
+  // el concepto lleva el nombre completo del paciente para poder identificarlo
+  concepto: (nombrePaciente) =>
+    `${String(nombrePaciente || "").trim().toUpperCase()} · SANTA EUGENIA`.replace(/^· /, ""),
+};
+
+export const TITULO_PAGO = "Cómo y cuándo se abona";
+
 // conFrakmenta añade el párrafo que deslinda a la financiera
 export function parrafosLegales({ conFrakmenta = false } = {}) {
   return [
@@ -56,6 +75,8 @@ export function parrafosLegales({ conFrakmenta = false } = {}) {
     ] : []),
 
     `Este documento sirve como presupuesto previo por escrito a los efectos del art. 251-3.2 de la Ley 22/2010, del Código de consumo de Cataluña, y no sustituye al consentimiento informado del tratamiento, que se otorga por separado conforme a la Ley 41/2002.`,
+
+    `Los tratamientos se realizarán conforme al cronograma de meses que figura en este plan. No pueden adelantarse a fechas anteriores a las previstas, salvo que se adelante también el pago en clínica correspondiente a esas fases.`,
 
     `El impago de dos vencimientos consecutivos faculta a la clínica a interrumpir el calendario y a reclamar el importe pendiente correspondiente al tratamiento ya realizado. Cualquier modificación de este plan requiere acuerdo por escrito de ambas partes.`,
 

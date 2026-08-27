@@ -4,10 +4,10 @@ import { translateTreatment, setTranslationDict } from "./treatments";
 import { loadPdfJs } from "./pdfjs";
 import { calcPlan, cuotaSugerida, totalTratamientos, cuotasDelPlan,
          resumenPlan, coberturaProxima, addMeses, conciliarCuotas,
-         precioSinDescuento } from "./planCalc";
+         precioSinDescuento, columnasTablero } from "./planCalc";
 import { colocacionInicial, parsePlanPDF, importeFila } from "./pdfPlan";
 import { htmlPlanImpreso } from "./planPrint";
-import { DIRECCION_TEXTO } from "./legalPlan";
+import { DIRECCION_TEXTO, ETIQUETAS_LINEA } from "./legalPlan";
 import { PLAZOS as FRAG_PLAZOS, financiable, motivoNoFinanciable,
          comisionFrakmenta, calcFrakmenta, lineaDeTiempo, fraseTramos,
          etiquetaMes } from "./frakmenta";
@@ -3659,7 +3659,7 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
       </div>
 
       {/* ── Tablero ── */}
-      <div className="board" style={{display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(158px,1fr))", gap:8, alignItems:"stretch"}}>
+      <div className="board" style={{display:"grid", gridTemplateColumns:`repeat(${columnasTablero(plan.nMeses)},minmax(0,1fr))`, gap:8, alignItems:"stretch"}}>
         {meses.map(mes => {
           const items   = txConMes.filter(t => t.mes === mes);
           const importe = calc.porMes[mes-1] || 0;
@@ -3767,13 +3767,14 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
               <tbody>
                 {[
                   ["", linea.map(f => etiquetaMes(plan.fechaInicio, f.mes)), "#888", 11, 600],
-                  ["Frakmenta", linea.map(f => f.frakmenta), "#8e44ad", 12.5, 600],
-                  ["Clínica",   linea.map(f => f.clinica),   "#3498db", 12.5, 600],
-                  ["Total",     linea.map(f => f.total),     "#2c3250", 14,   800],
+                  [ETIQUETAS_LINEA.frakmenta, linea.map(f => f.frakmenta), "#8e44ad", 12.5, 600],
+                  [ETIQUETAS_LINEA.clinica,   linea.map(f => f.clinica),   "#3498db", 12.5, 600],
+                  [ETIQUETAS_LINEA.total,     linea.map(f => f.total),     "#2c3250", 14,   800],
                 ].map(([etiqueta, valores, color, size, weight], fila) => (
                   <tr key={etiqueta || "meses"} style={{borderTop: fila === 3 ? "2px solid #e2e5ed" : "none"}}>
-                    <td style={{fontSize:11, color:"#888", fontWeight:700, letterSpacing:.5,
-                      textTransform:"uppercase", paddingRight:12, whiteSpace:"nowrap"}}>{etiqueta}</td>
+                    <td style={{fontSize:10, color:"#777", fontWeight:700, letterSpacing:.2,
+                      textTransform:"uppercase", paddingRight:12, lineHeight:1.15,
+                      width:110, minWidth:110, maxWidth:110}}>{etiqueta}</td>
                     {valores.map((v, i) => (
                       <td key={i} style={{textAlign:"center", padding:"5px 4px", fontSize:size, color,
                         fontWeight:weight, whiteSpace:"nowrap",
