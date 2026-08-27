@@ -8,6 +8,7 @@
 
 import { addMeses as addMesesISO } from "./planCalc.js";
 import { fraseTramos, etiquetaMes } from "./fragmenta.js";
+import { TITULO_LEGAL, parrafosLegales, CAMPOS_FIRMA, CLINICA } from "./legalPlan.js";
 
 const eur0 = (n) => `${Math.round(n).toLocaleString("es-ES")} €`;
 const eur2 = (n) => `${n.toLocaleString("es-ES",{minimumFractionDigits:2,maximumFractionDigits:2})} €`;
@@ -72,6 +73,36 @@ export const estilosPlanImpreso = `
   .avisos>*{flex:1;}
   .warn,.info{font-size:10.5pt;padding:1.5mm 2mm;border-radius:5px;line-height:1.25;
               -webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  /* El compromiso va en su propia hoja. Apretarlo en la primera obligaría a
+     una letra minúscula, y una cláusula que no se lee es justo lo que la
+     normativa de consumo considera no transparente. */
+  .legal{break-before:page;padding-top:2mm;}
+  .legal h3{font-size:17pt;margin:0 0 3mm;letter-spacing:.06em;text-transform:uppercase;
+            color:#12211f;border-bottom:2.5px solid #c9a84c;padding-bottom:1.5mm;}
+  .legal p{margin:0 0 2.5mm;font-size:11.5pt;line-height:1.45;text-align:justify;color:#1a1a1a;}
+  .firma{display:flex;gap:6mm;margin-top:8mm;align-items:flex-end;}
+  .firma>div{display:flex;flex-direction:column;}
+  .firma .linea-f{border-bottom:1.5px solid #12211f;height:16mm;}
+  .firma .lbl{font-size:10pt;color:#555;margin-top:1.5mm;text-transform:uppercase;
+              letter-spacing:.04em;font-weight:600;}
+  .pie{font-size:9.5pt;color:#777;margin-top:6mm;text-align:center;}
+  /* Sin línea de tiempo sobran ~175px en la primera hoja: se reparten
+     agrandando lo que el paciente tiene que leer. */
+  body.holgado .ch .m,
+  body.holgado .ch .v{font-size:12.5pt;}
+  body.holgado .ch .t{font-size:27pt;}
+  body.holgado .ch{padding:1.8mm 2.2mm;}
+  body.holgado .chip{padding:1.6mm 2mm;line-height:1.2;}
+  body.holgado .chip b,
+  body.holgado .chip i{font-size:14.5pt;}
+  body.holgado .st{font-size:15pt;padding:1.8mm 2.2mm;}
+  body.holgado .bd{gap:1.6mm;padding:2mm;}
+  body.holgado .say p{font-size:20pt;}
+  body.holgado .say p b{font-size:24pt;}
+  body.holgado .say .sub{font-size:13pt;line-height:1.35;}
+  body.holgado .say{padding:2.5mm 3.5mm;}
+  body.holgado .warn,
+  body.holgado .info{font-size:12pt;}
   .warn{background:#f9dcd6;color:#8c2d16;border-left:4px solid #c2482f;}
   .info{background:#fbeed3;color:#6e4c0c;border-left:4px solid #c8891b;}
 `;
@@ -149,7 +180,7 @@ export function htmlPlanImpreso({ plan, paciente, der, logoUrl = "" }) {
 
   return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"/>
 <title>Plan de pago — ${esc(paciente?.name || "")}</title>
-<style>${estilosPlanImpreso}</style></head><body>
+<style>${estilosPlanImpreso}</style></head><body class="${frag ? "" : "holgado"}">
   <div class="top">
     ${logoUrl ? `<img src="${logoUrl}" alt=""/>` : ""}
     <div>
@@ -164,5 +195,15 @@ export function htmlPlanImpreso({ plan, paciente, der, logoUrl = "" }) {
   </div>
   ${lineaHtml}
   ${avisos ? `<div class="avisos">${avisos}</div>` : ""}
+  <div class="legal">
+    <h3>${TITULO_LEGAL}</h3>
+    ${parrafosLegales({ conFragmenta: !!frag }).map(t => `<p>${t}</p>`).join("")}
+    <div class="firma">
+      ${CAMPOS_FIRMA.map(c => `<div style="flex:${c.ancho}">
+        <div class="linea-f"></div><div class="lbl">${c.etiqueta}</div>
+      </div>`).join("")}
+    </div>
+    <div class="pie">${CLINICA.nombre} · ${CLINICA.direccion}</div>
+  </div>
 </body></html>`;
 }

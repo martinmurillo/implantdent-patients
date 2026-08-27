@@ -1,0 +1,62 @@
+// ─── Cláusula de compromiso de pago ──────────────────────────────────────────
+//   ┌──────────────────────────────────────────────────────────────────────┐
+//   │  TEXTO LEGAL — editar aquí. Redactado sobre normativa española y      │
+//   │  catalana vigente, pero NO es asesoramiento jurídico: conviene que    │
+//   │  lo revise el asesor legal de la clínica antes de usarlo con          │
+//   │  pacientes.                                                           │
+//   └──────────────────────────────────────────────────────────────────────┘
+//
+// Base normativa de cada párrafo:
+//
+//  · Ley 16/2011, de contratos de crédito al consumo, art. 4.1.f y 4.1.j:
+//    el aplazamiento SIN intereses, comisiones ni gastos queda excluido del
+//    régimen de crédito al consumo. Por eso se hace constar expresamente.
+//    ⚠ Si la clínica llegara a cobrar algo por aplazar, dejaría de estar
+//    excluido y pasaría a exigir TAE, derecho de desistimiento y evaluación
+//    de solvencia. La comisión de Fragmenta no cuenta: la cobra la
+//    financiera, no la clínica, y por eso se deslinda en su propio párrafo.
+//
+//  · Ley 22/2010, Codi de consum de Catalunya, art. 251-3.2: en la
+//    prestación de servicios hay obligación de presupuesto previo por
+//    escrito salvo renuncia expresa del consumidor.
+//
+//  · Ley 41/2002, de autonomía del paciente: el consentimiento informado
+//    del tratamiento es un acto distinto y no queda cubierto por esto.
+//
+//  · RDL 1/2007 (LGDCU): no se incluyen intereses de demora ni penalidades,
+//    que en un contrato con consumidor son terreno de cláusula abusiva.
+//
+//  · Decret 121/2013: hojas oficiales de queja y reclamación.
+
+export const CLINICA = {
+  nombre:    "CLÍNICA IMPLANTDENT, S.L.",
+  direccion: "C/ Nou 63-65 · 17600 Figueres · Girona",
+};
+
+export const TITULO_LEGAL = "Compromiso de pago";
+
+// conFragmenta añade el párrafo que deslinda a la financiera
+export function parrafosLegales({ conFragmenta = false } = {}) {
+  return [
+    `Quien firma declara haber recibido copia de este plan de pago, haber comprendido su contenido y aceptar el calendario de importes y fechas de vencimiento que en él se detalla, que reconoce como deuda cierta y exigible en cada uno de los vencimientos indicados.`,
+
+    `${CLINICA.nombre} concede este aplazamiento sin intereses, comisiones ni gastos de ningún tipo, por lo que queda excluido del ámbito de aplicación de la Ley 16/2011, de 24 de junio, de contratos de crédito al consumo (art. 4).`,
+
+    ...(conFragmenta ? [
+      `La financiación de la entrega inicial se formaliza en contrato aparte con FRAGMENTA, entidad ajena a esta clínica. La comisión que figura en este documento la percibe dicha entidad, no la clínica, y se rige por las condiciones de ese contrato.`,
+    ] : []),
+
+    `Este documento sirve como presupuesto previo por escrito a los efectos del art. 251-3.2 de la Ley 22/2010, del Código de consumo de Cataluña, y no sustituye al consentimiento informado del tratamiento, que se otorga por separado conforme a la Ley 41/2002.`,
+
+    `El impago de dos vencimientos consecutivos faculta a la clínica a interrumpir el calendario y a reclamar el importe pendiente correspondiente al tratamiento ya realizado. Cualquier modificación de este plan requiere acuerdo por escrito de ambas partes.`,
+
+    `Esta clínica dispone de hojas oficiales de queja, reclamación y denuncia a disposición de los pacientes.`,
+  ];
+}
+
+export const CAMPOS_FIRMA = [
+  { etiqueta: "Nombre y apellidos", ancho: 3 },
+  { etiqueta: "DNI / NIE",          ancho: 2 },
+  { etiqueta: "Fecha",              ancho: 1.4 },
+  { etiqueta: "Firma",              ancho: 2.6 },
+];
