@@ -8,7 +8,7 @@
 
 import { addMeses as addMesesISO } from "./planCalc.js";
 import { fraseTramos, etiquetaMes } from "./frakmenta.js";
-import { TITULO_LEGAL, parrafosLegales, CAMPOS_FIRMA, CLINICA } from "./legalPlan.js";
+import { TITULO_LEGAL, parrafosLegales, CAMPOS_FIRMA, CLINICA, DIRECCION_PIE } from "./legalPlan.js";
 
 const eur0 = (n) => `${Math.round(n).toLocaleString("es-ES")} €`;
 const eur2 = (n) => `${n.toLocaleString("es-ES",{minimumFractionDigits:2,maximumFractionDigits:2})} €`;
@@ -203,7 +203,7 @@ export function htmlPlanImpreso({ plan, paciente, der, logoUrl = "" }) {
         <div class="linea-f"></div><div class="lbl">${c.etiqueta}</div>
       </div>`).join("")}
     </div>
-    <div class="pie">${CLINICA.nombre} · ${CLINICA.direccion}</div>
+    <div class="pie">${CLINICA.nombre} · ${DIRECCION_PIE}</div>
   </div>
 </body></html>`;
 }

@@ -28,10 +28,19 @@
 //
 //  · Decret 121/2013: hojas oficiales de queja y reclamación.
 
+// Fuente única de la dirección. Estaba escrita por separado aquí y en el aviso
+// LOPD de los presupuestos, y así fue como una de las dos se quedó desfasada.
 export const CLINICA = {
-  nombre:    "CLÍNICA IMPLANTDENT, S.L.",
-  direccion: "Carrer de Santa Eugènia, 2 · 17001 Girona",
+  nombre: "CLÍNICA IMPLANTDENT, S.L.",
+  via:    "Carrer de Santa Eugènia, 2",
+  cp:     "17001",
+  ciudad: "Girona",
 };
+
+// Para el pie del compromiso, en línea suelta
+export const DIRECCION_PIE   = `${CLINICA.via} · ${CLINICA.cp} ${CLINICA.ciudad}`;
+// Para citarla dentro de una frase, como en el aviso de protección de datos
+export const DIRECCION_TEXTO = `${CLINICA.via}, ${CLINICA.cp} ${CLINICA.ciudad}`;
 
 export const TITULO_LEGAL = "Compromiso de pago";
 

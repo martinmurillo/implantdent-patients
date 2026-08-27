@@ -7,6 +7,7 @@ import { calcPlan, cuotaSugerida, totalTratamientos, cuotasDelPlan,
          precioSinDescuento } from "./planCalc";
 import { colocacionInicial, parsePlanPDF, importeFila } from "./pdfPlan";
 import { htmlPlanImpreso } from "./planPrint";
+import { DIRECCION_TEXTO } from "./legalPlan";
 import { PLAZOS as FRAG_PLAZOS, financiable, motivoNoFinanciable,
          comisionFrakmenta, calcFrakmenta, lineaDeTiempo, fraseTramos,
          etiquetaMes } from "./frakmenta";
@@ -243,9 +244,9 @@ const T = {
 };
 
 const LEGAL = {
-  es:`En virtud de la Ley 03/2018 sobre la protección de datos de carácter personal, le informamos que sus datos personales están incorporados en un fichero automatizado responsabilidad de CLINICA IMPLANTDENT, SL. La finalidad de este fichero es gestionar la relación profesional entre usted y esta consulta dental. Puede ejercer sus derechos de acceso, modificación, cancelación y oposición mediante escrito dirigido a C/NOU 63-65 - 17600 FIGUERES - GIRONA. Si en el plazo de 30 días no nos comunica lo contrario, entenderemos que los datos no han sido modificados, que se compromete a notificarnos cualquier variación y que tenemos su consentimiento para utilizarlos.`,
-  en:`Pursuant to Law 03/2018 on personal data protection, we inform you that your personal data is stored in an automated file under the responsibility of CLINICA IMPLANTDENT, SL. The purpose is to manage the professional relationship between you and this dental practice. You may exercise your rights of access, modification, cancellation and opposition by writing to C/NOU 63-65 - 17600 FIGUERES - GIRONA. If within 30 days you do not notify us otherwise, we will understand the data has not changed and that we have your consent to use it.`,
-  fr:`Conformément à la Loi 03/2018 sur la protection des données personnelles, vos données sont dans un fichier automatisé sous responsabilité de CLINICA IMPLANTDENT, SL. Vous pouvez exercer vos droits d'accès, modification, annulation et opposition à C/NOU 63-65 - 17600 FIGUERES - GIRONA. Sans réponse de votre part sous 30 jours, nous considérerons les données correctes et aurons votre consentement pour leur utilisation.`,
+  es:`En virtud de la Ley 03/2018 sobre la protección de datos de carácter personal, le informamos que sus datos personales están incorporados en un fichero automatizado responsabilidad de CLINICA IMPLANTDENT, SL. La finalidad de este fichero es gestionar la relación profesional entre usted y esta consulta dental. Puede ejercer sus derechos de acceso, modificación, cancelación y oposición mediante escrito dirigido a ${DIRECCION_TEXTO}. Si en el plazo de 30 días no nos comunica lo contrario, entenderemos que los datos no han sido modificados, que se compromete a notificarnos cualquier variación y que tenemos su consentimiento para utilizarlos.`,
+  en:`Pursuant to Law 03/2018 on personal data protection, we inform you that your personal data is stored in an automated file under the responsibility of CLINICA IMPLANTDENT, SL. The purpose is to manage the professional relationship between you and this dental practice. You may exercise your rights of access, modification, cancellation and opposition by writing to ${DIRECCION_TEXTO}. If within 30 days you do not notify us otherwise, we will understand the data has not changed and that we have your consent to use it.`,
+  fr:`Conformément à la Loi 03/2018 sur la protection des données personnelles, vos données sont dans un fichier automatisé sous responsabilité de CLINICA IMPLANTDENT, SL. Vous pouvez exercer vos droits d'accès, modification, annulation et opposition à ${DIRECCION_TEXTO}. Sans réponse de votre part sous 30 jours, nous considérerons les données correctes et aurons votre consentement pour leur utilisation.`,
 };
 const CONSENT = {
   es:"He recibido una copia de este presupuesto y entendido lo que se detalla en él.",
