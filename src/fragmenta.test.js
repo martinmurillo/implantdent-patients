@@ -204,3 +204,31 @@ describe("etiquetaMes", () => {
     assert.equal(etiquetaMes(null, 3), "Mes 3");
   });
 });
+
+describe("comisión firmada frente a comisión recalculada", () => {
+  // La comisión guardada protege de que se editen las TARIFAS. No protege de
+  // que cambien los datos del préstamo: si cambia el importe, cambia el tramo
+  // y la comisión hay que volver a pedirla a la tabla.
+  test("con comisión guardada, editar la tabla no altera un plan firmado", () => {
+    const firmado = calcFragmenta({ importe: 2000, plazo: 12, comision: 105 });
+    assert.equal(firmado.primera, 271.67);
+    assert.equal(firmado.total, 2105);
+  });
+
+  test("sin comisión guardada se coge la tarifa vigente", () => {
+    assert.equal(calcFragmenta({ importe: 2000, plazo: 12 }).comision,
+                 comisionFragmenta(2000, 12));
+  });
+
+  test("bajar la entrega cambia de tramo: 2.000 y 500 no pagan lo mismo", () => {
+    assert.equal(comisionFragmenta(2000, 12), 105);
+    assert.equal(comisionFragmenta(500, 12), 30);
+  });
+
+  test("una comisión de 0 guardada se respeta y no se confunde con vacía", () => {
+    const f = calcFragmenta({ importe: 2000, plazo: 12, comision: 0 });
+    assert.equal(f.comision, 0);
+    assert.equal(f.primera, 166.67);
+    assert.equal(f.total, 2000);
+  });
+});

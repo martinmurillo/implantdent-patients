@@ -3515,6 +3515,20 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
   // Tocar la entrega o el nº de cuotas devuelve la cuota al cálculo automático
   const setYRecalcula = (campo, valor) => onPlanChange({ ...plan, [campo]: valor, cuotaManual:false });
 
+  // Cambiar el importe de la entrega cambia el tramo de la tarifa, así que la
+  // comisión se recalcula. La comisión guardada protege de que se editen las
+  // tarifas, no de que cambien los datos del propio préstamo.
+  const setEntrega = (campo, valor) => {
+    const imp = parseFloat(valor) || 0;
+    const plazo = financiable(imp) ? plan.fragmentaPlazo : 0;   // fuera de rango deja de financiarse
+    onPlanChange({
+      ...plan, [campo]: valor,
+      cuotaManual: campo === "entrega" ? false : plan.cuotaManual,
+      fragmentaPlazo: plazo,
+      fragmentaComision: plazo ? String(comisionFragmenta(imp, plazo) ?? "") : "",
+    });
+  };
+
   const { txConMes, entrega, nCuotas, inicioQ, sugerida, cuota, calc,
           frag, linea, nMesesLinea, desembolsoTotal } = planDerivado(plan, tratamientos);
 
@@ -3609,7 +3623,7 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
       <div className="np" style={{...s.card, display:"flex", gap:10, flexWrap:"wrap", alignItems:"flex-end", marginBottom:14}}>
         {plan.modo === "visita" ? (
           <>
-            {campo("Entrega hoy", plan.entregaVisita, v=>set("entregaVisita",v), {props:{step:50, min:0}})}
+            {campo("Entrega hoy", plan.entregaVisita, v=>setEntrega("entregaVisita",v), {props:{step:50, min:0}})}
             {campo("Techo por mes", plan.techoMes, v=>set("techoMes",v), {props:{step:25, min:0}})}
             <div style={{flex:2, minWidth:180, fontSize:12, color:"#777", paddingBottom:9}}>
               La entrega se descuenta de los primeros meses. El techo marca en rojo los meses que lo superan.
@@ -3618,7 +3632,7 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
           </>
         ) : (
           <>
-            {campo("Entrega hoy", plan.entrega, v=>setYRecalcula("entrega",v), {props:{step:100, min:0}})}
+            {campo("Entrega hoy", plan.entrega, v=>setEntrega("entrega",v), {props:{step:100, min:0}})}
             {campo("Nº de cuotas", plan.nCuotas, v=>setYRecalcula("nCuotas",v), {props:{step:1, min:1, max:60}})}
             <div style={{flex:1, minWidth:110}}>
               <label style={{...s.label, fontSize:10, display:"flex", justifyContent:"space-between", alignItems:"center"}}>
