@@ -3448,6 +3448,11 @@ const planDerivado = (plan, tratamientos) => {
            desembolsoTotal: Math.round((calc.totalPlan + (frag ? frag.comision : 0)) * 100) / 100 };
 };
 
+// Un plan solo se salda con los pagos hechos desde que arranca. Los anteriores
+// son de otras cosas y no pueden dar por cobrada una cuota.
+const pagosDesde = (pagos, fechaInicio) =>
+  (pagos || []).filter(p => !fechaInicio || String(p.date) >= String(fechaInicio));
+
 // ─── Plan ⇄ fila de payment_plans ────────────────────────────────────────────
 const planDesdeFila = (row) => ({
   id: row.id,
@@ -3879,7 +3884,7 @@ function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobra
       const paciente = patients.find(p => p.id === pl.patient_id);
       if (!paciente) return null;
       const propias = cuotas.filter(c => c.plan_id === pl.id);
-      const pagosPaciente = pagos.filter(pg => pg.patient_id === pl.patient_id);
+      const pagosPaciente = pagosDesde(pagos.filter(pg => pg.patient_id === pl.patient_id), pl.fecha_inicio);
       const resumen = resumenPlan({ plan: pl, cuotas: propias, pagos, pagosPaciente, hoy });
       const avisos  = coberturaProxima({ plan: pl, cuotas: propias, pagos, hoy });
       const proxCita = (paciente.appointments || [])
@@ -4584,7 +4589,11 @@ export default function App() {
     const { data: pagosPac } = await supabase.from("payments").select("*").eq("patient_id", patientId);
     for (const pl of activos) {
       const { data: cuotasPl } = await supabase.from("payment_plan_cuotas").select("*").eq("plan_id", pl.id);
-      const marcar = conciliarCuotas({ cuotas: cuotasPl || [], pagosPaciente: pagosPac || [] });
+      // Solo cuentan los pagos desde que arranca el plan. Sin este filtro, un
+      // pago viejo del paciente (una limpieza del año pasado) saldaría la
+      // entrega sin que nadie haya puesto ese dinero.
+      const pagosDelPlan = pagosDesde(pagosPac, pl.fecha_inicio);
+      const marcar = conciliarCuotas({ cuotas: cuotasPl || [], pagosPaciente: pagosDelPlan });
       for (const m of marcar) {
         await supabase.from("payment_plan_cuotas").update({ payment_id: m.paymentId }).eq("id", m.cuotaId);
       }
