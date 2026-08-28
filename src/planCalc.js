@@ -330,6 +330,45 @@ export function estadoCobroMeses({ cuotas = [], pagosPaciente = [], hoy = null }
   };
 }
 
+// ─── Cola de avisos del día ──────────────────────────────────────────────────
+// A quién hay que escribir HOY. Se avisa tres veces de cada cuota: una semana
+// antes, la víspera y el mismo día del vencimiento.
+//
+// El importe no es el de la cuota a secas, sino lo que realmente hay que
+// cobrarle ese mes, con el atraso de meses vencidos ya sumado.
+export function avisosDelDia({ planes = [], cuotas = [], pagos = [], hoy, hitos = [7, 1, 0] }) {
+  const out = [];
+  for (const plan of planes) {
+    if (plan.estado !== "activo") continue;
+    const propias = cuotas.filter(c => c.plan_id === plan.id);
+    if (!propias.length) continue;
+
+    // solo los pagos desde que arranca el plan; los anteriores son de otra cosa
+    const pagosPaciente = pagos.filter(p =>
+      p.patient_id === plan.patient_id &&
+      (!plan.fecha_inicio || String(p.date) >= String(plan.fecha_inicio)));
+
+    const ec = estadoCobroMeses({ cuotas: propias, pagosPaciente, hoy });
+    if (ec.todoPagado) continue;
+
+    // la primera que toca cobrar y todavía no venció
+    const prox = ec.meses.find(m => m.estado === "aCobrar" && m.aPagar > 0.005);
+    if (!prox) continue;
+
+    const dias = diasEntre(hoy, prox.vence_el);
+    if (!hitos.includes(dias)) continue;
+
+    out.push({
+      plan, mes: prox.mes, vence_el: prox.vence_el,
+      importe: prox.aPagar, arrastre: prox.arrastre || 0,
+      dias,
+      tipo: dias === 0 ? "hoy" : dias === 1 ? "vispera" : "antelacion",
+      clave: `aviso_${plan.id}_${prox.mes}_${dias}`,
+    });
+  }
+  return out.sort((a, b) => a.dias - b.dias || String(a.plan.patient_name).localeCompare(String(b.plan.patient_name), "es"));
+}
+
 // ─── Seguimiento de un plan acordado ─────────────────────────────────────────
 export function resumenPlan({ plan, cuotas = [], pagos = [], pagosPaciente = null, hoy }) {
   const conEstado = [...cuotas]
