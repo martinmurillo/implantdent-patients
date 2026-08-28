@@ -835,6 +835,8 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
   const hasImplant = txNames.some(n=>n.includes("implante"));
   const historyEntries = [...(patient.history||[])].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,3);
 
+  const esAjeno = !!patient.creado_por;
+
   // Resumen del plan de pago acordado, para no tener que abrirlo
   const planResumen = (() => {
     const pl = plans.find(x => x.patient_id === patient.id && x.estado === "activo");
@@ -893,6 +895,13 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
           <div onClick={onOpen?()=>onOpen(patient):undefined}
             style={{flex:1, cursor:onOpen?"pointer":"default", fontWeight:700, color:"#2c3250", fontSize:15, display:"flex", alignItems:"center", gap:6}}>
             {patient.name||"Sin nombre"}
+            {esAjeno && (
+              <span title={`Paciente dado de alta por ${patient.creado_por}. No cuenta para las estadísticas.`}
+                style={{background:"#8e44ad22",border:"1px solid #8e44ad66",borderRadius:5,color:"#8e44ad",
+                  padding:"2px 7px",fontSize:10,fontWeight:700,letterSpacing:.3}}>
+                {String(patient.creado_por).split("@")[0]}
+              </span>
+            )}
             {hasOrtho   && <span title="Ortodoncia" style={{fontSize:13}}>⭐</span>}
             {hasImplant && <span title="Implante"   style={{fontSize:13}}>🦷</span>}
             {iniciadoSinCita && <span className="blink-red" style={{background:"#e74c3c",color:"#fff",borderRadius:5,padding:"2px 8px",fontSize:11,fontWeight:700,letterSpacing:"0.3px"}}>iniciado sin cita</span>}
@@ -4021,6 +4030,9 @@ function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobra
                 #{plan.budget_no||"—"} · {plan.modo === "cuotas" ? `entrega + ${plan.n_cuotas} cuotas` : "paga por visita"}
                 {" · inicio "}{fmtDate(plan.fecha_inicio)}
                 {plan.notas ? ` · ${plan.notas}` : ""}
+                {plan.creado_por && (
+                  <> · <span style={{color:"#8e44ad",fontWeight:700}}>lo hizo {plan.creado_por}</span></>
+                )}
               </div>
             </div>
             <div style={{display:"flex", gap:18, alignItems:"center", flexWrap:"wrap"}}>
@@ -4518,6 +4530,294 @@ function SinAcceso({ email, sugerirPortal = false }) {
   );
 }
 
+// ─── NuevoPlanJefe ───────────────────────────────────────────────────────────
+// El jefe arma planes sin tener acceso al programa del dueño. Busca por nº de
+// historia y, antes de tocar nada, ve un cartel para COTEJAR: su presupuesto
+// sale del sistema original de la clínica y puede haberse modificado por otro
+// lado (tratamientos, descuentos). Si no cuadra, no debe seguir.
+//
+// Si el paciente no está, puede cargar un PDF: se crea a su nombre, para no
+// mezclarlo con los del dueño ni con sus estadísticas.
+function NuevoPlanJefe({ email, onCancelar, onGuardado }) {
+  const [hc,        setHc]        = useState("");
+  const [buscando,  setBuscando]  = useState(false);
+  const [resultados, setResultados] = useState(null);   // null = todavía no buscó
+  const [elegido,   setElegido]   = useState(null);
+  const [sueltos,   setSueltos]   = useState(null);     // { nombre, hc, budgetNo, txs }
+  const [plan,      setPlan]      = useState(null);
+  const [msg,       setMsg]       = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const fileRef = useRef();
+
+  const buscar = async () => {
+    const q = hc.trim();
+    if (!q) return;
+    setBuscando(true); setMsg(""); setElegido(null); setSueltos(null);
+    const { data, error } = await supabase.rpc("presupuesto_por_hc", { p_hc: q });
+    setBuscando(false);
+    if (error) { setMsg("Error al buscar: " + error.message); return; }
+    setResultados(data || []);
+  };
+
+  const arrancarPlan = (tratamientos) => {
+    const colocacion = colocacionPara(tratamientos);
+    const ultimo = Math.max(1, ...Object.values(colocacion), 1);
+    setPlan({ ...emptyPlan(), colocacion, nMeses: Math.max(6, ultimo + 1), estado: "borrador" });
+  };
+
+  const elegirPresupuesto = (fila) => {
+    setElegido(fila);
+    arrancarPlan(txsParaPlan({ treatments: fila.treatments }, {
+      sinDescuento: false, factor: factorDescuento({ treatments: fila.treatments }),
+    }));
+  };
+
+  const importarPDF = async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    setMsg("Leyendo PDF...");
+    try {
+      const { paciente: nombre, filas } = await parsePlanPDF(file);
+      if (!filas.length) { setMsg("No encontré tratamientos en ese PDF."); e.target.value = ""; return; }
+      const txs = filas.map(f => ({ id: genId(), nombre: f.nombre, importe: importeFila(f), pieza: f.pieza }));
+      setElegido(null);
+      setSueltos({ nombre: nombre || "", hc: hc.trim(), budgetNo: "", txs });
+      arrancarPlan(txs);
+      setMsg(`✓ ${txs.length} tratamiento(s) leídos`);
+    } catch (err) { setMsg("No pude leer el PDF: " + err.message); }
+    e.target.value = "";
+  };
+
+  const tratamientos = sueltos ? sueltos.txs
+    : elegido ? txsParaPlan({ treatments: elegido.treatments }, {
+        sinDescuento: plan?.modo === "visita",
+        factor: plan?.modo === "visita" ? 1 : factorDescuento({ treatments: elegido.treatments }),
+      })
+    : [];
+
+  const guardar = async () => {
+    if (!plan) return;
+    setGuardando(true); setMsg("");
+    let patientId = elegido?.id;
+    let nombre    = elegido?.name || "";
+    let budgetNo  = elegido?.budget_no || "";
+
+    // Paciente nuevo: se crea a nombre del jefe
+    if (sueltos) {
+      if (!sueltos.nombre.trim()) {
+        setGuardando(false); setMsg("Poné el nombre del paciente antes de guardar."); return;
+      }
+      const nuevo = {
+        id: crypto.randomUUID(), name: sueltos.nombre.trim(), hc: sueltos.hc || "",
+        dni: "", budget_no: sueltos.budgetNo || "", date: today(), time: "", phone: "",
+        treatments: { items: sueltos.txs.map(t => ({ id: t.id, name: t.nombre, value: String(t.importe), discount: "0" })),
+                      discountPct: "0", priceMode: "pdf" },
+        appointments: [], reminders: [], notes: "", history: [],
+        status: "pendiente", last_contact: today(), closed: false,
+        creado_por: email,
+      };
+      const { error } = await supabase.from("patients").insert([nuevo]);
+      if (error) { setGuardando(false); setMsg("No pude crear el paciente: " + error.message); return; }
+      patientId = nuevo.id; nombre = nuevo.name; budgetNo = nuevo.budget_no;
+    }
+
+    const der = planDerivado(plan, tratamientos);
+    const fila = {
+      ...filaDesdePlan(plan, { id: patientId, name: nombre, budget_no: budgetNo }, der),
+      creado_por: email,
+    };
+    const { error } = await supabase.from("payment_plans").insert([fila]);
+    if (error) { setGuardando(false); setMsg("No pude guardar el plan: " + error.message); return; }
+
+    const cuotas = cuotasDelPlan(fila, der.calc)
+      .map(c => ({ ...c, id: genId(), plan_id: fila.id, patient_id: patientId }));
+    if (cuotas.length) await supabase.from("payment_plan_cuotas").insert(cuotas);
+
+    setGuardando(false);
+    onGuardado();
+  };
+
+  // ── Cartel de cotejo ──
+  const cartel = (fila) => {
+    const pac   = { treatments: fila.treatments };
+    const items = getTxItems(pac);
+    const total = patientGrand(pac);
+    const dtoPdf = pdfDiscountLabel(pac);
+    const dtoSel = getTxDiscountPct(pac);
+    const yaTiene = !!fila.plan_id;
+    return (
+      <div key={fila.id + (fila.plan_id || "")} style={{...s.card, borderLeft:`4px solid ${yaTiene ? "#e67e22" : "#c9a84c"}`}}>
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12, flexWrap:"wrap"}}>
+          <div>
+            <div style={{fontWeight:700, fontSize:16, color:"#2c3250"}}>{fila.name || "Sin nombre"}</div>
+            <div style={{fontSize:12.5, color:"#888", marginTop:3}}>
+              HC {fila.hc || "—"} · Presupuesto #{fila.budget_no || "—"} · {fmtDate(fila.fecha)}
+              {fila.paciente_creado_por && <> · <span style={{color:"#8e44ad"}}>creado por {fila.paciente_creado_por}</span></>}
+            </div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:10, color:"#888", letterSpacing:1}}>TOTAL DEL TRATAMIENTO</div>
+            <div style={{fontSize:22, fontWeight:800, color:"#c9a84c"}}>{fmtEur(total)}</div>
+          </div>
+        </div>
+
+        {yaTiene && (
+          <div style={{marginTop:10, background:"#fdf4e3", color:"#6e4c0c", borderLeft:"3px solid #c8891b",
+            borderRadius:7, padding:"10px 13px", fontSize:13.5}}>
+            ⚠ <b>Este paciente ya tiene un plan de pago</b> ({fila.plan_estado})
+            {fila.plan_modo === "cuotas"
+              ? <> — entrega {fmtEur(fila.plan_entrega)} y {fila.plan_n_cuotas} cuotas de {fmtEur(fila.plan_importe_cuota)}</>
+              : <> — paga según se va haciendo</>}
+            {fila.plan_fecha_inicio && <>, desde el {fmtDate(fila.plan_fecha_inicio)}</>}
+            {fila.plan_creado_por ? <> · lo hizo {fila.plan_creado_por}</> : <> · lo hizo la clínica</>}.
+            <br/>Si armás otro, quedarán los dos.
+          </div>
+        )}
+
+        <div style={{marginTop:10, display:"flex", gap:8, flexWrap:"wrap", alignItems:"center"}}>
+          <span style={{fontSize:11, color:"#c9a84c", letterSpacing:1, fontWeight:700}}>DESCUENTOS YA APLICADOS</span>
+          {dtoPdf === null && dtoSel === 0
+            ? <span style={{fontSize:13, color:"#888"}}>ninguno · precio de tarifa</span>
+            : <>
+                {dtoPdf !== null && <span style={{fontSize:12.5, background:"#e9f4ee", color:"#1c523b",
+                  borderRadius:5, padding:"3px 9px", fontWeight:600}}>{dtoPdf} del presupuesto</span>}
+                {dtoSel > 0 && <span style={{fontSize:12.5, background:"#e9f4ee", color:"#1c523b",
+                  borderRadius:5, padding:"3px 9px", fontWeight:600}}>{dtoSel}% adicional</span>}
+              </>}
+        </div>
+
+        <div style={{marginTop:10}}>
+          <div style={{fontSize:11, color:"#c9a84c", letterSpacing:1, fontWeight:700, marginBottom:6}}>
+            TRATAMIENTOS ({items.length})
+          </div>
+          <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))", gap:"2px 16px"}}>
+            {items.map(t => (
+              <div key={t.id} style={{display:"flex", justifyContent:"space-between", gap:10,
+                fontSize:13, padding:"3px 0", borderBottom:"1px solid #f0f2f7"}}>
+                <span style={{color:"#333"}}>{t.name}</span>
+                <span style={{color:"#666", fontWeight:600, whiteSpace:"nowrap"}}>{fmtEur(t.value)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{marginTop:14, display:"flex", gap:8, flexWrap:"wrap"}}>
+          <button onClick={()=>elegirPresupuesto(fila)} style={s.btnGold}>
+            Coincide, armar plan de pago
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // ── Pantalla ──
+  if (plan) {
+    return (
+      <>
+        <div style={{display:"flex", gap:12, alignItems:"center", marginBottom:16, flexWrap:"wrap"}}>
+          <button onClick={()=>{setPlan(null); setMsg("");}}
+            style={{background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:22}}>←</button>
+          <b style={{fontSize:15}}>{sueltos ? (sueltos.nombre || "Paciente nuevo") : elegido?.name}</b>
+          <span style={{fontSize:12, color:"#888"}}>
+            {sueltos ? "presupuesto cargado de PDF" : `HC ${elegido?.hc || "—"} · #${elegido?.budget_no || "—"}`}
+          </span>
+          <div style={{flex:1}}/>
+          <select value={plan.estado} onChange={e=>setPlan({...plan, estado:e.target.value})}
+            style={{...s.smInput, width:"auto", cursor:"pointer"}}>
+            <option value="borrador">Borrador</option>
+            <option value="activo">Activo — acuerdo cerrado</option>
+          </select>
+          <button onClick={guardar} disabled={guardando} style={{...s.btnGold, opacity:guardando?0.6:1}}>
+            {guardando ? "Guardando..." : "Guardar plan"}
+          </button>
+          {msg && <span style={{fontSize:12.5, color:msg.startsWith("✓")?"#2ecc71":"#e74c3c"}}>{msg}</span>}
+        </div>
+
+        {sueltos && (
+          <div style={{...s.card, display:"flex", gap:12, flexWrap:"wrap", alignItems:"flex-end", marginBottom:14}}>
+            <div style={{flex:2, minWidth:220}}>
+              <label style={{...s.label, fontSize:10}}>Nombre del paciente</label>
+              <input value={sueltos.nombre} onChange={e=>setSueltos({...sueltos, nombre:e.target.value})}
+                placeholder="Nombre y apellidos" style={s.smInput}/>
+            </div>
+            <div style={{flex:1, minWidth:110}}>
+              <label style={{...s.label, fontSize:10}}>Nº de historia</label>
+              <input value={sueltos.hc} onChange={e=>setSueltos({...sueltos, hc:e.target.value})} style={s.smInput}/>
+            </div>
+            <div style={{flex:1, minWidth:110}}>
+              <label style={{...s.label, fontSize:10}}>Nº de presupuesto</label>
+              <input value={sueltos.budgetNo} onChange={e=>setSueltos({...sueltos, budgetNo:e.target.value})} style={s.smInput}/>
+            </div>
+            <div style={{flex:2, minWidth:200, fontSize:12, color:"#8e44ad", paddingBottom:9}}>
+              Este paciente no está en el sistema: quedará registrado a tu nombre.
+            </div>
+          </div>
+        )}
+
+        <PlanDePagoBoard tratamientos={tratamientos} plan={plan} onPlanChange={setPlan}/>
+      </>
+    );
+  }
+
+  return (
+    <div style={{maxWidth:900}}>
+      <div style={{display:"flex", gap:12, alignItems:"center", marginBottom:16, flexWrap:"wrap"}}>
+        <button onClick={onCancelar}
+          style={{background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:22}}>←</button>
+        <b style={{fontSize:15}}>Nuevo plan de pago</b>
+        {msg && <span style={{fontSize:12.5, color:msg.startsWith("✓")?"#2ecc71":"#e74c3c"}}>{msg}</span>}
+      </div>
+
+      <div style={{...s.card, marginBottom:16}}>
+        <label style={s.label}>Nº de historia del paciente</label>
+        <div style={{display:"flex", gap:8, flexWrap:"wrap"}}>
+          <input value={hc} onChange={e=>setHc(e.target.value)}
+            onKeyDown={e=>{ if (e.key === "Enter") buscar(); }}
+            placeholder="Por ejemplo 20700" autoFocus
+            style={{...s.input, maxWidth:240}}/>
+          <button onClick={buscar} disabled={buscando || !hc.trim()}
+            style={{...s.btnGold, opacity:(buscando||!hc.trim())?0.5:1}}>
+            {buscando ? "Buscando..." : "Buscar presupuesto"}
+          </button>
+        </div>
+        <div style={{fontSize:12, color:"#888", marginTop:8}}>
+          Comprobá que el presupuesto coincide con el del sistema de la clínica antes de armar el plan.
+        </div>
+      </div>
+
+      {resultados !== null && resultados.length === 0 && (
+        <div style={{...s.card, textAlign:"center", padding:"28px 20px"}}>
+          <div style={{fontSize:14, color:"#2c3250", marginBottom:6}}>
+            No hay ningún presupuesto con la historia <b>{hc.trim()}</b>
+          </div>
+          <div style={{fontSize:12.5, color:"#888"}}>
+            Podés cargar el presupuesto en PDF y el paciente quedará registrado a tu nombre.
+          </div>
+        </div>
+      )}
+
+      {resultados !== null && resultados.length > 1 && (
+        <div style={{background:"#fdf4e3", color:"#6e4c0c", borderLeft:"3px solid #c8891b",
+          borderRadius:7, padding:"10px 13px", fontSize:13.5, marginBottom:12}}>
+          Hay <b>{resultados.length} presupuestos</b> con esa historia. Mirá cuál coincide con el tuyo.
+        </div>
+      )}
+
+      {(resultados || []).map(cartel)}
+
+      {resultados !== null && (
+        <div style={{...s.card, borderStyle:"dashed", display:"flex", gap:14, alignItems:"center", flexWrap:"wrap"}}>
+          <button onClick={()=>fileRef.current.click()} style={s.btnDark}>📄 Cargar presupuesto en PDF</button>
+          <input ref={fileRef} type="file" accept=".pdf" onChange={importarPDF} style={{display:"none"}}/>
+          <span style={{fontSize:12.5, color:"#888", flex:1, minWidth:240}}>
+            Para un presupuesto que no esté en el sistema. El paciente quedará registrado a tu nombre y no
+            entrará en las estadísticas de la clínica.
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── PortalPlanes ────────────────────────────────────────────────────────────
 // Vista aparte, en /planes, para el jefe y recepción. Solo los planes activos y
 // terminados: ni pacientes, ni cobros, ni presupuestos.
@@ -4537,6 +4837,7 @@ function PortalPlanes() {
   const [pagos,     setPagos]     = useState([]);
   const [pacientes, setPacientes] = useState([]);
   const [busca,     setBusca]     = useState("");
+  const [nuevo,     setNuevo]     = useState(false);   // armando un plan nuevo
   const [abierto,   setAbierto]   = useState(null);
   const [plan,      setPlan]      = useState(null);
   const [guardando, setGuardando] = useState(false);
@@ -4548,10 +4849,22 @@ function PortalPlanes() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // RLS decide qué ve cada uno: activos y terminados para todos, y además sus
+  // propios borradores para quien los haya creado.
   const recargarPlanes = async () => {
     const { data } = await supabase.from("payment_plans").select("*")
-      .in("estado", ["activo","terminado"]).order("fecha_inicio");
+      .in("estado", ["activo","terminado","borrador"]).order("fecha_inicio");
     setPlans(data || []);
+  };
+
+  const recargarTodo = async () => {
+    const [{ data: cu }, { data: pg }, { data: pa }] = await Promise.all([
+      supabase.from("payment_plan_cuotas").select("*").order("vence_el"),
+      supabase.from("payments").select("*"),
+      supabase.from("patients").select("id,name,hc,budget_no,treatments"),
+    ]);
+    setCuotas(cu || []); setPagos(pg || []); setPacientes(pa || []);
+    await recargarPlanes();
   };
 
   useEffect(() => {
@@ -4619,6 +4932,11 @@ function PortalPlanes() {
         <span style={{fontWeight:900,fontSize:15,letterSpacing:3,color:"#c9a84c"}}>IMPLANTDENT</span>
         <span style={{fontSize:13,color:"#555"}}>Planes de pago</span>
         <div style={{flex:1}}/>
+        {puedeMover && !nuevo && !abierto && (
+          <button onClick={()=>setNuevo(true)} style={{...s.btnGold, padding:"7px 16px", fontSize:13}}>
+            + Nuevo plan de pago
+          </button>
+        )}
         <span style={{fontSize:12,color:"#888"}}>
           {sesion.user?.email} · <b style={{color:puedeMover?"#c9a84c":"#777"}}>{rol}</b>
         </span>
@@ -4626,19 +4944,25 @@ function PortalPlanes() {
       </div>
 
       <div style={{padding:"24px 28px"}}>
-        {!abierto && (
+        {nuevo && (
+          <NuevoPlanJefe email={(sesion.user?.email || "").toLowerCase()}
+            onCancelar={()=>setNuevo(false)}
+            onGuardado={async ()=>{ setNuevo(false); await recargarTodo(); }}/>
+        )}
+
+        {!nuevo && !abierto && (
           <input value={busca} onChange={e=>setBusca(e.target.value)}
             placeholder="Buscar por nombre, HC o nº de presupuesto..."
             style={{...s.input, marginBottom:14, maxWidth:420}}/>
         )}
 
-        {!abierto && plans.length === 0 && (
+        {!nuevo && !abierto && plans.length === 0 && (
           <div style={{textAlign:"center",color:"#888",padding:50,background:"#fff",borderRadius:10,fontSize:13}}>
             No hay planes activos ni terminados.
           </div>
         )}
 
-        {!abierto && plans.map(pl => {
+        {!nuevo && !abierto && plans.map(pl => {
           const pac = pacientes.find(p => p.id === pl.patient_id);
           if (!pac) return null;
           if (!coincideBusqueda(busca, pac, pl)) return null;
@@ -4662,6 +4986,7 @@ function PortalPlanes() {
                 <div style={{fontSize:12,color:"#888",marginTop:3}}>
                   #{pl.budget_no||"—"} · {pl.modo==="cuotas" ? "entrega + "+pl.n_cuotas+" cuotas" : "paga por visita"}
                   {" · inicio "}{fmtDate(pl.fecha_inicio)}
+                  {pl.creado_por && <> · <span style={{color:"#8e44ad",fontWeight:600}}>lo hizo {pl.creado_por}</span></>}
                 </div>
               </div>
               <div style={{display:"flex",gap:18,alignItems:"center",flexWrap:"wrap"}}>
@@ -4688,7 +5013,7 @@ function PortalPlanes() {
           );
         })}
 
-        {abierto && plan && (() => {
+        {!nuevo && abierto && plan && (() => {
           const pac = pacientes.find(p => p.id === abierto.patient_id);
           const propias = cuotas.filter(c => c.plan_id === abierto.id);
           const cobros = propias.length ? estadoCobroMeses({
@@ -5000,6 +5325,10 @@ function AppCompleta() {
 
   const recent = patients;
   const allPatients = [...patients, ...archivedPatients];
+  // Pacientes dados de alta por el jefe: siguen en el sistema para poder
+  // cobrarles desde el Excel, pero no cuentan para las estadísticas de la
+  // clínica ni deben confundirse con los propios.
+  const idsAjenos = new Set(allPatients.filter(p => p.creado_por).map(p => p.id));
 
   const todayStr = today();
   const todayAppts = [];
@@ -5723,7 +6052,9 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
         )}
 
         {!dbLoading && view==="stats" && (
-          <EstadisticasPanel payments={payments} items={items} patients={allPatients} onOpenPatient={openEdit} onRefreshItems={fetchItems} onSync={syncAllItems} onEnsureArchived={ensureArchived} archivedLoaded={archivedLoaded} clinicStats={clinicStats} onSaveClinicStat={saveClinicStat}/>
+          <EstadisticasPanel payments={payments.filter(p=>!idsAjenos.has(p.patient_id))}
+            items={items.filter(i=>!idsAjenos.has(i.patient_id))}
+            patients={allPatients.filter(p=>!p.creado_por)} onOpenPatient={openEdit} onRefreshItems={fetchItems} onSync={syncAllItems} onEnsureArchived={ensureArchived} archivedLoaded={archivedLoaded} clinicStats={clinicStats} onSaveClinicStat={saveClinicStat}/>
         )}
       </div>
     </div>
