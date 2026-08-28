@@ -775,10 +775,19 @@ describe("estadoCobroMeses", () => {
     assert.equal(r.todoPagado, true);
   });
 
-  test("con todo vencido y nada pagado, todos los meses salen vencidos", () => {
+  test("con todo vencido, el último mes concentra lo que se debe", () => {
     const r = estadoCobroMeses({ cuotas, pagosPaciente: [], hoy: "2027-01-01" });
-    assert.deepEqual(vista(r), ["Vencido", "Vencido", "Vencido", "Vencido"]);
+    assert.deepEqual(r.meses.map(m => m.estado),
+      ["vencido", "vencido", "vencido", "vencido"]);
+    // los tres primeros sin importe, el último con la suma entera
+    assert.deepEqual(r.meses.map(m => m.aPagar), [0, 0, 0, 2314.04]);
     assert.equal(r.pendienteTotal, 2314.04);
+  });
+
+  test("todo vencido con algo pagado: el último concentra solo lo que falta", () => {
+    const r = estadoCobroMeses({ cuotas, pagosPaciente: pagos(2000), hoy: "2027-01-01" });
+    assert.deepEqual(r.meses.map(m => m.aPagar), [0, 0, 0, 314.04]);
+    assert.equal(r.meses[0].estado, "pagado");
   });
 
   test("varias cuotas en el mismo mes se suman", () => {

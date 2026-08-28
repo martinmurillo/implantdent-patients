@@ -3802,8 +3802,11 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange, cobros = null,
                       if (!cobros) return f.clinica;
                       const e = cobros.meses.find(m => m.mes === f.mes);
                       if (!e) return f.clinica;
-                      return e.estado === "pagado" ? "Pagado"
-                           : e.estado === "vencido" ? "Vencido" : e.aPagar;
+                      if (e.estado === "pagado") return "Pagado";
+                      // un mes vencido sin importe es que su atraso se cobra en
+                      // otro mes; con importe, es que lo concentra él
+                      if (e.estado === "vencido" && e.aPagar <= 0.005) return "Vencido";
+                      return e.aPagar;
                     }), "#3498db", 12.5, 600],
                   // En seguimiento el total es lo que hay que COBRARLE en clínica:
                   // lo de Frakmenta ya está en caja. Al diseñar el plan sigue
@@ -3813,8 +3816,9 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange, cobros = null,
                       if (!cobros) return f.total;
                       const e = cobros.meses.find(m => m.mes === f.mes);
                       if (!e) return 0;
-                      return e.estado === "pagado" ? "Pagado"
-                           : e.estado === "vencido" ? "Vencido" : e.aPagar;
+                      if (e.estado === "pagado") return "Pagado";
+                      if (e.estado === "vencido" && e.aPagar <= 0.005) return "Vencido";
+                      return e.aPagar;
                     }), "#2c3250", 14, 800],
                 ].map(([etiqueta, valores, color, size, weight]) => (
                   <tr key={etiqueta || "meses"}
@@ -3921,6 +3925,7 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange, cobros = null,
 // de visita: esto es un compromiso económico.
 function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobrar, waClicks = [], onWaClick = () => {} }) {
   const [filtro, setFiltro] = useState("todos");
+  const [busca,  setBusca]  = useState("");
   const [cobrando, setCobrando] = useState(null);
   const hoy = today();
 
@@ -3954,6 +3959,7 @@ function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobra
     })
     .filter(Boolean)
     .filter(f => filtro === "todos" ? f.resumen.estado !== "cancelado" : f.resumen.estado === filtro)
+    .filter(f => coincideBusqueda(busca, f.paciente, f.plan))
     // el vencimiento más próximo primero; sin próxima cuota, al final
     .sort((a, b) => {
       const va = a.resumen.proxima?.vence_el || "9999-12-31";
@@ -3972,6 +3978,9 @@ function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobra
 
   return (
     <div>
+      <input value={busca} onChange={e=>setBusca(e.target.value)}
+        placeholder="Buscar por nombre, HC o nº de presupuesto..."
+        style={{...s.input, marginBottom:10, maxWidth:420}}/>
       <div style={{display:"flex", gap:6, marginBottom:14, flexWrap:"wrap"}}>
         {[["todos","Todos"],["atrasado","Atrasados"],["al día","Al día"],
           ["terminado","Terminados"],["borrador","Borradores"],["cancelado","Cancelados"]].map(([id,label])=>(
@@ -3986,7 +3995,9 @@ function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobra
 
       {filas.length === 0 && (
         <div style={{textAlign:"center", color:"#888", padding:50, background:"#ffffff", borderRadius:10, fontSize:13}}>
-          {plans.length === 0 ? "Todavía no hay planes de pago guardados." : "Ningún plan con ese filtro."}
+          {plans.length === 0 ? "Todavía no hay planes de pago guardados."
+            : busca.trim() ? `Ningún plan coincide con "${busca.trim()}".`
+            : "Ningún plan con ese filtro."}
         </div>
       )}
 
@@ -4000,6 +4011,7 @@ function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobra
             <div>
               <div style={{fontWeight:700, color:"#2c3250", fontSize:15, display:"flex", alignItems:"center", gap:8}}>
                 {paciente.name || "Sin nombre"}
+                {paciente.hc && <span style={{fontSize:12,color:"#888",fontWeight:600}}>HC {paciente.hc}</span>}
                 <span style={{background:(COLOR[resumen.estado]||"#888")+"22", color:COLOR[resumen.estado]||"#888",
                   borderRadius:5, padding:"2px 8px", fontSize:11, fontWeight:700}}>
                   {resumen.estado}
@@ -4460,6 +4472,19 @@ function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], waClicks =
   );
 }
 
+// Buscador de planes: por nombre, nº de historia o nº de presupuesto. Ignora
+// acentos y mayúsculas, para que "gomez" encuentre a "GÓMEZ".
+const sinAcentos = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const coincideBusqueda = (texto, paciente, plan) => {
+  const q = sinAcentos(texto).trim();
+  if (!q) return true;
+  return q.split(/\s+/).every(palabra =>
+    sinAcentos(paciente?.name).includes(palabra) ||
+    sinAcentos(paciente?.hc).includes(palabra) ||
+    sinAcentos(paciente?.budget_no).includes(palabra) ||
+    sinAcentos(plan?.budget_no).includes(palabra));
+};
+
 // ─── SinAcceso ───────────────────────────────────────────────────────────────
 // Desde que los roles fallan cerrado, una cuenta que no esté en
 // plan_usuarios no ve nada. Sin esta pantalla vería la aplicación vacía y
@@ -4511,6 +4536,7 @@ function PortalPlanes() {
   const [cuotas,    setCuotas]    = useState([]);
   const [pagos,     setPagos]     = useState([]);
   const [pacientes, setPacientes] = useState([]);
+  const [busca,     setBusca]     = useState("");
   const [abierto,   setAbierto]   = useState(null);
   const [plan,      setPlan]      = useState(null);
   const [guardando, setGuardando] = useState(false);
@@ -4600,6 +4626,12 @@ function PortalPlanes() {
       </div>
 
       <div style={{padding:"24px 28px"}}>
+        {!abierto && (
+          <input value={busca} onChange={e=>setBusca(e.target.value)}
+            placeholder="Buscar por nombre, HC o nº de presupuesto..."
+            style={{...s.input, marginBottom:14, maxWidth:420}}/>
+        )}
+
         {!abierto && plans.length === 0 && (
           <div style={{textAlign:"center",color:"#888",padding:50,background:"#fff",borderRadius:10,fontSize:13}}>
             No hay planes activos ni terminados.
@@ -4609,6 +4641,7 @@ function PortalPlanes() {
         {!abierto && plans.map(pl => {
           const pac = pacientes.find(p => p.id === pl.patient_id);
           if (!pac) return null;
+          if (!coincideBusqueda(busca, pac, pl)) return null;
           const propias  = cuotas.filter(c => c.plan_id === pl.id);
           const pagosPac = pagosDesde(pagos.filter(pg => pg.patient_id === pl.patient_id), pl.fecha_inicio);
           const r  = resumenPlan({ plan: pl, cuotas: propias, pagos, pagosPaciente: pagosPac, hoy });
@@ -4620,6 +4653,7 @@ function PortalPlanes() {
               <div>
                 <div style={{fontWeight:700,fontSize:15,display:"flex",alignItems:"center",gap:8}}>
                   {pac.name || "Sin nombre"}
+                  {pac.hc && <span style={{fontSize:12,color:"#888",fontWeight:600}}>HC {pac.hc}</span>}
                   <span style={{background:col+"22",color:col,borderRadius:5,padding:"2px 8px",
                     fontSize:11,fontWeight:700}}>
                     {ec.todoPagado ? "todo pagado" : r.estado}
@@ -4668,7 +4702,9 @@ function PortalPlanes() {
                 <button onClick={()=>{setAbierto(null); setPlan(null); setMsg("");}}
                   style={{background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:22}}>←</button>
                 <b style={{fontSize:15}}>{pac?.name || "Paciente"}</b>
-                <span style={{fontSize:12,color:"#888"}}>#{abierto.budget_no||"—"}</span>
+                <span style={{fontSize:12,color:"#888"}}>
+                  {pac?.hc ? `HC ${pac.hc} · ` : ""}#{abierto.budget_no||"—"}
+                </span>
                 <div style={{flex:1}}/>
                 {puedeMover ? (
                   <>

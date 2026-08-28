@@ -298,13 +298,22 @@ export function estadoCobroMeses({ cuotas = [], pagosPaciente = [], hoy = null }
 
   // ...y se cobra en el primer mes que todavía no venció. Los pagos se imputan
   // en orden, así que ese mes nunca puede estar ya saldado si hay arrastre.
-  const iDestino = filas.findIndex(f => !estaVencido(f));
-  const destino  = iDestino >= 0 ? iDestino : filas.length - 1;
+  const destino = filas.findIndex(f => !estaVencido(f));
+  // Si ya venció todo no hay mes futuro donde ponerlo, así que lo concentra el
+  // último: si no, no habría ninguna casilla mostrando lo que se debe.
+  const todoVencido = destino < 0;
+  const ultimo = filas.length - 1;
 
   const meses = filas.map((f, i) => {
     const base = { mes: f.mes, importe: f.importe, vence_el: f.vence_el };
-    if (f.propio <= 0.005)  return { ...base, aPagar: 0, arrastre: 0, estado: "pagado", pagado: true };
-    if (estaVencido(f))     return { ...base, aPagar: 0, arrastre: 0, estado: "vencido", pagado: false };
+    if (f.propio <= 0.005) return { ...base, aPagar: 0, arrastre: 0, estado: "pagado", pagado: true };
+    if (estaVencido(f)) {
+      const concentra = todoVencido && i === ultimo;
+      return { ...base,
+               aPagar: concentra ? arrastre : 0,
+               arrastre: concentra ? round2(arrastre - f.propio) : 0,
+               estado: "vencido", pagado: false };
+    }
     const extra = i === destino ? arrastre : 0;
     return { ...base, aPagar: round2(f.propio + extra), arrastre: extra,
              estado: "aCobrar", pagado: false };
