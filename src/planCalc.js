@@ -331,13 +331,20 @@ export function estadoCobroMeses({ cuotas = [], pagosPaciente = [], hoy = null }
 }
 
 // ─── Cola de avisos del día ──────────────────────────────────────────────────
-// A quién hay que escribir HOY. Se avisa tres veces de cada cuota: una semana
-// antes, la víspera y el mismo día del vencimiento.
+// A quién hay que escribir hoy. De cada cuota se avisa tres veces: una semana
+// antes, la víspera y el mismo día.
 //
-// El importe no es el de la cuota a secas, sino lo que realmente hay que
-// cobrarle ese mes, con el atraso de meses vencidos ya sumado.
-export function avisosDelDia({ planes = [], cuotas = [], pagos = [], hoy, hitos = [7, 1, 0] }) {
+// Un aviso NO desaparece porque pase su día. Si nadie escribió el día 7, sigue
+// saliendo el 6, el 5... hasta que alguien lo mande o llegue la siguiente
+// etapa. Y si se pasa el vencimiento sin cobrar, pasa a "atrasado" y se queda
+// hasta que el paciente pague. Lo que no puede es desaparecer solo.
+//
+// Se emite UNA entrada por plan: el importe de la próxima cuota ya lleva
+// sumado el atraso, así que dos filas contarían el mismo dinero dos veces.
+export function avisosDelDia({ planes = [], cuotas = [], pagos = [], hoy, avisados = [] }) {
+  const clavesAvisadas = new Set(avisados.map(a => (typeof a === "string" ? a : a.clave)));
   const out = [];
+
   for (const plan of planes) {
     if (plan.estado !== "activo") continue;
     const propias = cuotas.filter(c => c.plan_id === plan.id);
@@ -351,22 +358,47 @@ export function avisosDelDia({ planes = [], cuotas = [], pagos = [], hoy, hitos 
     const ec = estadoCobroMeses({ cuotas: propias, pagosPaciente, hoy });
     if (ec.todoPagado) continue;
 
-    // la primera que toca cobrar y todavía no venció
     const prox = ec.meses.find(m => m.estado === "aCobrar" && m.aPagar > 0.005);
-    if (!prox) continue;
+    const dias = prox ? diasEntre(hoy, prox.vence_el) : null;
+    const enVentana = prox && dias >= 0 && dias <= 7;
 
-    const dias = diasEntre(hoy, prox.vence_el);
-    if (!hitos.includes(dias)) continue;
+    if (enVentana) {
+      // 7 días antes, la víspera o el mismo día. Al pasar de etapa cambia la
+      // clave, así que vuelve a salir aunque ya se hubiera avisado en la
+      // anterior.
+      const etapa = dias === 0 ? "hoy" : dias === 1 ? "vispera" : "antelacion";
+      const clave = `aviso_${plan.id}_${prox.mes}_${etapa}`;
+      if (clavesAvisadas.has(clave)) continue;
+      out.push({
+        plan, mes: prox.mes, vence_el: prox.vence_el,
+        importe: prox.aPagar, arrastre: prox.arrastre || 0,
+        dias, tipo: etapa, clave, ultimoAviso: null,
+      });
+      continue;
+    }
 
-    out.push({
-      plan, mes: prox.mes, vence_el: prox.vence_el,
-      importe: prox.aPagar, arrastre: prox.arrastre || 0,
-      dias,
-      tipo: dias === 0 ? "hoy" : dias === 1 ? "vispera" : "antelacion",
-      clave: `aviso_${plan.id}_${prox.mes}_${dias}`,
-    });
+    // Se pasó el vencimiento y sigue sin cobrarse: no se va de la lista hasta
+    // que pague, aunque ya se le haya escrito.
+    const vencidos = ec.meses.filter(m => m.estado === "vencido");
+    const debido = round2(ec.arrastre || 0);
+    if (vencidos.length && debido > 0.005) {
+      const primero = vencidos[0];
+      const clave = `aviso_${plan.id}_${primero.mes}_atrasado`;
+      out.push({
+        plan, mes: primero.mes, vence_el: primero.vence_el,
+        importe: debido, arrastre: 0,
+        dias: diasEntre(hoy, primero.vence_el),
+        tipo: "atrasado", clave,
+        ultimoAviso: avisados.find(a => typeof a !== "string" && a.clave === clave) || null,
+      });
+    }
   }
-  return out.sort((a, b) => a.dias - b.dias || String(a.plan.patient_name).localeCompare(String(b.plan.patient_name), "es"));
+
+  const orden = { atrasado: 0, hoy: 1, vispera: 2, antelacion: 3 };
+  return out.sort((a, b) =>
+    orden[a.tipo] - orden[b.tipo] ||
+    a.dias - b.dias ||
+    String(a.plan.patient_name).localeCompare(String(b.plan.patient_name), "es"));
 }
 
 // ─── Seguimiento de un plan acordado ─────────────────────────────────────────

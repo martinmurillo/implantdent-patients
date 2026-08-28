@@ -4543,9 +4543,10 @@ const anotarAviso = async (aviso, email) => {
 // enviados es compartido (tabla plan_avisos): en cuanto uno manda el mensaje,
 // a los otros dos les sale marcado y el paciente no lo recibe por triplicado.
 const TIPOS_AVISO = {
-  antelacion: { titulo: "Faltan 7 días",  color: "#c9a84c" },
-  vispera:    { titulo: "Vence mañana",   color: "#e67e22" },
-  hoy:        { titulo: "Vence hoy",      color: "#e74c3c" },
+  atrasado:   { titulo: "Vencidos sin cobrar", color: "#8c2d16" },
+  hoy:        { titulo: "Vence hoy",           color: "#e74c3c" },
+  vispera:    { titulo: "Vence mañana",        color: "#e67e22" },
+  antelacion: { titulo: "Esta semana",         color: "#c9a84c" },
 };
 
 function ColaDeAvisos({ avisos, pacientes, avisados, email, firmante = "", onEnviado }) {
@@ -4608,7 +4609,7 @@ function ColaDeAvisos({ avisos, pacientes, avisados, email, firmante = "", onEnv
           Quedan <b>{pendientes}</b> por mandar de {avisos.length}.
         </div>
       )}
-      {["hoy", "vispera", "antelacion"].map(tipo => {
+      {["atrasado", "hoy", "vispera", "antelacion"].map(tipo => {
         const grupo = avisos.filter(a => a.tipo === tipo);
         if (!grupo.length) return null;
         const { titulo, color } = TIPOS_AVISO[tipo];
@@ -4637,8 +4638,17 @@ function ColaDeAvisos({ avisos, pacientes, avisados, email, firmante = "", onEnv
                       #{av.plan.budget_no || "—"} · vence {fmtDate(av.vence_el)}
                       {" · "}
                       <b style={{color}}>
-                        {av.dias === 0 ? "es hoy" : av.dias === 1 ? "queda 1 día" : `quedan ${av.dias} días`}
+                        {av.dias < 0 ? `venció hace ${Math.abs(av.dias)} día${Math.abs(av.dias) === 1 ? "" : "s"}`
+                          : av.dias === 0 ? "es hoy"
+                          : av.dias === 1 ? "queda 1 día"
+                          : `quedan ${av.dias} días`}
                       </b>
+                      {av.ultimoAviso && (
+                        <span style={{color:"#888"}}>
+                          {" · último aviso "}{fmtDate(String(av.ultimoAviso.enviado_el).slice(0,10))}
+                          {av.ultimoAviso.enviado_por ? ` por ${String(av.ultimoAviso.enviado_por).split("@")[0]}` : ""}
+                        </span>
+                      )}
                       {av.arrastre > 0 && (
                         <span style={{color:"#8c2d16"}}> · incluye {fmtEur(av.arrastre)} de atraso</span>
                       )}
@@ -4651,7 +4661,7 @@ function ColaDeAvisos({ avisos, pacientes, avisados, email, firmante = "", onEnv
                       <div style={{fontSize:18, fontWeight:800, color:"#2c3250"}}>{fmtEur(av.importe)}</div>
                     </div>
 
-                    {ya ? (
+                    {ya && av.tipo !== "atrasado" ? (
                       <span style={{fontSize:12, background:"#e9f4ee", color:"#1c523b", borderRadius:6,
                         padding:"7px 13px", fontWeight:700, whiteSpace:"nowrap"}}>
                         ✓ avisado{ya.enviado_por ? ` por ${String(ya.enviado_por).split("@")[0]}` : ""}

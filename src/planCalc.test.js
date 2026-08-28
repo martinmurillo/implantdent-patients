@@ -889,18 +889,19 @@ describe("cuotasDelPlan · el ancla no se arrastra", () => {
 
 // ─── Cola de avisos: a quién escribir hoy ────────────────────────────────────
 describe("avisosDelDia", () => {
-  const plan = { id: "p1", patient_id: "pac1", patient_name: "ROSA", estado: "activo",
+  const plan = { id: "p1", patient_id: "pac1", patient_name: "CHAIMAE", estado: "activo",
                  fecha_inicio: "2026-08-27" };
   const cuotas = [
     { plan_id: "p1", numero: 0, mes: 1, vence_el: "2026-08-27", importe: 2000 },
     { plan_id: "p1", numero: 1, mes: 2, vence_el: "2026-09-27", importe: 500 },
     { plan_id: "p1", numero: 2, mes: 3, vence_el: "2026-10-27", importe: 500 },
   ];
-  const pagado2000 = [{ id:"g1", patient_id:"pac1", amount:2000, date:"2026-08-27" }];
-  const cola = (hoy, pagos = pagado2000) =>
-    avisosDelDia({ planes: [plan], cuotas, pagos, hoy });
+  const entregaPagada = [{ id:"g1", patient_id:"pac1", amount:2000, date:"2026-08-27" }];
+  const cola = (hoy, { pagos = entregaPagada, avisados = [] } = {}) =>
+    avisosDelDia({ planes: [plan], cuotas, pagos, hoy, avisados });
 
-  test("avisa una semana antes del vencimiento", () => {
+  test("aparece 7 días antes, no antes", () => {
+    assert.deepEqual(cola("2026-09-19"), []);
     const r = cola("2026-09-20");
     assert.equal(r.length, 1);
     assert.equal(r[0].tipo, "antelacion");
@@ -908,63 +909,102 @@ describe("avisosDelDia", () => {
     assert.equal(r[0].importe, 500);
   });
 
-  test("avisa la víspera y el mismo día", () => {
-    assert.equal(cola("2026-09-26")[0].tipo, "vispera");
-    assert.equal(cola("2026-09-27")[0].tipo, "hoy");
-    assert.equal(cola("2026-09-27")[0].dias, 0);
-  });
-
-  test("los días que no son hito no generan aviso", () => {
-    for (const d of ["2026-09-19", "2026-09-21", "2026-09-25"]) {
-      assert.deepEqual(cola(d), [], `no deberia avisar el ${d}`);
+  test("si nadie lo manda, NO desaparece los días siguientes", () => {
+    for (const [d, dias] of [["2026-09-21",6],["2026-09-23",4],["2026-09-25",2]]) {
+      const r = cola(d);
+      assert.equal(r.length, 1, `deberia seguir saliendo el ${d}`);
+      assert.equal(r[0].tipo, "antelacion");
+      assert.equal(r[0].dias, dias);
     }
   });
 
-  test("el importe lleva el atraso de meses vencidos ya sumado", () => {
-    // pagó 1.800 de los 2.000 de entrega: faltan 200
-    const pagos = [{ id:"g1", patient_id:"pac1", amount:1800, date:"2026-08-27" }];
-    const r = cola("2026-09-20", pagos);
-    assert.equal(r[0].importe, 700);     // 500 de la cuota + 200 del atraso
-    assert.equal(r[0].arrastre, 200);
+  test("mandado en una etapa, desaparece hasta la siguiente", () => {
+    const av = [{ clave: "aviso_p1_2_antelacion" }];
+    assert.deepEqual(cola("2026-09-20", { avisados: av }), []);
+    assert.deepEqual(cola("2026-09-23", { avisados: av }), []);
+    // la víspera es otra etapa: vuelve a salir
+    assert.equal(cola("2026-09-26", { avisados: av })[0].tipo, "vispera");
+    assert.equal(cola("2026-09-27", { avisados: av })[0].tipo, "hoy");
   });
 
-  test("un plan al corriente y ya saldado no entra en la cola", () => {
-    const todo = [{ id:"g1", patient_id:"pac1", amount:3000, date:"2026-08-27" }];
-    assert.deepEqual(cola("2026-09-20", todo), []);
+  test("pasado el vencimiento sin cobrar, queda como atrasado y no se va", () => {
+    for (const d of ["2026-09-28", "2026-10-05", "2026-10-15"]) {
+      const r = cola(d);
+      assert.equal(r.length, 1, `deberia seguir saliendo el ${d}`);
+      assert.equal(r[0].tipo, "atrasado");
+      assert.ok(r[0].dias < 0);
+      assert.equal(r[0].importe, 500);
+    }
+  });
+
+  test("si la siguiente cuota ya está en ventana, se avisa de ella con el atraso dentro", () => {
+    // el 26/10 vence la cuota de octubre mañana y la de septiembre sigue impagada:
+    // una sola fila, por los dos importes, para no reclamar el mismo dinero dos veces
+    const r = cola("2026-10-26");
+    assert.equal(r.length, 1);
+    assert.equal(r[0].tipo, "vispera");
+    assert.equal(r[0].importe, 1000);
+    assert.equal(r[0].arrastre, 500);
+  });
+
+  test("el atrasado sigue saliendo aunque ya se haya avisado", () => {
+    const av = [{ clave: "aviso_p1_2_atrasado", enviado_por: "x@y.z" }];
+    const r = cola("2026-10-05", { avisados: av });
+    assert.equal(r.length, 1);
+    assert.equal(r[0].tipo, "atrasado");
+    assert.ok(r[0].ultimoAviso, "deberia decir que ya se aviso una vez");
+  });
+
+  test("en cuanto paga, deja de salir", () => {
+    const pagos = [...entregaPagada, { id:"g2", patient_id:"pac1", amount:500, date:"2026-09-27" }];
+    assert.deepEqual(cola("2026-09-28", { pagos }), []);
+    assert.deepEqual(cola("2026-09-27", { pagos }), []);
+  });
+
+  test("una sola entrada por plan: el importe ya lleva el atraso dentro", () => {
+    // pagó 1.800 de los 2.000: faltan 200, y la cuota son 500
+    const pagos = [{ id:"g1", patient_id:"pac1", amount:1800, date:"2026-08-27" }];
+    const r = cola("2026-09-20", { pagos });
+    assert.equal(r.length, 1, "dos filas contarian el mismo dinero dos veces");
+    assert.equal(r[0].importe, 700);
+    assert.equal(r[0].arrastre, 200);
   });
 
   test("solo entran los planes activos", () => {
     for (const estado of ["borrador", "terminado", "cancelado"]) {
-      const r = avisosDelDia({ planes: [{ ...plan, estado }], cuotas, pagos: pagado2000, hoy: "2026-09-20" });
+      const r = avisosDelDia({ planes: [{ ...plan, estado }], cuotas,
+                               pagos: entregaPagada, hoy: "2026-09-20" });
       assert.deepEqual(r, [], `un plan ${estado} no deberia avisar`);
     }
   });
 
   test("no cuenta pagos anteriores al arranque del plan", () => {
     const viejo = [{ id:"g0", patient_id:"pac1", amount:5000, date:"2025-01-01" }];
-    const r = cola("2026-08-20", viejo);
-    // el pago viejo no salda nada, así que la entrega sigue pendiente
+    const r = cola("2026-08-27", { pagos: viejo });
     assert.equal(r.length, 1);
-    assert.equal(r[0].importe, 2000);
+    assert.equal(r[0].importe, 2000);   // la entrega sigue sin pagarse
   });
 
-  test("cada aviso tiene una clave distinta, para no repetirlo", () => {
-    const claves = ["2026-09-20", "2026-09-26", "2026-09-27"].map(d => cola(d)[0].clave);
-    assert.equal(new Set(claves).size, 3);
+  test("cada etapa tiene su clave, para no repetir el mismo aviso", () => {
+    const claves = [cola("2026-09-20")[0].clave, cola("2026-09-26")[0].clave,
+                    cola("2026-09-27")[0].clave, cola("2026-09-28")[0].clave];
+    assert.equal(new Set(claves).size, 4);
   });
 
-  test("los más urgentes salen primero", () => {
+  test("los atrasados salen primero, y luego por urgencia", () => {
+    // ANA solo tiene la entrega, que venció y no pagó: no hay cuota próxima
     const p2 = { ...plan, id:"p2", patient_id:"pac2", patient_name:"ANA" };
-    const c2 = cuotas.map(c => ({ ...c, plan_id:"p2", vence_el: c.vence_el === "2026-09-27" ? "2026-09-20" : c.vence_el }));
+    const c2 = [{ plan_id:"p2", numero:0, mes:1, vence_el:"2026-08-27", importe:900 }];
     const r = avisosDelDia({
-      planes: [plan, p2],
-      cuotas: [...cuotas, ...c2],
-      pagos: [...pagado2000, { id:"g2", patient_id:"pac2", amount:2000, date:"2026-08-27" }],
-      hoy: "2026-09-20",
+      planes: [plan, p2], cuotas: [...cuotas, ...c2],
+      pagos: entregaPagada, hoy: "2026-09-27",
     });
     assert.equal(r.length, 2);
-    assert.equal(r[0].dias, 0);   // ANA vence hoy
-    assert.equal(r[1].dias, 7);   // ROSA en una semana
+    assert.equal(r[0].tipo, "atrasado");
+    assert.equal(r[0].plan.patient_name, "ANA");
+    assert.equal(r[0].importe, 900);
+    assert.equal(r[1].tipo, "hoy");
+    assert.equal(r[1].plan.patient_name, "CHAIMAE");
   });
 
   test("sin planes no hay cola", () => {
