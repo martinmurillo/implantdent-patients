@@ -30,22 +30,33 @@ export const estilosFicha = `
   .hoy .imp{font-size:19pt;font-weight:800;color:#0e3b3e;line-height:1;}
   .plan{font-size:10pt;font-weight:700;color:#a07830;margin:1.2mm 0 0.8mm;
         letter-spacing:.04em;text-transform:uppercase;}
-  table{width:100%;border-collapse:collapse;}
-  th{font-size:8pt;text-transform:uppercase;letter-spacing:.05em;color:#777;
-     text-align:left;border-bottom:1.5px solid #999;padding-bottom:1mm;font-weight:700;}
+  /* Cuadrícula cerrada: recepción escribe a boli dentro de cada casilla, así
+     que las celdas tienen que estar delimitadas por los cuatro lados. */
+  /* anchos fijos: si no, la última columna se come todo el espacio sobrante
+     y las casillas de escribir quedan desiguales */
+  table{width:100%;border-collapse:collapse;border:1.2px solid #555;table-layout:fixed;}
+  th{font-size:8pt;text-transform:uppercase;letter-spacing:.04em;color:#555;
+     text-align:left;border:1px solid #555;background:#f0eee9;
+     padding:0.8mm 1.5mm;font-weight:700;}
   /* el alto de fila y el cuerpo los fija cada ficha según cuántas cuotas
      tenga: un plan de 24 meses no puede usar la misma letra que uno de 6 */
-  td{font-size:var(--cuerpo);padding:0.4mm 0;border-bottom:1px solid #ccc;
-     height:var(--alto);vertical-align:top;}
-  .f{width:26mm;font-weight:600;}
-  .c{width:22mm;text-align:right;padding-right:5mm;font-weight:700;}
-  .w{width:38mm;}
-  .forma{width:28mm;font-size:var(--cuerpo-menor);color:#999;letter-spacing:.1em;}
-  tr.pagada td{color:#999;}
+  td{font-size:var(--cuerpo);padding:0.4mm 1.5mm;border:1px solid #888;
+     height:var(--alto);vertical-align:middle;}
+  .f{width:15%;font-weight:600;}
+  .c{width:12%;text-align:right;font-weight:700;}
+  /* las casillas para escribir van en blanco, bien cerradas y anchas:
+     son las que recepción rellena a boli */
+  .w{width:28%;background:#fff;}
+  .deuda{width:29%;background:#fff;}
+  .forma{width:16%;font-size:var(--cuerpo-menor);color:#aaa;
+         letter-spacing:.14em;text-align:center;}
+  tr.pagada td{color:#999;background:#f7f7f5;}
   tr.pagada .c{text-decoration:line-through;}
   .ok{font-size:var(--cuerpo-menor);font-weight:800;color:#1c523b;letter-spacing:.06em;}
-  /* qué citar con ese pago, debajo de su fila */
-  .cita td{border-bottom:1px solid #ccc;padding:0 0 0.4mm;height:auto;
+  /* qué citar con ese pago: banda que cruza la tabla, sin cuadrícula */
+  .cita td{border-left:1px solid #555;border-right:1px solid #555;
+           border-top:none;border-bottom:1px solid #888;
+           padding:0.2mm 1.5mm 0.5mm;height:auto;background:#eef3f2;
            font-size:var(--cuerpo-cita);color:#0e3b3e;font-style:italic;line-height:1.1;}
   .cita b{font-style:normal;font-weight:700;}
   .pie{font-size:7.5pt;color:#777;border-top:1px solid #ccc;
@@ -75,7 +86,7 @@ export function htmlFichaCobro({ plan, paciente, cuotas = [], estado, aPagarAhor
         <td class="c">${eur(c.importe)}</td>
         <td class="w">${pagada ? '<span class="ok">COBRADO</span>' : ""}</td>
         <td class="forma">${pagada ? "" : "V · E · T"}</td>
-        <td class="w"></td>
+        <td class="deuda"></td>
       </tr>` + (citar.length ? `
       <tr class="cita">
         <td colspan="5">Con este pago, <b>dar cita para ${esc(citar.join(", "))}</b></td>
@@ -117,7 +128,7 @@ export function htmlFichaCobro({ plan, paciente, cuotas = [], estado, aPagarAhor
     <table>
       <thead><tr>
         <th class="f">Vence</th><th class="c">Cuota</th><th class="w">Pagado</th>
-        <th class="forma">Forma</th><th class="w">Deuda anterior</th>
+        <th class="forma">Forma</th><th class="deuda">Deuda anterior</th>
       </tr></thead>
       <tbody>${filas}</tbody>
     </table>
