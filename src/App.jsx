@@ -5,10 +5,10 @@ import { loadPdfJs } from "./pdfjs";
 import { calcPlan, cuotaSugerida, totalTratamientos, cuotasDelPlan,
          resumenPlan, coberturaProxima, addMeses, conciliarCuotas,
          precioSinDescuento, columnasTablero, estadoCobroMeses,
-         vencimientosPorMes } from "./planCalc";
+         vencimientosPorMes, avisosDelDia } from "./planCalc";
 import { colocacionInicial, parsePlanPDF, importeFila } from "./pdfPlan";
 import { htmlPlanImpreso } from "./planPrint";
-import { DIRECCION_TEXTO, ETIQUETAS_LINEA } from "./legalPlan";
+import { DIRECCION_TEXTO, ETIQUETAS_LINEA, PAGO } from "./legalPlan";
 import { PLAZOS as FRAG_PLAZOS, financiable, motivoNoFinanciable,
          comisionFrakmenta, calcFrakmenta, lineaDeTiempo, fraseTramos,
          etiquetaMes } from "./frakmenta";
@@ -4530,6 +4530,170 @@ function SinAcceso({ email, sugerirPortal = false }) {
   );
 }
 
+// Deja constancia de que ya se mandó, para que no lo repitan los otros dos.
+const anotarAviso = async (aviso, email) => {
+  await supabase.from("plan_avisos").upsert({
+    clave: aviso.clave, plan_id: aviso.plan.id, mes: aviso.mes,
+    dias: aviso.dias, enviado_por: email,
+  }, { onConflict: "clave" });
+};
+
+// ─── ColaDeAvisos ────────────────────────────────────────────────────────────
+// A quién hay que escribir hoy. La usan los tres, así que el registro de
+// enviados es compartido (tabla plan_avisos): en cuanto uno manda el mensaje,
+// a los otros dos les sale marcado y el paciente no lo recibe por triplicado.
+const TIPOS_AVISO = {
+  atrasado:   { titulo: "Vencidos sin cobrar", color: "#8c2d16" },
+  hoy:        { titulo: "Vence hoy",           color: "#e74c3c" },
+  vispera:    { titulo: "Vence mañana",        color: "#e67e22" },
+  antelacion: { titulo: "Esta semana",         color: "#c9a84c" },
+};
+
+function ColaDeAvisos({ avisos, pacientes, avisados, email, firmante = "", onEnviado }) {
+  const [marcando, setMarcando] = useState(null);
+
+  // El mensaje lo firma quien lo manda, no siempre Martín
+  const quienFirma = firmante.trim()
+    || (l => l ? l.charAt(0).toUpperCase() + l.slice(1) : "el equipo")(String(email || "").split("@")[0]);
+
+  const mensaje = (av, pac) => {
+    const nombre = ((pac?.name || "").trim().split(/\s+/)[0] || "")
+      .replace(/^./, c => c.toUpperCase()).replace(/(?<=^.).*/, t => t.toLowerCase());
+    const cuando = av.tipo === "hoy" ? `hoy, ${fmtDate(av.vence_el)},`
+                 : av.tipo === "vispera" ? `mañana, ${fmtDate(av.vence_el)},`
+                 : `el ${fmtDate(av.vence_el)}`;
+    return `Hola ${nombre} 😊\n\nSoy ${quienFirma} de Clínica Dental IMPLANTDENT.\n\n`
+      + `Te escribo para recordarte que ${cuando} vence el pago de tu plan de tratamiento, `
+      + `por un importe de ${fmtEur(av.importe)}.`
+      + (av.arrastre > 0
+          ? `\n\nEn ese importe están incluidos ${fmtEur(av.arrastre)} que quedaron pendientes del mes anterior.`
+          : "")
+      + `\n\nPuedes abonarlo en la clínica, en efectivo o con tarjeta, o por transferencia:\n`
+      + `${PAGO.iban}\nConcepto: ${PAGO.concepto(pac?.name)}\n\n`
+      + `Cualquier cosa que necesites, me lo dices por aquí.\n\nUn saludo ${nombre}`;
+  };
+
+  const marcar = async (av) => {
+    setMarcando(av.clave);
+    await onEnviado(av);
+    setMarcando(null);
+  };
+
+  const cabecera = (
+    <div style={{marginBottom:14}}>
+      <div style={{fontSize:17, fontWeight:700, color:"#2c3250"}}>Recordatorios de cobro de hoy</div>
+      <div style={{fontSize:12.5, color:"#888", marginTop:2}}>
+        Cada cuota se avisa tres veces: <b>7 días antes</b>, <b>la víspera</b> y <b>el mismo día</b>.
+        Solo aparece lo que toca mandar hoy.
+      </div>
+    </div>
+  );
+
+  if (!avisos.length) return (
+    <div>
+      {cabecera}
+      <div style={{textAlign:"center", color:"#888", padding:50, background:"#fff", borderRadius:10, fontSize:13}}>
+        Hoy no hay ningún recordatorio que mandar.
+      </div>
+    </div>
+  );
+
+  const pendientes = avisos.filter(a => !avisados.some(x => x.clave === a.clave)).length;
+
+  return (
+    <div>
+      {cabecera}
+      {pendientes > 0 && (
+        <div style={{background:"#c9a84c18", border:"1px solid #c9a84c55", borderRadius:8,
+          padding:"10px 14px", fontSize:14, fontWeight:600, color:"#7a5f1c", marginBottom:16}}>
+          Quedan <b>{pendientes}</b> por mandar de {avisos.length}.
+        </div>
+      )}
+      {["atrasado", "hoy", "vispera", "antelacion"].map(tipo => {
+        const grupo = avisos.filter(a => a.tipo === tipo);
+        if (!grupo.length) return null;
+        const { titulo, color } = TIPOS_AVISO[tipo];
+        return (
+          <div key={tipo} style={{marginBottom:18}}>
+            <div style={{fontSize:11, letterSpacing:2, fontWeight:700, color, marginBottom:8}}>
+              {titulo.toUpperCase()} · {grupo.length}
+            </div>
+            {grupo.map(av => {
+              const pac = pacientes.find(p => p.id === av.plan.patient_id);
+              const ya  = avisados.find(x => x.clave === av.clave);
+              const tel = pac?.phone
+                ? (n => /^[6789]\d{8}$/.test(n) ? "34" + n : n)(pac.phone.replace(/\D/g, ""))
+                : null;
+              return (
+                <div key={av.clave} style={{...s.card, borderLeft:`4px solid ${color}`,
+                  display:"flex", justifyContent:"space-between", alignItems:"center",
+                  gap:12, flexWrap:"wrap", opacity: ya ? 0.65 : 1}}>
+                  <div>
+                    <div style={{fontWeight:700, fontSize:14.5, color:"#2c3250",
+                      display:"flex", alignItems:"center", gap:8, flexWrap:"wrap"}}>
+                      {pac?.name || av.plan.patient_name || "Paciente"}
+                      {pac?.hc && <span style={{fontSize:12, color:"#888", fontWeight:600}}>HC {pac.hc}</span>}
+                    </div>
+                    <div style={{fontSize:12, color:"#888", marginTop:3}}>
+                      #{av.plan.budget_no || "—"} · vence {fmtDate(av.vence_el)}
+                      {" · "}
+                      <b style={{color}}>
+                        {av.dias < 0 ? `venció hace ${Math.abs(av.dias)} día${Math.abs(av.dias) === 1 ? "" : "s"}`
+                          : av.dias === 0 ? "es hoy"
+                          : av.dias === 1 ? "queda 1 día"
+                          : `quedan ${av.dias} días`}
+                      </b>
+                      {av.ultimoAviso && (
+                        <span style={{color:"#888"}}>
+                          {" · último aviso "}{fmtDate(String(av.ultimoAviso.enviado_el).slice(0,10))}
+                          {av.ultimoAviso.enviado_por ? ` por ${String(av.ultimoAviso.enviado_por).split("@")[0]}` : ""}
+                        </span>
+                      )}
+                      {av.arrastre > 0 && (
+                        <span style={{color:"#8c2d16"}}> · incluye {fmtEur(av.arrastre)} de atraso</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{display:"flex", gap:14, alignItems:"center", flexWrap:"wrap"}}>
+                    <div style={{textAlign:"right"}}>
+                      <div style={{fontSize:10, color:"#888", letterSpacing:1}}>A COBRAR</div>
+                      <div style={{fontSize:18, fontWeight:800, color:"#2c3250"}}>{fmtEur(av.importe)}</div>
+                    </div>
+
+                    {ya && av.tipo !== "atrasado" ? (
+                      <span style={{fontSize:12, background:"#e9f4ee", color:"#1c523b", borderRadius:6,
+                        padding:"7px 13px", fontWeight:700, whiteSpace:"nowrap"}}>
+                        ✓ avisado{ya.enviado_por ? ` por ${String(ya.enviado_por).split("@")[0]}` : ""}
+                      </span>
+                    ) : tel ? (
+                      <a href={`whatsapp://send?phone=${tel}&text=${encodeURIComponent(mensaje(av, pac))}`}
+                        onClick={()=>marcar(av)}
+                        style={{fontSize:13, padding:"8px 16px", borderRadius:7, textDecoration:"none",
+                          fontWeight:700, background:"#25d36618", border:"1px solid #25d36688",
+                          color:"#25a244", whiteSpace:"nowrap",
+                          opacity: marcando === av.clave ? 0.5 : 1}}>
+                        💬 Enviar recordatorio
+                      </a>
+                    ) : (
+                      <span style={{fontSize:12, color:"#e74c3c", fontWeight:600}}>sin teléfono</span>
+                    )}
+
+                    {!ya && tel && (
+                      <button onClick={()=>marcar(av)} title="Marcar como avisado sin abrir WhatsApp"
+                        style={{...s.btnSm, padding:"6px 10px"}}>✓</button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Cambios en vivo ─────────────────────────────────────────────────────────
 // Sin esto, si uno borra un plan el otro no se entera hasta salir y volver a
 // entrar.
@@ -4545,6 +4709,7 @@ const escucharCambiosDePlanes = (nombre, alCambiar) => {
     .on("postgres_changes", { event: "*", schema: "public", table: "payment_plans" }, rebote)
     .on("postgres_changes", { event: "*", schema: "public", table: "payment_plan_cuotas" }, rebote)
     .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, rebote)
+    .on("postgres_changes", { event: "*", schema: "public", table: "plan_avisos" }, rebote)
     .subscribe();
   return () => { clearTimeout(t); supabase.removeChannel(canal); };
 };
@@ -4552,14 +4717,15 @@ const escucharCambiosDePlanes = (nombre, alCambiar) => {
 // Los datos que necesita el portal, en una sola función para que la carga
 // inicial y la recarga en vivo no puedan desincronizarse.
 const cargarDatosPortal = async () => {
-  const [{ data: pl }, { data: cu }, { data: pg }, { data: pa }] = await Promise.all([
+  const [{ data: pl }, { data: cu }, { data: pg }, { data: pa }, { data: av }] = await Promise.all([
     supabase.from("payment_plans").select("*")
       .in("estado", ["activo","terminado","borrador"]).order("fecha_inicio"),
     supabase.from("payment_plan_cuotas").select("*").order("vence_el"),
     supabase.from("payments").select("*"),
-    supabase.from("patients").select("id,name,hc,budget_no,treatments"),
+    supabase.from("patients").select("id,name,hc,budget_no,treatments,phone"),
+    supabase.from("plan_avisos").select("*"),
   ]);
-  return { planes: pl || [], cuotas: cu || [], pagos: pg || [], pacientes: pa || [] };
+  return { planes: pl || [], cuotas: cu || [], pagos: pg || [], pacientes: pa || [], avisados: av || [] };
 };
 
 // ─── NuevoPlanJefe ───────────────────────────────────────────────────────────
@@ -4864,11 +5030,14 @@ function PortalPlanes() {
   const [sesion,    setSesion]    = useState(null);
   const [listo,     setListo]     = useState(false);
   const [rol,       setRol]       = useState(null);   // null = todavía sin comprobar
+  const [nombre,    setNombre]    = useState("");
   const [plans,     setPlans]     = useState([]);
   const [cuotas,    setCuotas]    = useState([]);
   const [pagos,     setPagos]     = useState([]);
   const [pacientes, setPacientes] = useState([]);
   const [busca,     setBusca]     = useState("");
+  const [avisados,  setAvisados]  = useState([]);
+  const [seccion,   setSeccion]   = useState("avisos");  // avisos | planes
   const [nuevo,     setNuevo]     = useState(false);   // armando un plan nuevo
   const [abierto,   setAbierto]   = useState(null);
   const [plan,      setPlan]      = useState(null);
@@ -4885,7 +5054,8 @@ function PortalPlanes() {
   // propios borradores. Recepción no ve ningún borrador.
   const recargarTodo = async () => {
     const d = await cargarDatosPortal();
-    setPlans(d.planes); setCuotas(d.cuotas); setPagos(d.pagos); setPacientes(d.pacientes);
+    setPlans(d.planes); setCuotas(d.cuotas); setPagos(d.pagos);
+    setPacientes(d.pacientes); setAvisados(d.avisados);
   };
   const recargarPlanes = recargarTodo;
 
@@ -4893,9 +5063,9 @@ function PortalPlanes() {
     if (!sesion) return;
     (async () => {
       const email = (sesion.user?.email || "").toLowerCase();
-      const { data: u } = await supabase.from("plan_usuarios").select("rol").eq("email", email).maybeSingle();
+      const { data: u } = await supabase.from("plan_usuarios").select("rol,nombre").eq("email", email).maybeSingle();
       const r = u?.rol || "sin_acceso";
-      setRol(r);
+      setRol(r); setNombre(u?.nombre || "");
       if (r === "sin_acceso") return;
       const [{ data: cu }, { data: pg }, { data: pa }] = await Promise.all([
         supabase.from("payment_plan_cuotas").select("*").order("vence_el"),
@@ -4904,7 +5074,7 @@ function PortalPlanes() {
       ]);
       setCuotas(cu || []); setPagos(pg || []); setPacientes(pa || []);
       const d = await cargarDatosPortal();
-      setPlans(d.planes);
+      setPlans(d.planes); setAvisados(d.avisados);
     })();
   }, [sesion]);
 
@@ -4913,7 +5083,8 @@ function PortalPlanes() {
     if (!sesion) return;
     return escucharCambiosDePlanes("portal", async () => {
       const d = await cargarDatosPortal();
-      setPlans(d.planes); setCuotas(d.cuotas); setPagos(d.pagos); setPacientes(d.pacientes);
+      setPlans(d.planes); setCuotas(d.cuotas); setPagos(d.pagos);
+      setPacientes(d.pacientes); setAvisados(d.avisados);
     });
   }, [sesion]);
 
@@ -4956,6 +5127,7 @@ function PortalPlanes() {
   // el dueño entra al portal con las mismas manos que el jefe
   const puedeMover = rol === "jefe" || rol === "dueno";
   const hoy = today();
+  const cola = avisosDelDia({ planes: plans, cuotas, pagos, hoy });
 
   return (
     <div style={{minHeight:"100vh",background:"#f0f2f7",color:"#2c3250",fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
@@ -4976,25 +5148,45 @@ function PortalPlanes() {
       </div>
 
       <div style={{padding:"24px 28px"}}>
+        {!nuevo && !abierto && (
+          <div style={{display:"flex", background:"#ffffff", borderRadius:10, padding:4,
+            marginBottom:16, width:"fit-content"}}>
+            {[["avisos",`Avisos de hoy${cola.length ? ` (${cola.length})` : ""}`],["planes","Planes de pago"]].map(([id,label])=>(
+              <button key={id} onClick={()=>setSeccion(id)}
+                style={{background:seccion===id?"#dce8fa":"none", border:"none", borderRadius:8,
+                  color:seccion===id?"#c9a84c":"#555", padding:"8px 20px", cursor:"pointer",
+                  fontSize:13, fontWeight:seccion===id?700:400}}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {!nuevo && !abierto && seccion === "avisos" && (
+          <ColaDeAvisos avisos={cola} pacientes={pacientes} avisados={avisados}
+            email={(sesion.user?.email || "").toLowerCase()} firmante={nombre}
+            onEnviado={async (av)=>{ await anotarAviso(av, (sesion.user?.email||"").toLowerCase()); await recargarTodo(); }}/>
+        )}
+
         {nuevo && (
           <NuevoPlanJefe email={(sesion.user?.email || "").toLowerCase()}
             onCancelar={()=>setNuevo(false)}
             onGuardado={async ()=>{ setNuevo(false); await recargarTodo(); }}/>
         )}
 
-        {!nuevo && !abierto && (
+        {!nuevo && !abierto && seccion === "planes" && (
           <input value={busca} onChange={e=>setBusca(e.target.value)}
             placeholder="Buscar por nombre, HC o nº de presupuesto..."
             style={{...s.input, marginBottom:14, maxWidth:420}}/>
         )}
 
-        {!nuevo && !abierto && plans.length === 0 && (
+        {!nuevo && !abierto && seccion === "planes" && plans.length === 0 && (
           <div style={{textAlign:"center",color:"#888",padding:50,background:"#fff",borderRadius:10,fontSize:13}}>
             No hay planes activos ni terminados.
           </div>
         )}
 
-        {!nuevo && !abierto && plans.map(pl => {
+        {!nuevo && !abierto && seccion === "planes" && plans.map(pl => {
           const pac = pacientes.find(p => p.id === pl.patient_id);
           if (!pac) return null;
           if (!coincideBusqueda(busca, pac, pl)) return null;
@@ -5112,8 +5304,10 @@ function AppCompleta() {
   const [waClicks,      setWaClicks]      = useState([]);
   const [plans,         setPlans]         = useState([]);
   const [planCuotas,    setPlanCuotas]    = useState([]);
+  const [planAvisos,    setPlanAvisos]    = useState([]);
   const [planPara,      setPlanPara]      = useState(null);   // presupuesto a abrir en el tablero
-  const [viewHistory, setViewHistory] = useState(["dashboard"]);
+  // Arranca en los avisos: es lo primero que hay que mirar cada mañana
+  const [viewHistory, setViewHistory] = useState(["avisos"]);
   const view = viewHistory[viewHistory.length - 1];
   const navigate = (id) => setViewHistory(prev => prev[prev.length-1]===id ? prev : [...prev, id]);
   const goBack   = ()   => setViewHistory(prev => prev.length>1 ? prev.slice(0,-1) : prev);
@@ -5139,6 +5333,7 @@ function AppCompleta() {
   const fetchWaClicks     = async () => { const {data}=await supabase.from("wa_clicks").select("*"); setWaClicks(data||[]); };
   const fetchPlans        = async () => { const {data}=await supabase.from("payment_plans").select("*").order("created_at",{ascending:false}); setPlans(data||[]); };
   const fetchPlanCuotas   = async () => { const {data}=await supabase.from("payment_plan_cuotas").select("*").order("vence_el"); setPlanCuotas(data||[]); };
+  const fetchPlanAvisos   = async () => { const {data}=await supabase.from("plan_avisos").select("*"); setPlanAvisos(data||[]); };
   const [clinicStats, setClinicStats] = useState([]);
   const fetchClinicStats = async () => { const {data}=await supabase.from("clinic_monthly_stats").select("*"); setClinicStats(data||[]); };
   const saveClinicStat = async (year, month, vals) => {
@@ -5169,12 +5364,13 @@ function AppCompleta() {
   useEffect(() => {
     if (!hasSession) return;
     return escucharCambiosDePlanes("dueno", async () => {
-      const [{ data: pl }, { data: cu }, { data: pg }] = await Promise.all([
+      const [{ data: pl }, { data: cu }, { data: pg }, { data: av }] = await Promise.all([
         supabase.from("payment_plans").select("*").order("created_at", { ascending:false }),
         supabase.from("payment_plan_cuotas").select("*").order("vence_el"),
         supabase.from("payments").select("*").order("date", { ascending:false }),
+        supabase.from("plan_avisos").select("*"),
       ]);
-      setPlans(pl || []); setPlanCuotas(cu || []); setPayments(pg || []);
+      setPlans(pl || []); setPlanCuotas(cu || []); setPayments(pg || []); setPlanAvisos(av || []);
     });
   }, [hasSession]);
 
@@ -5200,7 +5396,7 @@ function AppCompleta() {
   useEffect(()=>{
     if (!unlocked) return;
     setDbLoad(true);
-    Promise.all([fetchPatients(),fetchDoctors(),fetchItems(),fetchTemplates(),fetchTranslations(),fetchPayments(),fetchWaClicks(),fetchPlans(),fetchPlanCuotas()])
+    Promise.all([fetchPatients(),fetchDoctors(),fetchItems(),fetchTemplates(),fetchTranslations(),fetchPayments(),fetchWaClicks(),fetchPlans(),fetchPlanCuotas(),fetchPlanAvisos()])
       .then(() => autoSyncStatuses())
       .finally(()=>setDbLoad(false));
   },[unlocked]);
@@ -5474,6 +5670,7 @@ function AppCompleta() {
 
   // Cuotas que reclaman atención hoy: vencidas, o que vencen dentro de 5 días.
   // Es el aviso que pedía verse sin entrar a buscarlo.
+  const avisosDeHoy = avisosDelDia({ planes: plans, cuotas: planCuotas, pagos: payments, hoy: today() });
   const cuotasQueAvisan = (() => {
     const hoyStr = today();
     return plans.filter(pl => pl.estado === "activo").filter(pl => {
@@ -5595,6 +5792,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
       <div style={{background:"#ffffff",borderBottom:"1px solid #e2e5ed",padding:"0 16px",display:"flex",alignItems:"center",gap:4,height:60}}>
         <span style={{fontWeight:900,fontSize:15,letterSpacing:3,color:"#c9a84c",marginRight:8}}>IMPLANTDENT</span>
         <div style={{flex:1}}/>
+        <NavBtn id="avisos"    label="Avisos"     badge={avisosDeHoy.length}/>
         <NavBtn id="dashboard" label="Pacientes"  badge={0}/>
         <NavBtn id="debts"     label="Deudas"     badge={pendingDebtPatients.length}/>
         <NavBtn id="pagos"     label="Cobros"/>
@@ -6083,6 +6281,12 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
 
         {!dbLoading && view==="presupuestos" && (
           <PresupuestosExcelPanel patients={[...patients,...archivedPatients]} onRefresh={fetchPatients}/>
+        )}
+
+        {!dbLoading && view==="avisos" && (
+          <ColaDeAvisos avisos={avisosDeHoy} pacientes={allPatients} avisados={planAvisos}
+            email={(sesionEmail||"").toLowerCase()} firmante="Martín"
+            onEnviado={async (av)=>{ await anotarAviso(av, (sesionEmail||"").toLowerCase()); await fetchPlanAvisos(); }}/>
         )}
 
         {!dbLoading && view==="planes" && (
