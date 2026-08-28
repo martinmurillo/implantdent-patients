@@ -701,64 +701,84 @@ describe("columnasTablero", () => {
 
 // ─── Estado de cobro mes a mes, tal como se ve en la línea de tiempo ─────────
 describe("estadoCobroMeses", () => {
-  // entrega de 2.000 en el mes 1 y tres cuotas de 500
+  // entrega de 2.000 y tres cuotas de 104,68, como el plan real
   const cuotas = [
     { numero: 0, concepto: "entrega", mes: 1, vence_el: "2026-08-27", importe: 2000 },
-    { numero: 1, concepto: "cuota",   mes: 2, vence_el: "2026-09-27", importe: 500 },
-    { numero: 2, concepto: "cuota",   mes: 3, vence_el: "2026-10-27", importe: 500 },
-    { numero: 3, concepto: "cuota",   mes: 4, vence_el: "2026-11-27", importe: 500 },
+    { numero: 1, concepto: "cuota",   mes: 2, vence_el: "2026-09-27", importe: 104.68 },
+    { numero: 2, concepto: "cuota",   mes: 3, vence_el: "2026-10-27", importe: 104.68 },
+    { numero: 3, concepto: "cuota",   mes: 4, vence_el: "2026-11-27", importe: 104.68 },
   ];
+  const pagos = (...xs) => xs.map(amount => ({ amount }));
+  const vista = (r) => r.meses.map(m =>
+    m.estado === "pagado" ? "Pagado" : m.estado === "vencido" ? "Vencido" : m.aPagar);
 
-  test("sin pagos, cada mes muestra SU importe, no un acumulado", () => {
-    const r = estadoCobroMeses({ cuotas, pagosPaciente: [] });
-    assert.deepEqual(r.meses.map(m => m.aPagar), [2000, 500, 500, 500]);
-    assert.equal(r.todoPagado, false);
-  });
-
-  test("las cuotas se ven iguales entre sí, que es lo que se acordó", () => {
-    const r = estadoCobroMeses({ cuotas, pagosPaciente: [] });
-    const soloCuotas = r.meses.slice(1).map(m => m.aPagar);
+  test("la cuota es fija: los meses no van subiendo", () => {
+    const r = estadoCobroMeses({ cuotas, pagosPaciente: [], hoy: "2026-08-27" });
+    assert.deepEqual(vista(r), [2000, 104.68, 104.68, 104.68]);
+    const soloCuotas = vista(r).slice(1);
     assert.equal(new Set(soloCuotas).size, 1, "las cuotas no pueden ir subiendo");
   });
 
-  test("cobrada la entrega, el mes 1 queda pagado", () => {
-    const r = estadoCobroMeses({ cuotas, pagosPaciente: [{ amount: 2000 }] });
-    assert.equal(r.meses[0].pagado, true);
-    assert.equal(r.meses[0].aPagar, 0);
-    assert.equal(r.meses[1].aPagar, 500);
-    assert.equal(r.pendienteTotal, 1500);
+  test("sin fecha no hay vencidos: es el plan recién diseñado", () => {
+    const r = estadoCobroMeses({ cuotas, pagosPaciente: [] });
+    assert.deepEqual(vista(r), [2000, 104.68, 104.68, 104.68]);
   });
 
-  test("un pago parcial deja en su mes lo que falta, sin inflar los siguientes", () => {
-    // pagan 1.500 de los 2.000 de entrega
-    const r = estadoCobroMeses({ cuotas, pagosPaciente: [{ amount: 1500 }] });
-    assert.equal(r.meses[0].pagado, false);
-    assert.equal(r.meses[0].aPagar, 500);   // lo que falta de la entrega
-    assert.equal(r.meses[1].aPagar, 500);   // su cuota, no 500 + 500
-    assert.equal(r.meses[2].aPagar, 500);
-    // el total que se le debe reclamar sigue siendo el correcto
-    assert.equal(r.pendienteTotal, 2000);
+  test("cobrada la entrega, ese mes queda pagado y el resto no se mueve", () => {
+    const r = estadoCobroMeses({ cuotas, pagosPaciente: pagos(2000), hoy: "2026-09-01" });
+    assert.deepEqual(vista(r), ["Pagado", 104.68, 104.68, 104.68]);
+    assert.equal(r.pendienteTotal, 314.04);
   });
 
-  test("un pago de más adelanta cuotas siguientes", () => {
-    const r = estadoCobroMeses({ cuotas, pagosPaciente: [{ amount: 2600 }] });
-    assert.equal(r.meses[0].pagado, true);
-    assert.equal(r.meses[1].pagado, true);       // 2500 <= 2600
-    assert.equal(r.meses[2].aPagar, 400);        // le quedan 100 a favor
-    assert.equal(r.meses[3].aPagar, 500);        // y esta ya vuelve a ser entera
+  test("pagó de menos y el mes venció: se marca vencido y falta pasa al siguiente", () => {
+    // 1.900 de los 2.000 → faltan 100
+    const r = estadoCobroMeses({ cuotas, pagosPaciente: pagos(1900), hoy: "2026-09-01" });
+    assert.deepEqual(vista(r), ["Vencido", 204.68, 104.68, 104.68]);
+    assert.equal(r.meses[1].arrastre, 100);
+    assert.equal(r.arrastre, 100);
   });
 
-  test("todo pagado cuando se cubre el plan entero", () => {
-    const r = estadoCobroMeses({ cuotas, pagosPaciente: [{ amount: 3500 }] });
+  test("el arrastre no se cobra dos veces: solo en el mes destino", () => {
+    const r = estadoCobroMeses({ cuotas, pagosPaciente: pagos(1900), hoy: "2026-09-01" });
+    assert.deepEqual(r.meses.map(m => m.arrastre), [0, 100, 0, 0]);
+    // lo pendiente sigue cuadrando con el plan menos lo pagado
+    assert.equal(r.pendienteTotal, 414.04);
+  });
+
+  test("varios pagos parciales se suman antes de imputarse", () => {
+    const r = estadoCobroMeses({ cuotas, pagosPaciente: pagos(1000, 900), hoy: "2026-09-01" });
+    assert.deepEqual(vista(r), ["Vencido", 204.68, 104.68, 104.68]);
+  });
+
+  test("pagó de más: el sobrante va descontando las cuotas siguientes", () => {
+    // 2.200 → cubre la entrega, la cuota 2 entera y 95,32 de la cuota 3
+    const r = estadoCobroMeses({ cuotas, pagosPaciente: pagos(2200), hoy: "2026-09-01" });
+    assert.deepEqual(vista(r), ["Pagado", "Pagado", 9.36, 104.68]);
+  });
+
+  test("pagado justo el total: todo pagado", () => {
+    const r = estadoCobroMeses({ cuotas, pagosPaciente: pagos(2314.04), hoy: "2026-12-01" });
+    assert.deepEqual(vista(r), ["Pagado", "Pagado", "Pagado", "Pagado"]);
     assert.equal(r.todoPagado, true);
     assert.equal(r.pendienteTotal, 0);
-    assert.ok(r.meses.every(m => m.pagado));
   });
 
-  test("pagar de más no deja saldo negativo", () => {
-    const r = estadoCobroMeses({ cuotas, pagosPaciente: [{ amount: 9999 }] });
+  test("faltando céntimos no se da por pagado", () => {
+    const r = estadoCobroMeses({ cuotas, pagosPaciente: pagos(2313.40), hoy: "2026-12-01" });
+    assert.equal(r.todoPagado, false);
+    assert.equal(r.pendienteTotal, 0.64);
+  });
+
+  test("pagar de más de la cuenta no deja saldo negativo", () => {
+    const r = estadoCobroMeses({ cuotas, pagosPaciente: pagos(9999), hoy: "2026-12-01" });
     assert.equal(r.pendienteTotal, 0);
     assert.equal(r.todoPagado, true);
+  });
+
+  test("con todo vencido y nada pagado, todos los meses salen vencidos", () => {
+    const r = estadoCobroMeses({ cuotas, pagosPaciente: [], hoy: "2027-01-01" });
+    assert.deepEqual(vista(r), ["Vencido", "Vencido", "Vencido", "Vencido"]);
+    assert.equal(r.pendienteTotal, 2314.04);
   });
 
   test("varias cuotas en el mismo mes se suman", () => {
@@ -775,12 +795,6 @@ describe("estadoCobroMeses", () => {
     const r = estadoCobroMeses({ cuotas: [], pagosPaciente: [] });
     assert.equal(r.todoPagado, false);
     assert.deepEqual(r.meses, []);
-  });
-
-  test("aguanta céntimos sin dar falsos pendientes", () => {
-    const c = [{ numero: 1, mes: 1, vence_el: "2026-08-27", importe: 104.68 }];
-    const r = estadoCobroMeses({ cuotas: c, pagosPaciente: [{ amount: 104.68 }] });
-    assert.equal(r.todoPagado, true);
   });
 });
 

@@ -3802,7 +3802,8 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange, cobros = null,
                       if (!cobros) return f.clinica;
                       const e = cobros.meses.find(m => m.mes === f.mes);
                       if (!e) return f.clinica;
-                      return e.pagado ? "Pagado" : e.aPagar;
+                      return e.estado === "pagado" ? "Pagado"
+                           : e.estado === "vencido" ? "Vencido" : e.aPagar;
                     }), "#3498db", 12.5, 600],
                   // En seguimiento el total es lo que hay que COBRARLE en clínica:
                   // lo de Frakmenta ya está en caja. Al diseñar el plan sigue
@@ -3812,7 +3813,8 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange, cobros = null,
                       if (!cobros) return f.total;
                       const e = cobros.meses.find(m => m.mes === f.mes);
                       if (!e) return 0;
-                      return e.pagado ? "Pagado" : e.aPagar;
+                      return e.estado === "pagado" ? "Pagado"
+                           : e.estado === "vencido" ? "Vencido" : e.aPagar;
                     }), "#2c3250", 14, 800],
                 ].map(([etiqueta, valores, color, size, weight]) => (
                   <tr key={etiqueta || "meses"}
@@ -3822,9 +3824,9 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange, cobros = null,
                       width:110, minWidth:110, maxWidth:110}}>{etiqueta}</td>
                     {valores.map((v, i) => (
                       <td key={i} style={{textAlign:"center", padding:"5px 4px", fontSize:size,
-                        color: v === "Pagado" ? "#1c523b" : color,
-                        fontWeight: v === "Pagado" ? 800 : weight, whiteSpace:"nowrap",
-                        background: v === "Pagado" ? "#e9f4ee"
+                        color: v === "Pagado" ? "#1c523b" : v === "Vencido" ? "#8c2d16" : color,
+                        fontWeight: v === "Pagado" || v === "Vencido" ? 800 : weight, whiteSpace:"nowrap",
+                        background: v === "Pagado" ? "#e9f4ee" : v === "Vencido" ? "#f9dcd6"
                           : esFilaTotal(etiqueta) && v > 0.005 ? "#f7f3e6" : "transparent",
                         opacity: typeof v === "number" && v < 0.005 ? 0.25 : 1}}>
                         {typeof v === "number" ? (v < 0.005 ? "—" : eur0(v)) : v}
@@ -3842,7 +3844,11 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange, cobros = null,
               {cobros.todoPagado
                 ? "✓ Todas las cuotas en clínica están pagadas."
                 : <>Cobrado en clínica <b>{fmtEur(cobros.totalPagado)}</b> de {fmtEur(cobros.totalPlan)}
-                   {" · quedan "}<b>{fmtEur(cobros.pendienteTotal)}</b></>}
+                   {" · quedan "}<b>{fmtEur(cobros.pendienteTotal)}</b>
+                   {cobros.arrastre > 0 && (
+                     <span style={{color:"#8c2d16"}}>{" · incluye "}{fmtEur(cobros.arrastre)}
+                       {" de meses vencidos, ya sumados a la próxima cuota"}</span>
+                   )}</>}
             </div>
           )}
           <div style={{marginTop:12, fontSize:16, color:"#1a1a1a", fontWeight:600, lineHeight:1.45}}>
@@ -4196,6 +4202,7 @@ function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], waClicks =
     ? estadoCobroMeses({
         cuotas: cuotasDeEstePlan,
         pagosPaciente: pagosDesde(pagos.filter(pg => pg.patient_id === paciente.id), plan.fechaInicio),
+        hoy: today(),
       })
     : null;
   const yaGuardado = plans.some(pl => pl.id === plan.id);
@@ -4605,7 +4612,7 @@ function PortalPlanes() {
           const propias  = cuotas.filter(c => c.plan_id === pl.id);
           const pagosPac = pagosDesde(pagos.filter(pg => pg.patient_id === pl.patient_id), pl.fecha_inicio);
           const r  = resumenPlan({ plan: pl, cuotas: propias, pagos, pagosPaciente: pagosPac, hoy });
-          const ec = estadoCobroMeses({ cuotas: propias, pagosPaciente: pagosPac });
+          const ec = estadoCobroMeses({ cuotas: propias, pagosPaciente: pagosPac, hoy });
           const col = ec.todoPagado ? "#2ecc71" : r.estado === "atrasado" ? "#e74c3c" : "#3498db";
           return (
             <div key={pl.id} style={{...s.card, borderLeft:"4px solid "+col, display:"flex",
@@ -4653,6 +4660,7 @@ function PortalPlanes() {
           const cobros = propias.length ? estadoCobroMeses({
             cuotas: propias,
             pagosPaciente: pagosDesde(pagos.filter(pg => pg.patient_id === abierto.patient_id), abierto.fecha_inicio),
+            hoy,
           }) : null;
           return (
             <>

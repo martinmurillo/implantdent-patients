@@ -253,37 +253,71 @@ export function vencimientosPorMes(plan, nMeses) {
 
 // Estado de cobro mes a mes de lo que se paga EN CLÍNICA.
 //
-// Cada mes muestra SU importe, que es fijo: el paciente acordó pagar lo mismo
-// todos los meses y ver una cifra distinta cada vez no significaría nada.
+// Reglas, tal como se cobra de verdad:
 //
-// Los pagos se van imputando en orden, así que un mes solo baja de su importe
-// cuando está parcialmente cubierto, y llega a cero cuando está saldado. Lo que
-// falte de un mes se queda en ese mes; el arrastre acumulado para reclamar vive
-// en resumenPlan.aCobrarAhora, que es lo que usa el recordatorio.
-export function estadoCobroMeses({ cuotas = [], pagosPaciente = [] }) {
-  const importePorMes = new Map();
+//  · Cada mes muestra SU importe. Es fijo: el paciente acordó pagar lo mismo
+//    todos los meses.
+//  · Si un mes ya venció y quedó corto, ese mes pasa a "vencido" y lo que
+//    faltó se suma al primer mes que aún no ha vencido. Así lo que se lee en
+//    cada mes es lo que hay que cobrarle ese mes, sin sumar casillas.
+//  · Si pagó de más, el sobrante va descontando las cuotas siguientes hasta
+//    agotarse.
+//
+// Sin "hoy" no hay meses vencidos y todo se ve con su importe: es el caso de
+// estar diseñando el plan, cuando todavía no ha pasado nada.
+export function estadoCobroMeses({ cuotas = [], pagosPaciente = [], hoy = null }) {
+  const porMes = new Map();
   for (const c of cuotas) {
     const m = Number(c.mes) || 1;
-    importePorMes.set(m, round2((importePorMes.get(m) || 0) + (Number(c.importe) || 0)));
+    const prev = porMes.get(m);
+    porMes.set(m, {
+      importe: round2((prev?.importe || 0) + (Number(c.importe) || 0)),
+      // si hay varias cuotas el mismo mes, vence la primera
+      vence_el: !prev?.vence_el ? c.vence_el
+              : (c.vence_el && c.vence_el < prev.vence_el ? c.vence_el : prev.vence_el),
+    });
   }
+
   const totalPagado = round2(pagosPaciente.reduce((s, p) => s + (Number(p.amount) || 0), 0));
 
-  const meses = [];
-  let acum = 0;
-  for (const m of [...importePorMes.keys()].sort((a, b) => a - b)) {
-    const importe = importePorMes.get(m);
-    acum = round2(acum + importe);
-    // lo que queda por cubrir de ESTE mes, nunca más que su propio importe
-    const aPagar = round2(Math.min(importe, Math.max(0, acum - totalPagado)));
-    meses.push({ mes: m, importe, aPagar, pagado: aPagar <= 0.005 });
-  }
+  // Los pagos se imputan en orden. Un pago de más cae solo sobre las
+  // siguientes; uno de menos deja ese mes corto.
+  let disponible = totalPagado;
+  const filas = [...porMes.keys()].sort((a, b) => a - b).map(m => {
+    const { importe, vence_el } = porMes.get(m);
+    const cubierto = Math.min(disponible, importe);
+    disponible = round2(disponible - cubierto);
+    return { mes: m, importe, vence_el, propio: round2(importe - cubierto) };
+  });
 
+  const estaVencido = (f) => !!(hoy && f.vence_el && f.vence_el < hoy);
+
+  // Lo que quedó corto en meses ya vencidos se acumula...
+  let arrastre = 0;
+  for (const f of filas) if (estaVencido(f) && f.propio > 0.005) arrastre = round2(arrastre + f.propio);
+
+  // ...y se cobra en el primer mes que todavía no venció. Los pagos se imputan
+  // en orden, así que ese mes nunca puede estar ya saldado si hay arrastre.
+  const iDestino = filas.findIndex(f => !estaVencido(f));
+  const destino  = iDestino >= 0 ? iDestino : filas.length - 1;
+
+  const meses = filas.map((f, i) => {
+    const base = { mes: f.mes, importe: f.importe, vence_el: f.vence_el };
+    if (f.propio <= 0.005)  return { ...base, aPagar: 0, arrastre: 0, estado: "pagado", pagado: true };
+    if (estaVencido(f))     return { ...base, aPagar: 0, arrastre: 0, estado: "vencido", pagado: false };
+    const extra = i === destino ? arrastre : 0;
+    return { ...base, aPagar: round2(f.propio + extra), arrastre: extra,
+             estado: "aCobrar", pagado: false };
+  });
+
+  const totalPlan = round2(filas.reduce((a, f) => a + f.importe, 0));
   return {
     meses,
     totalPagado,
-    totalPlan: acum,
-    pendienteTotal: round2(Math.max(0, acum - totalPagado)),
-    todoPagado: meses.length > 0 && acum - totalPagado <= 0.005,
+    totalPlan,
+    arrastre,
+    pendienteTotal: round2(Math.max(0, totalPlan - totalPagado)),
+    todoPagado: meses.length > 0 && totalPlan - totalPagado <= 0.005,
   };
 }
 
