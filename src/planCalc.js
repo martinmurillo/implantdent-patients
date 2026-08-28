@@ -253,9 +253,13 @@ export function vencimientosPorMes(plan, nMeses) {
 
 // Estado de cobro mes a mes de lo que se paga EN CLÍNICA.
 //
-// Lo que se debe en un mes es el acumulado esperado hasta ese mes menos todo
-// lo pagado. Así, si un mes se paga de menos, la diferencia aparece sola
-// sumada en el mes siguiente, sin perderse.
+// Cada mes muestra SU importe, que es fijo: el paciente acordó pagar lo mismo
+// todos los meses y ver una cifra distinta cada vez no significaría nada.
+//
+// Los pagos se van imputando en orden, así que un mes solo baja de su importe
+// cuando está parcialmente cubierto, y llega a cero cuando está saldado. Lo que
+// falte de un mes se queda en ese mes; el arrastre acumulado para reclamar vive
+// en resumenPlan.aCobrarAhora, que es lo que usa el recordatorio.
 export function estadoCobroMeses({ cuotas = [], pagosPaciente = [] }) {
   const importePorMes = new Map();
   for (const c of cuotas) {
@@ -269,7 +273,8 @@ export function estadoCobroMeses({ cuotas = [], pagosPaciente = [] }) {
   for (const m of [...importePorMes.keys()].sort((a, b) => a - b)) {
     const importe = importePorMes.get(m);
     acum = round2(acum + importe);
-    const aPagar = round2(Math.max(0, acum - totalPagado));
+    // lo que queda por cubrir de ESTE mes, nunca más que su propio importe
+    const aPagar = round2(Math.min(importe, Math.max(0, acum - totalPagado)));
     meses.push({ mes: m, importe, aPagar, pagado: aPagar <= 0.005 });
   }
 

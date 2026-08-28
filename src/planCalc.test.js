@@ -709,10 +709,16 @@ describe("estadoCobroMeses", () => {
     { numero: 3, concepto: "cuota",   mes: 4, vence_el: "2026-11-27", importe: 500 },
   ];
 
-  test("sin pagos, cada mes debe su cuota acumulada", () => {
+  test("sin pagos, cada mes muestra SU importe, no un acumulado", () => {
     const r = estadoCobroMeses({ cuotas, pagosPaciente: [] });
-    assert.deepEqual(r.meses.map(m => m.aPagar), [2000, 2500, 3000, 3500]);
+    assert.deepEqual(r.meses.map(m => m.aPagar), [2000, 500, 500, 500]);
     assert.equal(r.todoPagado, false);
+  });
+
+  test("las cuotas se ven iguales entre sí, que es lo que se acordó", () => {
+    const r = estadoCobroMeses({ cuotas, pagosPaciente: [] });
+    const soloCuotas = r.meses.slice(1).map(m => m.aPagar);
+    assert.equal(new Set(soloCuotas).size, 1, "las cuotas no pueden ir subiendo");
   });
 
   test("cobrada la entrega, el mes 1 queda pagado", () => {
@@ -723,20 +729,23 @@ describe("estadoCobroMeses", () => {
     assert.equal(r.pendienteTotal, 1500);
   });
 
-  test("un pago de menos se arrastra al mes siguiente", () => {
+  test("un pago parcial deja en su mes lo que falta, sin inflar los siguientes", () => {
     // pagan 1.500 de los 2.000 de entrega
     const r = estadoCobroMeses({ cuotas, pagosPaciente: [{ amount: 1500 }] });
     assert.equal(r.meses[0].pagado, false);
-    assert.equal(r.meses[0].aPagar, 500);        // lo que falta de la entrega
-    assert.equal(r.meses[1].aPagar, 1000);       // esos 500 + la cuota de 500
-    assert.equal(r.meses[2].aPagar, 1500);
+    assert.equal(r.meses[0].aPagar, 500);   // lo que falta de la entrega
+    assert.equal(r.meses[1].aPagar, 500);   // su cuota, no 500 + 500
+    assert.equal(r.meses[2].aPagar, 500);
+    // el total que se le debe reclamar sigue siendo el correcto
+    assert.equal(r.pendienteTotal, 2000);
   });
 
   test("un pago de más adelanta cuotas siguientes", () => {
     const r = estadoCobroMeses({ cuotas, pagosPaciente: [{ amount: 2600 }] });
     assert.equal(r.meses[0].pagado, true);
     assert.equal(r.meses[1].pagado, true);       // 2500 <= 2600
-    assert.equal(r.meses[2].aPagar, 400);
+    assert.equal(r.meses[2].aPagar, 400);        // le quedan 100 a favor
+    assert.equal(r.meses[3].aPagar, 500);        // y esta ya vuelve a ser entera
   });
 
   test("todo pagado cuando se cubre el plan entero", () => {

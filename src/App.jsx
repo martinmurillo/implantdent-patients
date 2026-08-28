@@ -3543,6 +3543,7 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange, cobros = null,
   const { txConMes, entrega, nCuotas, inicioQ, sugerida, cuota, calc,
           frag, linea, nMesesLinea, desembolsoTotal } = planDerivado(plan, tratamientos);
   const vencimientos = vencimientosPorMes(plan, nMesesLinea);
+  const esFilaTotal = (et) => et === ETIQUETAS_LINEA.total || et === "A cobrar en clínica";
 
   // ── Frakmenta: financiar la entrega ──
   const puedeFinanciar = financiable(entrega);
@@ -3803,10 +3804,19 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange, cobros = null,
                       if (!e) return f.clinica;
                       return e.pagado ? "Pagado" : e.aPagar;
                     }), "#3498db", 12.5, 600],
-                  [ETIQUETAS_LINEA.total,     linea.map(f => f.total),     "#2c3250", 14,   800],
+                  // En seguimiento el total es lo que hay que COBRARLE en clínica:
+                  // lo de Frakmenta ya está en caja. Al diseñar el plan sigue
+                  // siendo el desembolso del paciente, que es lo que se le enseña.
+                  [cobros ? "A cobrar en clínica" : ETIQUETAS_LINEA.total,
+                    linea.map(f => {
+                      if (!cobros) return f.total;
+                      const e = cobros.meses.find(m => m.mes === f.mes);
+                      if (!e) return 0;
+                      return e.pagado ? "Pagado" : e.aPagar;
+                    }), "#2c3250", 14, 800],
                 ].map(([etiqueta, valores, color, size, weight]) => (
                   <tr key={etiqueta || "meses"}
-                    style={{borderTop: etiqueta === ETIQUETAS_LINEA.total ? "2px solid #e2e5ed" : "none"}}>
+                    style={{borderTop: esFilaTotal(etiqueta) ? "2px solid #e2e5ed" : "none"}}>
                     <td style={{fontSize:10, color:"#777", fontWeight:700, letterSpacing:.2,
                       textTransform:"uppercase", paddingRight:12, lineHeight:1.15,
                       width:110, minWidth:110, maxWidth:110}}>{etiqueta}</td>
@@ -3815,7 +3825,7 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange, cobros = null,
                         color: v === "Pagado" ? "#1c523b" : color,
                         fontWeight: v === "Pagado" ? 800 : weight, whiteSpace:"nowrap",
                         background: v === "Pagado" ? "#e9f4ee"
-                          : etiqueta === ETIQUETAS_LINEA.total && v > 0.005 ? "#f7f3e6" : "transparent",
+                          : esFilaTotal(etiqueta) && v > 0.005 ? "#f7f3e6" : "transparent",
                         opacity: typeof v === "number" && v < 0.005 ? 0.25 : 1}}>
                         {typeof v === "number" ? (v < 0.005 ? "—" : eur0(v)) : v}
                       </td>
