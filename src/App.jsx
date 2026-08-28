@@ -4194,7 +4194,6 @@ const planParaPresupuesto = (patient, plans) => {
 };
 
 function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], waClicks = [], onWaClick = () => {},
-                       avisados = [], emailSesion = "", onAvisoEnviado = () => {},
                        onSavePlan, onDeletePlan, onCobrarCuota, presupuestoInicial = null }) {
   const [tab,    setTab]    = useState(presupuestoInicial ? "tablero" : "pendientes");
   const [selId,  setSelId]  = useState(presupuestoInicial);
@@ -4208,7 +4207,6 @@ function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], waClicks =
   const [guardando, setGuardando] = useState(false);
   const fileRef = useRef();
 
-  const cola = avisosDelDia({ planes: plans, cuotas, pagos, hoy: today() });
   const paciente = patients.find(p => p.id === selId) || null;
   // Pagando por visita se pierde el descuento del presupuesto: los importes
   // vuelven a tarifa. En modo cuotas se respeta el descuento acordado.
@@ -4296,9 +4294,7 @@ function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], waClicks =
     <div>
       <div className="np" style={{display:"flex", gap:12, marginBottom:16, alignItems:"center", flexWrap:"wrap"}}>
         <div style={{display:"flex", background:"#ffffff", borderRadius:10, padding:4}}>
-          {[["pendientes","Pendientes de pago"],
-            ["avisos", `Avisos de hoy${cola.length ? ` (${cola.length})` : ""}`],
-            ["tablero","Armar plan"]].map(([id,label])=>(
+          {[["pendientes","Pendientes de pago"],["tablero","Armar plan"]].map(([id,label])=>(
             <button key={id} onClick={()=>setTab(id)}
               style={{background:tab===id?"#dce8fa":"none", border:"none", borderRadius:8,
                 color:tab===id?"#c9a84c":"#555", padding:"8px 20px", cursor:"pointer",
@@ -4330,12 +4326,6 @@ function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], waClicks =
           </span>
         )}
       </div>
-
-      {tab === "avisos" && (
-        <ColaDeAvisos avisos={cola} pacientes={patients} avisados={avisados}
-          email={emailSesion} firmante="Martín"
-          onEnviado={async (av)=>{ await anotarAviso(av, emailSesion); await onAvisoEnviado(); }}/>
-      )}
 
       {tab === "pendientes" && (
         <PendientesDePago plans={plans} cuotas={cuotas} pagos={pagos} patients={patients}
@@ -4588,14 +4578,36 @@ function ColaDeAvisos({ avisos, pacientes, avisados, email, firmante = "", onEnv
     setMarcando(null);
   };
 
-  if (!avisos.length) return (
-    <div style={{textAlign:"center", color:"#888", padding:50, background:"#fff", borderRadius:10, fontSize:13}}>
-      Hoy no hay ningún recordatorio que mandar.
+  const cabecera = (
+    <div style={{marginBottom:14}}>
+      <div style={{fontSize:17, fontWeight:700, color:"#2c3250"}}>Recordatorios de cobro de hoy</div>
+      <div style={{fontSize:12.5, color:"#888", marginTop:2}}>
+        Cada cuota se avisa tres veces: <b>7 días antes</b>, <b>la víspera</b> y <b>el mismo día</b>.
+        Solo aparece lo que toca mandar hoy.
+      </div>
     </div>
   );
 
+  if (!avisos.length) return (
+    <div>
+      {cabecera}
+      <div style={{textAlign:"center", color:"#888", padding:50, background:"#fff", borderRadius:10, fontSize:13}}>
+        Hoy no hay ningún recordatorio que mandar.
+      </div>
+    </div>
+  );
+
+  const pendientes = avisos.filter(a => !avisados.some(x => x.clave === a.clave)).length;
+
   return (
     <div>
+      {cabecera}
+      {pendientes > 0 && (
+        <div style={{background:"#c9a84c18", border:"1px solid #c9a84c55", borderRadius:8,
+          padding:"10px 14px", fontSize:14, fontWeight:600, color:"#7a5f1c", marginBottom:16}}>
+          Quedan <b>{pendientes}</b> por mandar de {avisos.length}.
+        </div>
+      )}
       {["hoy", "vispera", "antelacion"].map(tipo => {
         const grupo = avisos.filter(a => a.tipo === tipo);
         if (!grupo.length) return null;
@@ -4623,6 +4635,10 @@ function ColaDeAvisos({ avisos, pacientes, avisados, email, firmante = "", onEnv
                     </div>
                     <div style={{fontSize:12, color:"#888", marginTop:3}}>
                       #{av.plan.budget_no || "—"} · vence {fmtDate(av.vence_el)}
+                      {" · "}
+                      <b style={{color}}>
+                        {av.dias === 0 ? "es hoy" : av.dias === 1 ? "queda 1 día" : `quedan ${av.dias} días`}
+                      </b>
                       {av.arrastre > 0 && (
                         <span style={{color:"#8c2d16"}}> · incluye {fmtEur(av.arrastre)} de atraso</span>
                       )}
@@ -5011,7 +5027,7 @@ function PortalPlanes() {
   const [pacientes, setPacientes] = useState([]);
   const [busca,     setBusca]     = useState("");
   const [avisados,  setAvisados]  = useState([]);
-  const [seccion,   setSeccion]   = useState("planes");  // planes | avisos
+  const [seccion,   setSeccion]   = useState("avisos");  // avisos | planes
   const [nuevo,     setNuevo]     = useState(false);   // armando un plan nuevo
   const [abierto,   setAbierto]   = useState(null);
   const [plan,      setPlan]      = useState(null);
@@ -5125,7 +5141,7 @@ function PortalPlanes() {
         {!nuevo && !abierto && (
           <div style={{display:"flex", background:"#ffffff", borderRadius:10, padding:4,
             marginBottom:16, width:"fit-content"}}>
-            {[["planes","Planes de pago"],["avisos",`Avisos de hoy${cola.length ? ` (${cola.length})` : ""}`]].map(([id,label])=>(
+            {[["avisos",`Avisos de hoy${cola.length ? ` (${cola.length})` : ""}`],["planes","Planes de pago"]].map(([id,label])=>(
               <button key={id} onClick={()=>setSeccion(id)}
                 style={{background:seccion===id?"#dce8fa":"none", border:"none", borderRadius:8,
                   color:seccion===id?"#c9a84c":"#555", padding:"8px 20px", cursor:"pointer",
@@ -5280,7 +5296,8 @@ function AppCompleta() {
   const [planCuotas,    setPlanCuotas]    = useState([]);
   const [planAvisos,    setPlanAvisos]    = useState([]);
   const [planPara,      setPlanPara]      = useState(null);   // presupuesto a abrir en el tablero
-  const [viewHistory, setViewHistory] = useState(["dashboard"]);
+  // Arranca en los avisos: es lo primero que hay que mirar cada mañana
+  const [viewHistory, setViewHistory] = useState(["avisos"]);
   const view = viewHistory[viewHistory.length - 1];
   const navigate = (id) => setViewHistory(prev => prev[prev.length-1]===id ? prev : [...prev, id]);
   const goBack   = ()   => setViewHistory(prev => prev.length>1 ? prev.slice(0,-1) : prev);
@@ -5765,6 +5782,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
       <div style={{background:"#ffffff",borderBottom:"1px solid #e2e5ed",padding:"0 16px",display:"flex",alignItems:"center",gap:4,height:60}}>
         <span style={{fontWeight:900,fontSize:15,letterSpacing:3,color:"#c9a84c",marginRight:8}}>IMPLANTDENT</span>
         <div style={{flex:1}}/>
+        <NavBtn id="avisos"    label="Avisos"     badge={avisosDeHoy.length}/>
         <NavBtn id="dashboard" label="Pacientes"  badge={0}/>
         <NavBtn id="debts"     label="Deudas"     badge={pendingDebtPatients.length}/>
         <NavBtn id="pagos"     label="Cobros"/>
@@ -5772,7 +5790,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
         <NavBtn id="presupuestos"  label="N° Presupuestos"/>
         {/* los planes de pacientes ya cerrados viven en la lista archivada,
             que se carga bajo demanda: sin esto Pendientes los saltearía */}
-        <NavBtn id="planes"        label="Planes de pago" badge={Math.max(cuotasQueAvisan, avisosDeHoy.length)} onSelect={ensureArchived}/>
+        <NavBtn id="planes"        label="Planes de pago" badge={cuotasQueAvisan} onSelect={ensureArchived}/>
         <NavBtn id="clinica"       label="Clínica"/>
         <NavBtn id="stats"     label="Estadísticas" badge={0}/>
 
@@ -6255,11 +6273,15 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
           <PresupuestosExcelPanel patients={[...patients,...archivedPatients]} onRefresh={fetchPatients}/>
         )}
 
+        {!dbLoading && view==="avisos" && (
+          <ColaDeAvisos avisos={avisosDeHoy} pacientes={allPatients} avisados={planAvisos}
+            email={(sesionEmail||"").toLowerCase()} firmante="Martín"
+            onEnviado={async (av)=>{ await anotarAviso(av, (sesionEmail||"").toLowerCase()); await fetchPlanAvisos(); }}/>
+        )}
+
         {!dbLoading && view==="planes" && (
           <PlanesPanel key={planPara || "libre"} patients={allPatients} plans={plans} cuotas={planCuotas} pagos={payments}
             waClicks={waClicks} onWaClick={incWaClick}
-            avisados={planAvisos} emailSesion={(sesionEmail||"").toLowerCase()}
-            onAvisoEnviado={fetchPlanAvisos}
             onSavePlan={savePlan} onDeletePlan={deletePlan} onCobrarCuota={cobrarCuota} presupuestoInicial={planPara}/>
         )}
 
