@@ -4530,6 +4530,38 @@ function SinAcceso({ email, sugerirPortal = false }) {
   );
 }
 
+// ─── Cambios en vivo ─────────────────────────────────────────────────────────
+// Sin esto, si uno borra un plan el otro no se entera hasta salir y volver a
+// entrar.
+//
+// El contenido del aviso se IGNORA a propósito: lo único que dispara es una
+// recarga por las vías normales, que pasan por RLS. Así el canal solo lleva un
+// "algo cambió" y no puede enseñar nada que ese usuario no pudiera leer igual.
+const escucharCambiosDePlanes = (nombre, alCambiar) => {
+  let t = null;
+  // varios cambios seguidos (importar el Excel del día) son una sola recarga
+  const rebote = () => { clearTimeout(t); t = setTimeout(alCambiar, 500); };
+  const canal = supabase.channel(`planes-en-vivo-${nombre}`)
+    .on("postgres_changes", { event: "*", schema: "public", table: "payment_plans" }, rebote)
+    .on("postgres_changes", { event: "*", schema: "public", table: "payment_plan_cuotas" }, rebote)
+    .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, rebote)
+    .subscribe();
+  return () => { clearTimeout(t); supabase.removeChannel(canal); };
+};
+
+// Los datos que necesita el portal, en una sola función para que la carga
+// inicial y la recarga en vivo no puedan desincronizarse.
+const cargarDatosPortal = async () => {
+  const [{ data: pl }, { data: cu }, { data: pg }, { data: pa }] = await Promise.all([
+    supabase.from("payment_plans").select("*")
+      .in("estado", ["activo","terminado","borrador"]).order("fecha_inicio"),
+    supabase.from("payment_plan_cuotas").select("*").order("vence_el"),
+    supabase.from("payments").select("*"),
+    supabase.from("patients").select("id,name,hc,budget_no,treatments"),
+  ]);
+  return { planes: pl || [], cuotas: cu || [], pagos: pg || [], pacientes: pa || [] };
+};
+
 // ─── NuevoPlanJefe ───────────────────────────────────────────────────────────
 // El jefe arma planes sin tener acceso al programa del dueño. Busca por nº de
 // historia y, antes de tocar nada, ve un cartel para COTEJAR: su presupuesto
@@ -4849,23 +4881,13 @@ function PortalPlanes() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // RLS decide qué ve cada uno: activos y terminados para todos, y además sus
-  // propios borradores para quien los haya creado.
-  const recargarPlanes = async () => {
-    const { data } = await supabase.from("payment_plans").select("*")
-      .in("estado", ["activo","terminado","borrador"]).order("fecha_inicio");
-    setPlans(data || []);
-  };
-
+  // RLS decide qué ve cada uno: activos y terminados para todos, además de sus
+  // propios borradores. Recepción no ve ningún borrador.
   const recargarTodo = async () => {
-    const [{ data: cu }, { data: pg }, { data: pa }] = await Promise.all([
-      supabase.from("payment_plan_cuotas").select("*").order("vence_el"),
-      supabase.from("payments").select("*"),
-      supabase.from("patients").select("id,name,hc,budget_no,treatments"),
-    ]);
-    setCuotas(cu || []); setPagos(pg || []); setPacientes(pa || []);
-    await recargarPlanes();
+    const d = await cargarDatosPortal();
+    setPlans(d.planes); setCuotas(d.cuotas); setPagos(d.pagos); setPacientes(d.pacientes);
   };
+  const recargarPlanes = recargarTodo;
 
   useEffect(() => {
     if (!sesion) return;
@@ -4881,8 +4903,18 @@ function PortalPlanes() {
         supabase.from("patients").select("id,name,hc,budget_no,treatments"),
       ]);
       setCuotas(cu || []); setPagos(pg || []); setPacientes(pa || []);
-      await recargarPlanes();
+      const d = await cargarDatosPortal();
+      setPlans(d.planes);
     })();
+  }, [sesion]);
+
+  // Cambios de cualquiera de los tres, sin tener que recargar la página
+  useEffect(() => {
+    if (!sesion) return;
+    return escucharCambiosDePlanes("portal", async () => {
+      const d = await cargarDatosPortal();
+      setPlans(d.planes); setCuotas(d.cuotas); setPagos(d.pagos); setPacientes(d.pacientes);
+    });
   }, [sesion]);
 
   const txsDe = (pac, pl) => pac ? txsParaPlan(pac, {
@@ -5132,6 +5164,19 @@ function AppCompleta() {
       setSessionChecked(true);
     });
   }, []);
+
+  // Que se vea al momento lo que hagan el jefe o recepción, sin recargar
+  useEffect(() => {
+    if (!hasSession) return;
+    return escucharCambiosDePlanes("dueno", async () => {
+      const [{ data: pl }, { data: cu }, { data: pg }] = await Promise.all([
+        supabase.from("payment_plans").select("*").order("created_at", { ascending:false }),
+        supabase.from("payment_plan_cuotas").select("*").order("vence_el"),
+        supabase.from("payments").select("*").order("date", { ascending:false }),
+      ]);
+      setPlans(pl || []); setPlanCuotas(cu || []); setPayments(pg || []);
+    });
+  }, [hasSession]);
 
   // La aplicación completa es solo del dueño. El resto del personal entra
   // por /planes; una cuenta sin fila no entra a ningún sitio.
