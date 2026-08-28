@@ -330,6 +330,68 @@ export function estadoCobroMeses({ cuotas = [], pagosPaciente = [], hoy = null }
   };
 }
 
+// Nombre corto para la ficha de cobro, donde no cabe "Corona metal cerámica
+// sobre implante 36". Se queda con la palabra que identifica el tratamiento y
+// el número de pieza.
+//
+// El orden importa: "Corona ... sobre implante 36" lleva las dos palabras y
+// tiene que salir "Corona 36", no "Implante 36".
+const PALABRAS_TRATAMIENTO = [
+  [/corona/,                     "Corona"],
+  [/perno/,                      "Perno"],
+  [/carilla/,                    "Carilla"],
+  [/multi ?unit/,                "Multi Unit"],
+  [/implante/,                   "Implante"],
+  [/pilar/,                      "Pilar"],
+  [/sobredentadura|pr[oó]tesis|ataches|barra/, "Prótesis"],
+  [/reconstrucc/,                "Reconstr."],
+  [/exodoncia|extracc|^exo\b|odontosecc/, "Exodoncia"],
+  [/endodoncia|pulpotom/,        "Endodoncia"],
+  [/periodontal|periodonc/,      "Periodoncia"],
+  [/curetaje|colgajo/,           "Curetaje"],
+  [/injerto|hueso/,              "Injerto"],
+  [/provisional/,                "Provisional"],
+  [/f[eé]rula|ferulizac|placa/,  "Férula"],
+  [/limpieza|higiene/,           "Limpieza"],
+  [/radiograf|panor[aá]mica/,    "Radiografía"],
+  [/estudio/,                    "Estudio"],
+  [/ortodoncia|alineador|retenedor/, "Ortodoncia"],
+  [/blanqueam/,                  "Blanqueam."],
+  [/sellado|protecc/,            "Sellado"],
+  [/cirug/,                      "Cirugía"],
+  [/revisi[oó]n|visita|urgencia|mantenim/, "Revisión"],
+];
+
+export function nombreCortoTratamiento(nombre) {
+  const txt = String(nombre || "").trim();
+  if (!txt) return "";
+  const plano = txt.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  // el número de pieza va al final del nombre
+  const pieza = (txt.match(/(\d{1,2})\s*$/) || [])[1] || "";
+  for (const [re, corto] of PALABRAS_TRATAMIENTO) {
+    if (re.test(plano)) return pieza ? `${corto} ${pieza}` : corto;
+  }
+  // sin palabra conocida: la primera palabra con contenido, y la pieza
+  const base = txt.replace(/\s*\d{1,2}\s*$/, "")
+    .split(/\s+/).filter(w => !/^(de|del|la|el|los|las|con|sobre|para|y|a|en|\+)$/i.test(w))[0] || txt;
+  return pieza ? `${base} ${pieza}` : base;
+}
+
+// Qué hay que citar en cada mes, según dónde estén colocados los tratamientos
+export function tratamientosPorMes(colocacion = []) {
+  const porMes = new Map();
+  for (const t of colocacion) {
+    const m = Number(t.mes) || 1;
+    if (!porMes.has(m)) porMes.set(m, []);
+    porMes.get(m).push(nombreCortoTratamiento(t.nombre));
+  }
+  // se agrupan los repetidos: "Corona 36, Corona 46" mejor que repetir
+  for (const [m, lista] of porMes) {
+    porMes.set(m, [...new Set(lista)]);
+  }
+  return porMes;
+}
+
 // ─── Cola de avisos del día ──────────────────────────────────────────────────
 // A quién hay que escribir hoy. De cada cuota se avisa tres veces: una semana
 // antes, la víspera y el mismo día.

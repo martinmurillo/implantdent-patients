@@ -8,6 +8,7 @@ import { calcPlan, cuotaSugerida, totalTratamientos, cuotasDelPlan,
          vencimientosPorMes, avisosDelDia } from "./planCalc";
 import { colocacionInicial, parsePlanPDF, importeFila } from "./pdfPlan";
 import { htmlPlanImpreso } from "./planPrint";
+import { htmlFichaCobro, htmlHojaFichas } from "./fichaCobro";
 import { DIRECCION_TEXTO, ETIQUETAS_LINEA, PAGO } from "./legalPlan";
 import { PLAZOS as FRAG_PLAZOS, financiable, motivoNoFinanciable,
          comisionFrakmenta, calcFrakmenta, lineaDeTiempo, fraseTramos,
@@ -4059,6 +4060,22 @@ function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobra
                   <div style={{fontSize:11, color:"#888"}}>sin compromiso de cobro</div>
                 </div>
               )}
+              {plan.estado === "activo" && (
+                <button onClick={()=>{
+                  const propias = cuotas.filter(c => c.plan_id === plan.id);
+                  imprimirFichaCobro({
+                    plan, paciente, cuotas: propias,
+                    estado: estadoCobroMeses({
+                      cuotas: propias,
+                      pagosPaciente: pagosDesde(pagos.filter(pg => pg.patient_id === plan.patient_id), plan.fecha_inicio),
+                      hoy,
+                    }),
+                    aPagarAhora: resumen.aCobrarAhora,
+                  });
+                }} style={{...s.btnDark, padding:"5px 12px", fontSize:12}}>
+                  🖨 Resumen
+                </button>
+              )}
               <button onClick={()=>onAbrirPlan(plan)} style={{...s.btnDark, padding:"5px 12px", fontSize:12}}>
                 Ver plan
               </button>
@@ -4536,6 +4553,16 @@ const anotarAviso = async (aviso, email) => {
     clave: aviso.clave, plan_id: aviso.plan.id, mes: aviso.mes,
     dias: aviso.dias, enviado_por: email,
   }, { onConflict: "clave" });
+};
+
+// Ficha de cobro para el mostrador: un cuarto de A4 para recortar. Recepción
+// apunta encima lo que paga el paciente y ve si con ese pago toca dar cita.
+const imprimirFichaCobro = ({ plan, paciente, cuotas, estado, aPagarAhora }) => {
+  const html = htmlHojaFichas([htmlFichaCobro({ plan, paciente, cuotas, estado, aPagarAhora })]);
+  const win = window.open("", "_blank");
+  win.document.write(html); win.document.close();
+  win.document.title = `Ficha de cobro — ${paciente?.name || ""}`;
+  setTimeout(() => win.print(), 500);
 };
 
 // ─── ColaDeAvisos ────────────────────────────────────────────────────────────

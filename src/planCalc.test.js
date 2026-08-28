@@ -5,6 +5,7 @@ import {
   calcPlan, cuotasDelPlan, estadoCuota, resumenPlan, coberturaProxima,
   diasEntre, conciliarCuotas, precioSinDescuento, columnasTablero,
   estadoCobroMeses, vencimientosPorMes, avisosDelDia,
+  nombreCortoTratamiento, tratamientosPorMes,
 } from "./planCalc.js";
 
 // ─── Fechas ──────────────────────────────────────────────────────────────────
@@ -1009,5 +1010,68 @@ describe("avisosDelDia", () => {
 
   test("sin planes no hay cola", () => {
     assert.deepEqual(avisosDelDia({ planes: [], cuotas: [], pagos: [], hoy: "2026-09-20" }), []);
+  });
+});
+
+// ─── Nombre corto para la ficha de cobro ─────────────────────────────────────
+describe("nombreCortoTratamiento", () => {
+  test("se queda con la palabra y el número de pieza", () => {
+    assert.equal(nombreCortoTratamiento("Implante Titanio 46"), "Implante 46");
+    assert.equal(nombreCortoTratamiento("Gran Reconstrucción 27"), "Reconstr. 27");
+    assert.equal(nombreCortoTratamiento("Exodoncia 3er Molar simple 28"), "Exodoncia 28");
+    assert.equal(nombreCortoTratamiento("Perno de fibra de vidrio 24"), "Perno 24");
+    assert.equal(nombreCortoTratamiento("Carilla de Composite   11"), "Carilla 11");
+  });
+
+  test("corona gana a implante: 'corona sobre implante' es una corona", () => {
+    assert.equal(nombreCortoTratamiento("Corona metal cerámica sobre implante 36"), "Corona 36");
+    assert.equal(nombreCortoTratamiento("Corona zirconio 21"), "Corona 21");
+  });
+
+  test("sin número de pieza deja solo la palabra", () => {
+    assert.equal(nombreCortoTratamiento("Curetaje general"), "Curetaje");
+    // el multi unit es una pieza distinta del implante: junto a "Implante 46"
+    // en el mismo mes, verlo como "Implante" a secas confundiría
+    assert.equal(nombreCortoTratamiento("MULTI UNIT"), "Multi Unit");
+    assert.equal(nombreCortoTratamiento("Ataches + Sobredentadura Acrílica Inferior"), "Prótesis");
+  });
+
+  test("no se pierde con acentos ni mayúsculas", () => {
+    assert.equal(nombreCortoTratamiento("TRATAMIENTO PERIODONTAL SUPERIOR"), "Periodoncia");
+    assert.equal(nombreCortoTratamiento("Férula de descarga"), "Férula");
+    assert.equal(nombreCortoTratamiento("RADIOGRAFIA PANORAMICA"), "Radiografía");
+  });
+
+  test("lo desconocido cae en su primera palabra con contenido", () => {
+    assert.equal(nombreCortoTratamiento("Complemento braquets autoligables"), "Complemento");
+    assert.equal(nombreCortoTratamiento(""), "");
+    assert.equal(nombreCortoTratamiento(null), "");
+  });
+});
+
+describe("tratamientosPorMes", () => {
+  const colocacion = [
+    { tx_id:"a", nombre:"Implante Titanio 36", mes:1 },
+    { tx_id:"b", nombre:"Implante Titanio 46", mes:1 },
+    { tx_id:"c", nombre:"Corona metal cerámica sobre implante 36", mes:5 },
+    { tx_id:"d", nombre:"Curetaje general", mes:1 },
+  ];
+
+  test("agrupa por mes y acorta los nombres", () => {
+    const r = tratamientosPorMes(colocacion);
+    assert.deepEqual(r.get(1), ["Implante 36", "Implante 46", "Curetaje"]);
+    assert.deepEqual(r.get(5), ["Corona 36"]);
+  });
+
+  test("no repite el mismo nombre corto dos veces", () => {
+    const r = tratamientosPorMes([
+      { nombre:"Curetaje arcada superior", mes:2 },
+      { nombre:"Curetaje arcada inferior", mes:2 },
+    ]);
+    assert.deepEqual(r.get(2), ["Curetaje"]);
+  });
+
+  test("sin colocación devuelve vacío", () => {
+    assert.equal(tratamientosPorMes([]).size, 0);
   });
 });
