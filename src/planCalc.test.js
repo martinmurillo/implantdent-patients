@@ -4,6 +4,7 @@ import {
   addMeses, sumarDias, cuotaSugerida, totalTratamientos,
   calcPlan, cuotasDelPlan, estadoCuota, resumenPlan, coberturaProxima,
   diasEntre, conciliarCuotas, precioSinDescuento, columnasTablero,
+  estadoCobroMeses,
 } from "./planCalc.js";
 
 // ─── Fechas ──────────────────────────────────────────────────────────────────
@@ -695,5 +696,81 @@ describe("columnasTablero", () => {
     assert.equal(columnasTablero(12), 6);
     assert.equal(columnasTablero(14), 7);
     assert.equal(columnasTablero(24), 6);
+  });
+});
+
+// ─── Estado de cobro mes a mes, tal como se ve en la línea de tiempo ─────────
+describe("estadoCobroMeses", () => {
+  // entrega de 2.000 en el mes 1 y tres cuotas de 500
+  const cuotas = [
+    { numero: 0, concepto: "entrega", mes: 1, vence_el: "2026-08-27", importe: 2000 },
+    { numero: 1, concepto: "cuota",   mes: 2, vence_el: "2026-09-27", importe: 500 },
+    { numero: 2, concepto: "cuota",   mes: 3, vence_el: "2026-10-27", importe: 500 },
+    { numero: 3, concepto: "cuota",   mes: 4, vence_el: "2026-11-27", importe: 500 },
+  ];
+
+  test("sin pagos, cada mes debe su cuota acumulada", () => {
+    const r = estadoCobroMeses({ cuotas, pagosPaciente: [] });
+    assert.deepEqual(r.meses.map(m => m.aPagar), [2000, 2500, 3000, 3500]);
+    assert.equal(r.todoPagado, false);
+  });
+
+  test("cobrada la entrega, el mes 1 queda pagado", () => {
+    const r = estadoCobroMeses({ cuotas, pagosPaciente: [{ amount: 2000 }] });
+    assert.equal(r.meses[0].pagado, true);
+    assert.equal(r.meses[0].aPagar, 0);
+    assert.equal(r.meses[1].aPagar, 500);
+    assert.equal(r.pendienteTotal, 1500);
+  });
+
+  test("un pago de menos se arrastra al mes siguiente", () => {
+    // pagan 1.500 de los 2.000 de entrega
+    const r = estadoCobroMeses({ cuotas, pagosPaciente: [{ amount: 1500 }] });
+    assert.equal(r.meses[0].pagado, false);
+    assert.equal(r.meses[0].aPagar, 500);        // lo que falta de la entrega
+    assert.equal(r.meses[1].aPagar, 1000);       // esos 500 + la cuota de 500
+    assert.equal(r.meses[2].aPagar, 1500);
+  });
+
+  test("un pago de más adelanta cuotas siguientes", () => {
+    const r = estadoCobroMeses({ cuotas, pagosPaciente: [{ amount: 2600 }] });
+    assert.equal(r.meses[0].pagado, true);
+    assert.equal(r.meses[1].pagado, true);       // 2500 <= 2600
+    assert.equal(r.meses[2].aPagar, 400);
+  });
+
+  test("todo pagado cuando se cubre el plan entero", () => {
+    const r = estadoCobroMeses({ cuotas, pagosPaciente: [{ amount: 3500 }] });
+    assert.equal(r.todoPagado, true);
+    assert.equal(r.pendienteTotal, 0);
+    assert.ok(r.meses.every(m => m.pagado));
+  });
+
+  test("pagar de más no deja saldo negativo", () => {
+    const r = estadoCobroMeses({ cuotas, pagosPaciente: [{ amount: 9999 }] });
+    assert.equal(r.pendienteTotal, 0);
+    assert.equal(r.todoPagado, true);
+  });
+
+  test("varias cuotas en el mismo mes se suman", () => {
+    const juntas = [
+      { numero: 0, mes: 1, vence_el: "2026-08-27", importe: 2000 },
+      { numero: 1, mes: 1, vence_el: "2026-08-27", importe: 500 },
+    ];
+    const r = estadoCobroMeses({ cuotas: juntas, pagosPaciente: [] });
+    assert.equal(r.meses.length, 1);
+    assert.equal(r.meses[0].importe, 2500);
+  });
+
+  test("un plan sin cuotas no dice que esté todo pagado", () => {
+    const r = estadoCobroMeses({ cuotas: [], pagosPaciente: [] });
+    assert.equal(r.todoPagado, false);
+    assert.deepEqual(r.meses, []);
+  });
+
+  test("aguanta céntimos sin dar falsos pendientes", () => {
+    const c = [{ numero: 1, mes: 1, vence_el: "2026-08-27", importe: 104.68 }];
+    const r = estadoCobroMeses({ cuotas: c, pagosPaciente: [{ amount: 104.68 }] });
+    assert.equal(r.todoPagado, true);
   });
 });

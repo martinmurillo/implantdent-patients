@@ -4,7 +4,7 @@ import { translateTreatment, setTranslationDict } from "./treatments";
 import { loadPdfJs } from "./pdfjs";
 import { calcPlan, cuotaSugerida, totalTratamientos, cuotasDelPlan,
          resumenPlan, coberturaProxima, addMeses, conciliarCuotas,
-         precioSinDescuento, columnasTablero } from "./planCalc";
+         precioSinDescuento, columnasTablero, estadoCobroMeses } from "./planCalc";
 import { colocacionInicial, parsePlanPDF, importeFila } from "./pdfPlan";
 import { htmlPlanImpreso } from "./planPrint";
 import { DIRECCION_TEXTO, ETIQUETAS_LINEA } from "./legalPlan";
@@ -3513,7 +3513,8 @@ const imprimirPlan = ({ plan, paciente, der }) => {
   setTimeout(() => win.print(), 800);
 };
 
-function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
+function PlanDePagoBoard({ tratamientos, plan, onPlanChange, cobros = null,
+                          soloLectura = false, sinControles = false }) {
   const dragId = useRef(null);
   const [hotMes, setHotMes] = useState(null);
 
@@ -3594,7 +3595,7 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
     });
   };
   const soltarEn = (mes) => {
-    if (dragId.current) {
+    if (dragId.current && !soloLectura) {
       onPlanChange({ ...plan, colocacion: { ...plan.colocacion, [dragId.current]: mes } });
       dragId.current = null;
     }
@@ -3614,6 +3615,7 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
   return (
     <div>
       {/* ── Selector de modo ── */}
+      {!sinControles && (
       <div className="np" style={{display:"flex", background:"#ffffff", borderRadius:10, padding:4, gap:4, marginBottom:12}}>
         {[["visita","Paga cada vez que viene"],["cuotas","Entrega + cuotas fijas"]].map(([id,label])=>(
           <button key={id} onClick={()=>set("modo",id)}
@@ -3624,8 +3626,10 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
           </button>
         ))}
       </div>
+      )}
 
       {/* ── Controles ── */}
+      {!sinControles && (
       <div className="np" style={{...s.card, display:"flex", gap:10, flexWrap:"wrap", alignItems:"flex-end", marginBottom:14}}>
         {plan.modo === "visita" ? (
           <>
@@ -3662,6 +3666,7 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
           </>
         )}
       </div>
+      )}
 
       {/* ── Tablero ── */}
       <div className="board" style={{display:"grid", gridTemplateColumns:`repeat(${columnasTablero(plan.nMeses)},minmax(0,1fr))`, gap:8, alignItems:"stretch"}}>
@@ -3704,8 +3709,8 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
 
               <div style={{padding:7, display:"flex", flexDirection:"column", gap:5, flex:1}}>
                 {items.map(t => (
-                  <div key={t.id} draggable
-                    onDragStart={()=>{dragId.current = t.id;}}
+                  <div key={t.id} draggable={!soloLectura}
+                    onDragStart={()=>{ if (!soloLectura) dragId.current = t.id; }}
                     onDragEnd={()=>{dragId.current = null; setHotMes(null);}}
                     style={{background:"#f0f2f7", borderRadius:7, padding:"6px 7px", fontSize:11.8, lineHeight:1.3,
                       display:"flex", alignItems:"center", gap:6, cursor:"grab", border:"1px solid transparent"}}>
@@ -3715,6 +3720,7 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
                       </div>
                       <div style={{color:"#888", fontSize:11.5}}>{eur0(t.importe)}</div>
                     </div>
+                    {!soloLectura && (
                     <div className="np" style={{display:"flex", gap:1}}>
                       {[["‹",-1],["›",1]].map(([txt,d])=>(
                         <button key={txt} onClick={()=>mover(t.id, d)}
@@ -3724,6 +3730,7 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
                         </button>
                       ))}
                     </div>
+                    )}
                   </div>
                 ))}
                 {items.length === 0 && (
@@ -3746,6 +3753,7 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
       </div>
 
       {/* ── Agregar / quitar meses ── */}
+      {!sinControles && (
       <div className="np" style={{display:"flex", gap:8, marginTop:10, alignItems:"center"}}>
         <button onClick={()=>set("nMeses", plan.nMeses-1)} disabled={plan.nMeses <= calc.minMeses}
           title={plan.nMeses <= calc.minMeses ? "El último mes tiene tratamientos o cuotas" : "Quitar el último mes"}
@@ -3758,11 +3766,12 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
             fontSize:19, lineHeight:1, borderRadius:8, cursor:"pointer"}}>+</button>
         <span style={{fontSize:12.5, color:"#888"}}>{plan.nMeses} meses</span>
       </div>
+      )}
 
       {/* ── Línea de tiempo: la carga real mes a mes ──
           Frakmenta arranca el mes 1 (la primera cuota se cobra al firmar) y la
           clínica en el mes que diga el plan, así que hay meses con las dos. */}
-      {frag && (
+      {(frag || cobros) && (
         <div style={{marginTop:14, background:"#ffffff", border:"1px solid #e2e5ed", borderRadius:12, padding:"14px 16px"}}>
           <div style={{fontSize:11, color:"#c9a84c", letterSpacing:2, fontWeight:700, marginBottom:10}}>
             LO QUE PAGA CADA MES
@@ -3772,8 +3781,15 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
               <tbody>
                 {[
                   ["", linea.map(f => etiquetaMes(plan.fechaInicio, f.mes)), "#888", 11, 600],
-                  [ETIQUETAS_LINEA.frakmenta, linea.map(f => f.frakmenta), "#8e44ad", 12.5, 600],
-                  [ETIQUETAS_LINEA.clinica,   linea.map(f => f.clinica),   "#3498db", 12.5, 600],
+                  ...(frag ? [[ETIQUETAS_LINEA.frakmenta, linea.map(f => f.frakmenta), "#8e44ad", 12.5, 600]] : []),
+                  // con el plan guardado, la fila de clínica muestra el cobro real
+                  [ETIQUETAS_LINEA.clinica,
+                    linea.map(f => {
+                      if (!cobros) return f.clinica;
+                      const e = cobros.meses.find(m => m.mes === f.mes);
+                      if (!e) return f.clinica;
+                      return e.pagado ? "Pagado" : e.aPagar;
+                    }), "#3498db", 12.5, 600],
                   [ETIQUETAS_LINEA.total,     linea.map(f => f.total),     "#2c3250", 14,   800],
                 ].map(([etiqueta, valores, color, size, weight], fila) => (
                   <tr key={etiqueta || "meses"} style={{borderTop: fila === 3 ? "2px solid #e2e5ed" : "none"}}>
@@ -3781,9 +3797,11 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
                       textTransform:"uppercase", paddingRight:12, lineHeight:1.15,
                       width:110, minWidth:110, maxWidth:110}}>{etiqueta}</td>
                     {valores.map((v, i) => (
-                      <td key={i} style={{textAlign:"center", padding:"5px 4px", fontSize:size, color,
-                        fontWeight:weight, whiteSpace:"nowrap",
-                        background: fila === 3 && v > 0.005 ? "#f7f3e6" : "transparent",
+                      <td key={i} style={{textAlign:"center", padding:"5px 4px", fontSize:size,
+                        color: v === "Pagado" ? "#1c523b" : color,
+                        fontWeight: v === "Pagado" ? 800 : weight, whiteSpace:"nowrap",
+                        background: v === "Pagado" ? "#e9f4ee"
+                          : fila === 3 && v > 0.005 ? "#f7f3e6" : "transparent",
                         opacity: typeof v === "number" && v < 0.005 ? 0.25 : 1}}>
                         {typeof v === "number" ? (v < 0.005 ? "—" : eur0(v)) : v}
                       </td>
@@ -3793,13 +3811,25 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange }) {
               </tbody>
             </table>
           </div>
+          {cobros && (
+            <div style={{marginTop:10, padding:"9px 13px", borderRadius:8, fontSize:14.5, fontWeight:700,
+              background: cobros.todoPagado ? "#e9f4ee" : "#f0f2f7",
+              color: cobros.todoPagado ? "#1c523b" : "#2c3250"}}>
+              {cobros.todoPagado
+                ? "✓ Todas las cuotas en clínica están pagadas."
+                : <>Cobrado en clínica <b>{fmtEur(cobros.totalPagado)}</b> de {fmtEur(cobros.totalPlan)}
+                   {" · quedan "}<b>{fmtEur(cobros.pendienteTotal)}</b></>}
+            </div>
+          )}
           <div style={{marginTop:12, fontSize:16, color:"#1a1a1a", fontWeight:600, lineHeight:1.45}}>
             {fraseTramos(linea)}
           </div>
-          <div style={{marginTop:6, fontSize:13, color:"#666"}}>
-            Desembolso real total <b style={{color:"#2c3250"}}>{fmtEur(desembolsoTotal)}</b>
-            {" "}— tratamiento {fmtEur(calc.totalPlan)} + comisión Frakmenta {fmtEur(frag.comision)}
-          </div>
+          {frag && (
+            <div style={{marginTop:6, fontSize:13, color:"#666"}}>
+              Desembolso real total <b style={{color:"#2c3250"}}>{fmtEur(desembolsoTotal)}</b>
+              {" "}— tratamiento {fmtEur(calc.totalPlan)} + comisión Frakmenta {fmtEur(frag.comision)}
+            </div>
+          )}
         </div>
       )}
 
@@ -4135,6 +4165,15 @@ function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], waClicks =
     factor: esVisita ? 1 : factorDescuento(paciente),
   }) : []);
   const planesDelPaciente = paciente ? plans.filter(pl => pl.patient_id === paciente.id) : [];
+
+  // Estado real de cobro, solo si el plan ya está guardado y tiene calendario
+  const cuotasDeEstePlan = cuotas.filter(c => c.plan_id === plan.id);
+  const cobros = (paciente && cuotasDeEstePlan.length)
+    ? estadoCobroMeses({
+        cuotas: cuotasDeEstePlan,
+        pagosPaciente: pagosDesde(pagos.filter(pg => pg.patient_id === paciente.id), plan.fechaInicio),
+      })
+    : null;
   const yaGuardado = plans.some(pl => pl.id === plan.id);
 
   const elegir = (p) => {
@@ -4367,15 +4406,213 @@ function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], waClicks =
             </div>
           )}
 
-          <PlanDePagoBoard tratamientos={tratamientos} plan={plan} onPlanChange={setPlan}/>
+          <PlanDePagoBoard tratamientos={tratamientos} plan={plan} onPlanChange={setPlan} cobros={cobros}/>
         </>
       )}
     </div>
   );
 }
 
+// ─── PortalPlanes ────────────────────────────────────────────────────────────
+// Vista aparte, en /planes, para el jefe y recepción. Solo los planes activos y
+// terminados: ni pacientes, ni cobros, ni presupuestos.
+//
+//   jefe      → puede mover tratamientos entre meses y guardar la colocación
+//   recepcion → solo mira
+//
+// La restricción es de interfaz. Las políticas RLS dan acceso a cualquier
+// usuario autenticado, así que esto separa lo que ve el personal en pantalla,
+// no defiende de quien quiera ir contra la API por su cuenta.
+function PortalPlanes() {
+  const [sesion,    setSesion]    = useState(null);
+  const [listo,     setListo]     = useState(false);
+  const [rol,       setRol]       = useState("recepcion");
+  const [plans,     setPlans]     = useState([]);
+  const [cuotas,    setCuotas]    = useState([]);
+  const [pagos,     setPagos]     = useState([]);
+  const [pacientes, setPacientes] = useState([]);
+  const [abierto,   setAbierto]   = useState(null);
+  const [plan,      setPlan]      = useState(null);
+  const [guardando, setGuardando] = useState(false);
+  const [msg,       setMsg]       = useState("");
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data:{ session } }) => { setSesion(session); setListo(true); });
+    const { data:{ subscription } } = supabase.auth.onAuthStateChange((_e, ses) => setSesion(ses));
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const recargarPlanes = async () => {
+    const { data } = await supabase.from("payment_plans").select("*")
+      .in("estado", ["activo","terminado"]).order("fecha_inicio");
+    setPlans(data || []);
+  };
+
+  useEffect(() => {
+    if (!sesion) return;
+    (async () => {
+      const email = (sesion.user?.email || "").toLowerCase();
+      const { data: u } = await supabase.from("plan_usuarios").select("rol").eq("email", email).maybeSingle();
+      setRol(u?.rol === "jefe" ? "jefe" : "recepcion");
+      const [{ data: cu }, { data: pg }, { data: pa }] = await Promise.all([
+        supabase.from("payment_plan_cuotas").select("*").order("vence_el"),
+        supabase.from("payments").select("*"),
+        supabase.from("patients").select("id,name,hc,budget_no,treatments"),
+      ]);
+      setCuotas(cu || []); setPagos(pg || []); setPacientes(pa || []);
+      await recargarPlanes();
+    })();
+  }, [sesion]);
+
+  const txsDe = (pac, pl) => pac ? txsParaPlan(pac, {
+    sinDescuento: pl.modo === "visita",
+    factor: pl.modo === "visita" ? 1 : factorDescuento(pac),
+  }) : [];
+
+  const guardarColocacion = async () => {
+    if (rol !== "jefe" || !plan || !abierto) return;
+    setGuardando(true);
+    const pac = pacientes.find(p => p.id === abierto.patient_id);
+    const der = planDerivado(plan, txsDe(pac, plan));
+    // solo se toca dónde va cada tratamiento; importes y cuotas no se mueven
+    const { error } = await supabase.from("payment_plans").update({
+      colocacion: der.txConMes.map(t => ({ tx_id:t.id, nombre:t.nombre, importe:t.importe, mes:t.mes })),
+      n_meses: plan.nMeses,
+      updated_at: new Date().toISOString(),
+    }).eq("id", abierto.id);
+    setGuardando(false);
+    setMsg(error ? "Error: " + error.message : "✓ Guardado");
+    if (!error) await recargarPlanes();
+  };
+
+  if (!listo) return (
+    <div style={{minHeight:"100vh",background:"#f0f2f7",display:"flex",alignItems:"center",
+      justifyContent:"center",fontFamily:"'DM Sans','Segoe UI',sans-serif",color:"#888",fontSize:13}}>
+      Cargando...
+    </div>
+  );
+  if (!sesion) return <LoginForm onLogin={()=>{}}/>;
+
+  const hoy = today();
+
+  return (
+    <div style={{minHeight:"100vh",background:"#f0f2f7",color:"#2c3250",fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
+      <div style={{background:"#ffffff",borderBottom:"1px solid #e2e5ed",padding:"0 16px",
+        display:"flex",alignItems:"center",gap:12,height:60,flexWrap:"wrap"}}>
+        <span style={{fontWeight:900,fontSize:15,letterSpacing:3,color:"#c9a84c"}}>IMPLANTDENT</span>
+        <span style={{fontSize:13,color:"#555"}}>Planes de pago</span>
+        <div style={{flex:1}}/>
+        <span style={{fontSize:12,color:"#888"}}>
+          {sesion.user?.email} · <b style={{color:rol==="jefe"?"#c9a84c":"#777"}}>{rol}</b>
+        </span>
+        <button onClick={()=>supabase.auth.signOut()} style={{...s.btnSm,padding:"5px 12px"}}>Salir</button>
+      </div>
+
+      <div style={{padding:"24px 28px"}}>
+        {!abierto && plans.length === 0 && (
+          <div style={{textAlign:"center",color:"#888",padding:50,background:"#fff",borderRadius:10,fontSize:13}}>
+            No hay planes activos ni terminados.
+          </div>
+        )}
+
+        {!abierto && plans.map(pl => {
+          const pac = pacientes.find(p => p.id === pl.patient_id);
+          if (!pac) return null;
+          const propias  = cuotas.filter(c => c.plan_id === pl.id);
+          const pagosPac = pagosDesde(pagos.filter(pg => pg.patient_id === pl.patient_id), pl.fecha_inicio);
+          const r  = resumenPlan({ plan: pl, cuotas: propias, pagos, pagosPaciente: pagosPac, hoy });
+          const ec = estadoCobroMeses({ cuotas: propias, pagosPaciente: pagosPac });
+          const col = ec.todoPagado ? "#2ecc71" : r.estado === "atrasado" ? "#e74c3c" : "#3498db";
+          return (
+            <div key={pl.id} style={{...s.card, borderLeft:"4px solid "+col, display:"flex",
+              justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap"}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:15,display:"flex",alignItems:"center",gap:8}}>
+                  {pac.name || "Sin nombre"}
+                  <span style={{background:col+"22",color:col,borderRadius:5,padding:"2px 8px",
+                    fontSize:11,fontWeight:700}}>
+                    {ec.todoPagado ? "todo pagado" : r.estado}
+                  </span>
+                </div>
+                <div style={{fontSize:12,color:"#888",marginTop:3}}>
+                  #{pl.budget_no||"—"} · {pl.modo==="cuotas" ? "entrega + "+pl.n_cuotas+" cuotas" : "paga por visita"}
+                  {" · inicio "}{fmtDate(pl.fecha_inicio)}
+                </div>
+              </div>
+              <div style={{display:"flex",gap:18,alignItems:"center",flexWrap:"wrap"}}>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontSize:10,color:"#888",letterSpacing:1}}>COBRADO EN CLÍNICA</div>
+                  <div style={{fontSize:15,fontWeight:700,color:"#2ecc71"}}>
+                    {fmtEur(ec.totalPagado)} <span style={{color:"#bbb",fontWeight:400}}>/ {fmtEur(ec.totalPlan)}</span>
+                  </div>
+                </div>
+                {r.proxima && !ec.todoPagado && (
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:10,color:"#888",letterSpacing:1}}>PRÓXIMO VENCIMIENTO</div>
+                    <div style={{fontSize:13,fontWeight:700,color:r.diasParaProxima < 0 ? "#e74c3c" : "#2c3250"}}>
+                      {fmtDate(r.proxima.vence_el)} · {fmtEur(r.aCobrarAhora)}
+                    </div>
+                  </div>
+                )}
+                <button onClick={()=>{setAbierto(pl); setPlan(planDesdeFila(pl)); setMsg("");}}
+                  style={{...s.btnDark,padding:"6px 14px",fontSize:12}}>
+                  {rol==="jefe" ? "Abrir" : "Ver"}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+
+        {abierto && plan && (() => {
+          const pac = pacientes.find(p => p.id === abierto.patient_id);
+          const propias = cuotas.filter(c => c.plan_id === abierto.id);
+          const cobros = propias.length ? estadoCobroMeses({
+            cuotas: propias,
+            pagosPaciente: pagosDesde(pagos.filter(pg => pg.patient_id === abierto.patient_id), abierto.fecha_inicio),
+          }) : null;
+          return (
+            <>
+              <div style={{display:"flex",gap:12,alignItems:"center",marginBottom:16,flexWrap:"wrap"}}>
+                <button onClick={()=>{setAbierto(null); setPlan(null); setMsg("");}}
+                  style={{background:"none",border:"none",color:"#888",cursor:"pointer",fontSize:22}}>←</button>
+                <b style={{fontSize:15}}>{pac?.name || "Paciente"}</b>
+                <span style={{fontSize:12,color:"#888"}}>#{abierto.budget_no||"—"}</span>
+                <div style={{flex:1}}/>
+                {rol === "jefe" ? (
+                  <>
+                    <span style={{fontSize:12,color:"#888"}}>Puede mover los tratamientos entre meses</span>
+                    <button onClick={guardarColocacion} disabled={guardando}
+                      style={{...s.btnGold,opacity:guardando?0.6:1}}>
+                      {guardando ? "Guardando..." : "Guardar cambios"}
+                    </button>
+                  </>
+                ) : <span style={{fontSize:12,color:"#888"}}>Solo lectura</span>}
+                {msg && <span style={{fontSize:12.5,color:msg.startsWith("✓")?"#2ecc71":"#e74c3c"}}>{msg}</span>}
+              </div>
+              <PlanDePagoBoard tratamientos={txsDe(pac, plan)} plan={plan} onPlanChange={setPlan}
+                cobros={cobros} sinControles soloLectura={rol !== "jefe"}/>
+            </>
+          );
+        })()}
+      </div>
+    </div>
+  );
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
+// /planes es la vista restringida para el jefe y recepción. La bifurcación va en
+// un componente sin estado propio: si el return condicional viviera dentro de
+// AppCompleta, todos sus hooks quedarían detrás de una condición.
+const esPortalPlanes = () =>
+  typeof window !== "undefined" &&
+  window.location.pathname.replace(/\/+$/, "") === "/planes";
+
 export default function App() {
+  return esPortalPlanes() ? <PortalPlanes/> : <AppCompleta/>;
+}
+
+function AppCompleta() {
+
   const [unlocked,       setUnlocked]       = useState(false);
   const [hasSession,     setHasSession]     = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);

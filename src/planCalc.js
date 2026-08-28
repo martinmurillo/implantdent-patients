@@ -230,6 +230,37 @@ export const estadoCuota = (cuota, pagos = [], hoy) => {
   return cuota.vence_el < hoy ? "vencido" : "pendiente";
 };
 
+// Estado de cobro mes a mes de lo que se paga EN CLÍNICA.
+//
+// Lo que se debe en un mes es el acumulado esperado hasta ese mes menos todo
+// lo pagado. Así, si un mes se paga de menos, la diferencia aparece sola
+// sumada en el mes siguiente, sin perderse.
+export function estadoCobroMeses({ cuotas = [], pagosPaciente = [] }) {
+  const importePorMes = new Map();
+  for (const c of cuotas) {
+    const m = Number(c.mes) || 1;
+    importePorMes.set(m, round2((importePorMes.get(m) || 0) + (Number(c.importe) || 0)));
+  }
+  const totalPagado = round2(pagosPaciente.reduce((s, p) => s + (Number(p.amount) || 0), 0));
+
+  const meses = [];
+  let acum = 0;
+  for (const m of [...importePorMes.keys()].sort((a, b) => a - b)) {
+    const importe = importePorMes.get(m);
+    acum = round2(acum + importe);
+    const aPagar = round2(Math.max(0, acum - totalPagado));
+    meses.push({ mes: m, importe, aPagar, pagado: aPagar <= 0.005 });
+  }
+
+  return {
+    meses,
+    totalPagado,
+    totalPlan: acum,
+    pendienteTotal: round2(Math.max(0, acum - totalPagado)),
+    todoPagado: meses.length > 0 && acum - totalPagado <= 0.005,
+  };
+}
+
 // ─── Seguimiento de un plan acordado ─────────────────────────────────────────
 export function resumenPlan({ plan, cuotas = [], pagos = [], pagosPaciente = null, hoy }) {
   const conEstado = [...cuotas]
