@@ -194,13 +194,20 @@ export function cuotasDelPlan(plan, calc) {
     }
     const n = Number(n_cuotas) || 0;
     const inicio = Math.max(1, Number(mes_inicio_cuotas) || 1);
+    // Si se acordó un día de cobro concreto, las cuotas salen de ahí. Sin él,
+    // vencen el mismo día del mes que la fecha de inicio, como siempre.
+    //
+    // En los dos casos se suma SIEMPRE sobre la fecha ancla, nunca sobre la
+    // anterior ya calculada: encadenando, un 31 de enero capado a 28 de
+    // febrero arrastraría el día 28 al resto de las cuotas.
+    const base = plan.fecha_primer_cobro || null;
     for (let i = 0; i < n; i++) {
       const mes = inicio + i;
       filas.push({
         numero: i + 1,
         concepto: "cuota",
         mes,
-        vence_el: addMeses(fecha_inicio, mes - 1),
+        vence_el: base ? addMeses(base, i) : addMeses(fecha_inicio, mes - 1),
         importe: round2(Number(importe_cuota) || 0),
       });
     }
@@ -229,6 +236,20 @@ export const estadoCuota = (cuota, pagos = [], hoy) => {
   if (cuota.payment_id && pagos.some(p => p.id === cuota.payment_id)) return "pagado";
   return cuota.vence_el < hoy ? "vencido" : "pendiente";
 };
+
+// Fecha en que vence el cobro de cada mes, para poder enseñarla.
+export function vencimientosPorMes(plan, nMeses) {
+  const base = plan.fecha_primer_cobro || null;
+  const inicio = Math.max(1, Number(plan.mes_inicio_cuotas ?? plan.mesInicioCuotas) || 1);
+  const arranque = plan.fecha_inicio || plan.fechaInicio;
+  const out = new Map();
+  for (let m = 1; m <= nMeses; m++) {
+    // el mes 1 es la entrega, que se cobra el día que arranca el plan
+    if (m < inicio || !base) out.set(m, addMeses(arranque, m - 1));
+    else out.set(m, addMeses(base, m - inicio));
+  }
+  return out;
+}
 
 // Estado de cobro mes a mes de lo que se paga EN CLÍNICA.
 //

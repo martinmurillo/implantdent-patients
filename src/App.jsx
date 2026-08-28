@@ -4,7 +4,8 @@ import { translateTreatment, setTranslationDict } from "./treatments";
 import { loadPdfJs } from "./pdfjs";
 import { calcPlan, cuotaSugerida, totalTratamientos, cuotasDelPlan,
          resumenPlan, coberturaProxima, addMeses, conciliarCuotas,
-         precioSinDescuento, columnasTablero, estadoCobroMeses } from "./planCalc";
+         precioSinDescuento, columnasTablero, estadoCobroMeses,
+         vencimientosPorMes } from "./planCalc";
 import { colocacionInicial, parsePlanPDF, importeFila } from "./pdfPlan";
 import { htmlPlanImpreso } from "./planPrint";
 import { DIRECCION_TEXTO, ETIQUETAS_LINEA } from "./legalPlan";
@@ -3402,6 +3403,7 @@ const emptyPlan = () => ({
   nCuotas:"5", importeCuota:"0", cuotaManual:false, mesInicioCuotas:"2",
   nMeses:6, colocacion:{},
   frakmentaPlazo:0, frakmentaComision:"",   // 0 = la entrega no se financia
+  fechaPrimerCobro:"",                      // vacío = derivada de la fecha de inicio
   fechaInicio: today(), notas:"", estado:"activo",
 });
 
@@ -3470,6 +3472,7 @@ const planDesdeFila = (row) => ({
   nMeses: row.n_meses || 6,
   colocacion: Object.fromEntries((row.colocacion || []).map(c => [c.tx_id, c.mes])),
   fechaInicio: row.fecha_inicio || today(),
+  fechaPrimerCobro: row.fecha_primer_cobro || "",
   notas: row.notas || "",
   estado: row.estado || "activo",
 });
@@ -3481,6 +3484,7 @@ const filaDesdePlan = (plan, patient, der) => ({
   budget_no: patient.budget_no || "",
   modo: plan.modo,
   fecha_inicio: plan.fechaInicio,
+  fecha_primer_cobro: plan.fechaPrimerCobro || null,
   n_meses: plan.nMeses,
   entrega: der.entrega,
   techo_mes: parseFloat(plan.techoMes) || 0,
@@ -3538,6 +3542,7 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange, cobros = null,
 
   const { txConMes, entrega, nCuotas, inicioQ, sugerida, cuota, calc,
           frag, linea, nMesesLinea, desembolsoTotal } = planDerivado(plan, tratamientos);
+  const vencimientos = vencimientosPorMes(plan, nMesesLinea);
 
   // ── Frakmenta: financiar la entrega ──
   const puedeFinanciar = financiable(entrega);
@@ -3781,7 +3786,15 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange, cobros = null,
               <tbody>
                 {[
                   ["", linea.map(f => etiquetaMes(plan.fechaInicio, f.mes)), "#888", 11, 600],
-                  ...(frag ? [[ETIQUETAS_LINEA.frakmenta, linea.map(f => f.frakmenta), "#8e44ad", 12.5, 600]] : []),
+                  ["Vence", linea.map(f => {
+                    const v = vencimientos.get(f.mes);
+                    return v ? fmtDate(v).slice(0, 5) : "";
+                  }), "#0e3b3e", 11, 700],
+                  // Lo de Frakmenta ya lo tiene la clínica: en cuanto hay
+                  // seguimiento se muestra como cobrado, no como pendiente.
+                  ...(frag ? [[ETIQUETAS_LINEA.frakmenta,
+                    linea.map(f => cobros ? (f.frakmenta > 0.005 ? "Pagado" : 0) : f.frakmenta),
+                    "#8e44ad", 12.5, 600]] : []),
                   // con el plan guardado, la fila de clínica muestra el cobro real
                   [ETIQUETAS_LINEA.clinica,
                     linea.map(f => {
@@ -3791,8 +3804,9 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange, cobros = null,
                       return e.pagado ? "Pagado" : e.aPagar;
                     }), "#3498db", 12.5, 600],
                   [ETIQUETAS_LINEA.total,     linea.map(f => f.total),     "#2c3250", 14,   800],
-                ].map(([etiqueta, valores, color, size, weight], fila) => (
-                  <tr key={etiqueta || "meses"} style={{borderTop: fila === 3 ? "2px solid #e2e5ed" : "none"}}>
+                ].map(([etiqueta, valores, color, size, weight]) => (
+                  <tr key={etiqueta || "meses"}
+                    style={{borderTop: etiqueta === ETIQUETAS_LINEA.total ? "2px solid #e2e5ed" : "none"}}>
                     <td style={{fontSize:10, color:"#777", fontWeight:700, letterSpacing:.2,
                       textTransform:"uppercase", paddingRight:12, lineHeight:1.15,
                       width:110, minWidth:110, maxWidth:110}}>{etiqueta}</td>
@@ -3801,7 +3815,7 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange, cobros = null,
                         color: v === "Pagado" ? "#1c523b" : color,
                         fontWeight: v === "Pagado" ? 800 : weight, whiteSpace:"nowrap",
                         background: v === "Pagado" ? "#e9f4ee"
-                          : fila === 3 && v > 0.005 ? "#f7f3e6" : "transparent",
+                          : etiqueta === ETIQUETAS_LINEA.total && v > 0.005 ? "#f7f3e6" : "transparent",
                         opacity: typeof v === "number" && v < 0.005 ? 0.25 : 1}}>
                         {typeof v === "number" ? (v < 0.005 ? "—" : eur0(v)) : v}
                       </td>
@@ -4332,6 +4346,22 @@ function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], waClicks =
               <label style={{...s.label, fontSize:10}}>Fecha de inicio</label>
               <input type="date" value={plan.fechaInicio}
                 onChange={e=>setPlan({...plan, fechaInicio:e.target.value})} style={s.smInput}/>
+            </div>
+            <div style={{minWidth:150}}>
+              <label style={{...s.label, fontSize:10, display:"flex", justifyContent:"space-between", alignItems:"center"}}>
+                <span>1er cobro</span>
+                {plan.fechaPrimerCobro
+                  ? <button onClick={()=>setPlan({...plan, fechaPrimerCobro:""})}
+                      style={{background:"none",border:"none",color:"#c9a84c",cursor:"pointer",fontSize:10,padding:0,textDecoration:"underline"}}>
+                      auto
+                    </button>
+                  : <span style={{color:"#777",fontSize:9,letterSpacing:0}}>al mes</span>}
+              </label>
+              <input type="date"
+                value={plan.fechaPrimerCobro || (plan.fechaInicio ? addMeses(plan.fechaInicio, Math.max(1, parseInt(plan.mesInicioCuotas)||1) - 1) : "")}
+                onChange={e=>setPlan({...plan, fechaPrimerCobro:e.target.value})}
+                style={{...s.smInput, background: plan.fechaPrimerCobro ? "#ffffff" : "#f0f4f8",
+                        color: plan.fechaPrimerCobro ? "#2c3250" : "#5a6b8c"}}/>
             </div>
             <div style={{minWidth:130}}>
               <label style={{...s.label, fontSize:10}}>Estado</label>

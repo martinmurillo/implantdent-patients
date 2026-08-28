@@ -4,7 +4,7 @@ import {
   addMeses, sumarDias, cuotaSugerida, totalTratamientos,
   calcPlan, cuotasDelPlan, estadoCuota, resumenPlan, coberturaProxima,
   diasEntre, conciliarCuotas, precioSinDescuento, columnasTablero,
-  estadoCobroMeses,
+  estadoCobroMeses, vencimientosPorMes,
 } from "./planCalc.js";
 
 // ─── Fechas ──────────────────────────────────────────────────────────────────
@@ -772,5 +772,85 @@ describe("estadoCobroMeses", () => {
     const c = [{ numero: 1, mes: 1, vence_el: "2026-08-27", importe: 104.68 }];
     const r = estadoCobroMeses({ cuotas: c, pagosPaciente: [{ amount: 104.68 }] });
     assert.equal(r.todoPagado, true);
+  });
+});
+
+describe("cuotasDelPlan · fecha de primer cobro acordada", () => {
+  const base = {
+    modo: "cuotas", fecha_inicio: "2026-08-27",
+    entrega: 2000, n_cuotas: 3, importe_cuota: 500, mes_inicio_cuotas: 2,
+  };
+  const calc = calcPlan({
+    tratamientos: [], nMeses: 6, modo: "cuotas",
+    entrega: 2000, nCuotas: 3, importeCuota: 500, mesInicioCuotas: 2,
+  });
+
+  test("sin fecha propia, vencen el mismo día que la de inicio", () => {
+    const f = cuotasDelPlan(base, calc);
+    assert.deepEqual(f.map(x => x.vence_el),
+      ["2026-08-27", "2026-09-27", "2026-10-27", "2026-11-27"]);
+  });
+
+  test("con fecha propia, las cuotas salen de ahí y van de mes en mes", () => {
+    const f = cuotasDelPlan({ ...base, fecha_primer_cobro: "2026-10-05" }, calc);
+    assert.equal(f[0].vence_el, "2026-08-27");   // la entrega no se mueve
+    assert.deepEqual(f.slice(1).map(x => x.vence_el),
+      ["2026-10-05", "2026-11-05", "2026-12-05"]);
+  });
+
+  test("la fecha propia también respeta el fin de mes", () => {
+    const f = cuotasDelPlan({ ...base, fecha_primer_cobro: "2026-12-31" }, calc);
+    assert.deepEqual(f.slice(1).map(x => x.vence_el),
+      ["2026-12-31", "2027-01-31", "2027-02-28"]);
+  });
+
+  test("los meses de las cuotas no cambian, solo las fechas", () => {
+    const sin = cuotasDelPlan(base, calc);
+    const con = cuotasDelPlan({ ...base, fecha_primer_cobro: "2026-10-05" }, calc);
+    assert.deepEqual(sin.map(x => x.mes), con.map(x => x.mes));
+    assert.deepEqual(sin.map(x => x.importe), con.map(x => x.importe));
+  });
+});
+
+describe("vencimientosPorMes", () => {
+  test("sin fecha propia sigue la fecha de inicio", () => {
+    const v = vencimientosPorMes({ fecha_inicio: "2026-08-27", mes_inicio_cuotas: 2 }, 4);
+    assert.deepEqual([...v.values()],
+      ["2026-08-27", "2026-09-27", "2026-10-27", "2026-11-27"]);
+  });
+
+  test("con fecha propia, el mes 1 sigue siendo el arranque", () => {
+    const v = vencimientosPorMes(
+      { fecha_inicio: "2026-08-27", mes_inicio_cuotas: 2, fecha_primer_cobro: "2026-10-05" }, 4);
+    assert.deepEqual([...v.values()],
+      ["2026-08-27", "2026-10-05", "2026-11-05", "2026-12-05"]);
+  });
+
+  test("acepta también los nombres del estado del formulario", () => {
+    const v = vencimientosPorMes({ fechaInicio: "2026-08-27", mesInicioCuotas: 2 }, 2);
+    assert.deepEqual([...v.values()], ["2026-08-27", "2026-09-27"]);
+  });
+});
+
+describe("cuotasDelPlan · el ancla no se arrastra", () => {
+  // Encadenar addMeses sobre la fecha anterior haría que un 31 de enero,
+  // capado a 28 de febrero, dejara el resto de cuotas en día 28.
+  test("desde el 31 de enero, cada cuota vence el último día que corresponda", () => {
+    const f = cuotasDelPlan({
+      modo: "cuotas", fecha_inicio: "2026-01-31",
+      entrega: 0, n_cuotas: 5, importe_cuota: 100, mes_inicio_cuotas: 2,
+    }, null);
+    assert.deepEqual(f.map(x => x.vence_el),
+      ["2026-02-28", "2026-03-31", "2026-04-30", "2026-05-31", "2026-06-30"]);
+  });
+
+  test("lo mismo con una fecha de primer cobro a fin de mes", () => {
+    const f = cuotasDelPlan({
+      modo: "cuotas", fecha_inicio: "2026-01-15",
+      entrega: 0, n_cuotas: 4, importe_cuota: 100, mes_inicio_cuotas: 2,
+      fecha_primer_cobro: "2026-01-31",
+    }, null);
+    assert.deepEqual(f.map(x => x.vence_el),
+      ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]);
   });
 });
