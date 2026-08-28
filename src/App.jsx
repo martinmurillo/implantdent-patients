@@ -5067,14 +5067,11 @@ function PortalPlanes() {
       const r = u?.rol || "sin_acceso";
       setRol(r); setNombre(u?.nombre || "");
       if (r === "sin_acceso") return;
-      const [{ data: cu }, { data: pg }, { data: pa }] = await Promise.all([
-        supabase.from("payment_plan_cuotas").select("*").order("vence_el"),
-        supabase.from("payments").select("*"),
-        supabase.from("patients").select("id,name,hc,budget_no,treatments"),
-      ]);
-      setCuotas(cu || []); setPagos(pg || []); setPacientes(pa || []);
+      // una sola vía de carga: había quedado aquí una consulta duplicada que
+      // pedía los pacientes sin el teléfono, y pisaba a la buena
       const d = await cargarDatosPortal();
-      setPlans(d.planes); setAvisados(d.avisados);
+      setPlans(d.planes); setCuotas(d.cuotas); setPagos(d.pagos);
+      setPacientes(d.pacientes); setAvisados(d.avisados);
     })();
   }, [sesion]);
 
