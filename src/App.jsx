@@ -4443,6 +4443,39 @@ function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], waClicks =
   );
 }
 
+// ─── SinAcceso ───────────────────────────────────────────────────────────────
+// Desde que los roles fallan cerrado, una cuenta que no esté en
+// plan_usuarios no ve nada. Sin esta pantalla vería la aplicación vacía y
+// parecería que está rota.
+function SinAcceso({ email, sugerirPortal = false }) {
+  return (
+    <div style={{minHeight:"100vh",background:"#f0f2f7",display:"flex",alignItems:"center",
+      justifyContent:"center",fontFamily:"'DM Sans','Segoe UI',sans-serif",padding:20}}>
+      <div style={{background:"#f5f7fa",border:"1px solid #e2e5ed",borderRadius:16,
+        padding:"40px 36px",textAlign:"center",maxWidth:440}}>
+        <div style={{fontWeight:900,fontSize:18,letterSpacing:4,color:"#c9a84c",marginBottom:20}}>IMPLANTDENT</div>
+        <div style={{fontSize:15,color:"#2c3250",fontWeight:600,marginBottom:10}}>
+          Esta cuenta no tiene acceso
+        </div>
+        <div style={{fontSize:13,color:"#666",lineHeight:1.6,marginBottom:22}}>
+          {email && <><b>{email}</b><br/></>}
+          {sugerirPortal
+            ? <>Esta cuenta solo puede entrar en la vista de planes de pago.</>
+            : <>No figura entre los usuarios autorizados. Pedí el alta a la clínica.</>}
+        </div>
+        {sugerirPortal && (
+          <a href="/planes" style={{...s.btnGold, textDecoration:"none", display:"inline-block", marginBottom:12}}>
+            Ir a planes de pago
+          </a>
+        )}
+        <div>
+          <button onClick={()=>supabase.auth.signOut()} style={s.btnGhost}>Cerrar sesión</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── PortalPlanes ────────────────────────────────────────────────────────────
 // Vista aparte, en /planes, para el jefe y recepción. Solo los planes activos y
 // terminados: ni pacientes, ni cobros, ni presupuestos.
@@ -4456,7 +4489,7 @@ function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], waClicks =
 function PortalPlanes() {
   const [sesion,    setSesion]    = useState(null);
   const [listo,     setListo]     = useState(false);
-  const [rol,       setRol]       = useState("recepcion");
+  const [rol,       setRol]       = useState(null);   // null = todavía sin comprobar
   const [plans,     setPlans]     = useState([]);
   const [cuotas,    setCuotas]    = useState([]);
   const [pagos,     setPagos]     = useState([]);
@@ -4483,7 +4516,9 @@ function PortalPlanes() {
     (async () => {
       const email = (sesion.user?.email || "").toLowerCase();
       const { data: u } = await supabase.from("plan_usuarios").select("rol").eq("email", email).maybeSingle();
-      setRol(u?.rol === "jefe" ? "jefe" : "recepcion");
+      const r = u?.rol || "sin_acceso";
+      setRol(r);
+      if (r === "sin_acceso") return;
       const [{ data: cu }, { data: pg }, { data: pa }] = await Promise.all([
         supabase.from("payment_plan_cuotas").select("*").order("vence_el"),
         supabase.from("payments").select("*"),
@@ -4500,7 +4535,7 @@ function PortalPlanes() {
   }) : [];
 
   const guardarColocacion = async () => {
-    if (rol !== "jefe" || !plan || !abierto) return;
+    if (!puedeMover || !plan || !abierto) return;
     setGuardando(true);
     const pac = pacientes.find(p => p.id === abierto.patient_id);
     const der = planDerivado(plan, txsDe(pac, plan));
@@ -4522,7 +4557,16 @@ function PortalPlanes() {
     </div>
   );
   if (!sesion) return <LoginForm onLogin={()=>{}}/>;
+  if (rol === null) return (
+    <div style={{minHeight:"100vh",background:"#f0f2f7",display:"flex",alignItems:"center",
+      justifyContent:"center",fontFamily:"'DM Sans','Segoe UI',sans-serif",color:"#888",fontSize:13}}>
+      Comprobando acceso...
+    </div>
+  );
+  if (rol === "sin_acceso") return <SinAcceso email={sesion.user?.email}/>;
 
+  // el dueño entra al portal con las mismas manos que el jefe
+  const puedeMover = rol === "jefe" || rol === "dueno";
   const hoy = today();
 
   return (
@@ -4533,7 +4577,7 @@ function PortalPlanes() {
         <span style={{fontSize:13,color:"#555"}}>Planes de pago</span>
         <div style={{flex:1}}/>
         <span style={{fontSize:12,color:"#888"}}>
-          {sesion.user?.email} · <b style={{color:rol==="jefe"?"#c9a84c":"#777"}}>{rol}</b>
+          {sesion.user?.email} · <b style={{color:puedeMover?"#c9a84c":"#777"}}>{rol}</b>
         </span>
         <button onClick={()=>supabase.auth.signOut()} style={{...s.btnSm,padding:"5px 12px"}}>Salir</button>
       </div>
@@ -4586,7 +4630,7 @@ function PortalPlanes() {
                 )}
                 <button onClick={()=>{setAbierto(pl); setPlan(planDesdeFila(pl)); setMsg("");}}
                   style={{...s.btnDark,padding:"6px 14px",fontSize:12}}>
-                  {rol==="jefe" ? "Abrir" : "Ver"}
+                  {puedeMover ? "Abrir" : "Ver"}
                 </button>
               </div>
             </div>
@@ -4608,7 +4652,7 @@ function PortalPlanes() {
                 <b style={{fontSize:15}}>{pac?.name || "Paciente"}</b>
                 <span style={{fontSize:12,color:"#888"}}>#{abierto.budget_no||"—"}</span>
                 <div style={{flex:1}}/>
-                {rol === "jefe" ? (
+                {puedeMover ? (
                   <>
                     <span style={{fontSize:12,color:"#888"}}>Puede mover los tratamientos entre meses</span>
                     <button onClick={guardarColocacion} disabled={guardando}
@@ -4620,7 +4664,7 @@ function PortalPlanes() {
                 {msg && <span style={{fontSize:12.5,color:msg.startsWith("✓")?"#2ecc71":"#e74c3c"}}>{msg}</span>}
               </div>
               <PlanDePagoBoard tratamientos={txsDe(pac, plan)} plan={plan} onPlanChange={setPlan}
-                cobros={cobros} sinControles soloLectura={rol !== "jefe"}/>
+                cobros={cobros} sinControles soloLectura={!puedeMover}/>
             </>
           );
         })()}
@@ -4646,6 +4690,8 @@ function AppCompleta() {
   const [unlocked,       setUnlocked]       = useState(false);
   const [hasSession,     setHasSession]     = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
+  const [sesionEmail,    setSesionEmail]    = useState(null);
+  const [rolPropio,      setRolPropio]      = useState(null);
   const [patients,  setPatients]  = useState([]);
   const [doctors,   setDoctors]   = useState([]);
   const [items,     setItems]     = useState([]);
@@ -4702,15 +4748,25 @@ function AppCompleta() {
   // Comprobar sesión activa al arrancar
   useEffect(()=>{
     supabase.auth.getSession().then(({ data: { session } }) => {
+      setSesionEmail(session?.user?.email || null);
       setHasSession(!!session);
       setSessionChecked(true);
     });
   }, []);
 
+  // La aplicación completa es solo del dueño. El resto del personal entra
+  // por /planes; una cuenta sin fila no entra a ningún sitio.
+  useEffect(()=>{
+    if (!hasSession || !sesionEmail) { setRolPropio(null); return; }
+    supabase.from("plan_usuarios").select("rol").eq("email", sesionEmail.toLowerCase()).maybeSingle()
+      .then(({ data }) => setRolPropio(data?.rol || "sin_acceso"));
+  }, [hasSession, sesionEmail]);
+
   // Resetear estado al cerrar sesión (token expirado o sign out explícito)
   useEffect(()=>{
-    const { data:{ subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_OUT') { setUnlocked(false); setHasSession(false); }
+    const { data:{ subscription } } = supabase.auth.onAuthStateChange((event, ses) => {
+      if (event === 'SIGNED_OUT') { setUnlocked(false); setHasSession(false); setSesionEmail(null); setRolPropio(null); }
+      else if (ses?.user?.email) { setSesionEmail(ses.user.email); setHasSession(true); }
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -5084,7 +5140,23 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
 
   // Sin sesión activa → formulario de login real
   if (!hasSession) return (
-    <LoginForm onLogin={() => { setHasSession(true); setUnlocked(true); }} />
+    <LoginForm onLogin={async () => {
+      // hace falta el email para saber el rol; sin él quedaría comprobando para siempre
+      const { data:{ session } } = await supabase.auth.getSession();
+      setSesionEmail(session?.user?.email || null);
+      setHasSession(true); setUnlocked(true);
+    }} />
+  );
+
+  // Sesión activa pero sin ser el dueño → esta pantalla no es para ellos
+  if (rolPropio === null) return (
+    <div style={{minHeight:"100vh",background:"#f0f2f7",display:"flex",alignItems:"center",
+      justifyContent:"center",fontFamily:"'DM Sans','Segoe UI',sans-serif",color:"#888",fontSize:13}}>
+      Comprobando acceso...
+    </div>
+  );
+  if (rolPropio !== "dueno") return (
+    <SinAcceso email={sesionEmail} sugerirPortal={rolPropio === "jefe" || rolPropio === "recepcion"}/>
   );
 
   // Sesión activa pero pantalla bloqueada → PIN
