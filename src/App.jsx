@@ -4558,7 +4558,10 @@ const anotarAviso = async (aviso, email) => {
 // Ficha de cobro para el mostrador: un cuarto de A4 para recortar. Recepción
 // apunta encima lo que paga el paciente y ve si con ese pago toca dar cita.
 const imprimirFichaCobro = ({ plan, paciente, cuotas, estado, aPagarAhora }) => {
-  const html = htmlHojaFichas([htmlFichaCobro({ plan, paciente, cuotas, estado, aPagarAhora })]);
+  const html = htmlHojaFichas([htmlFichaCobro({
+    plan, paciente, cuotas, estado, aPagarAhora,
+    logoUrl: `${window.location.origin}/logo.png`,
+  })]);
   const win = window.open("", "_blank");
   win.document.write(html); win.document.close();
   win.document.title = `Ficha de cobro — ${paciente?.name || ""}`;
