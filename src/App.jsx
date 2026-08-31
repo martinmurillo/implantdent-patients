@@ -4236,6 +4236,25 @@ const colocacionPara = (txs) =>
 
 // Un plan ya guardado se abre para editar; si no hay ninguno, se arranca uno
 // con los tratamientos colocados por defecto.
+// Borrar un plan activo es lo más caro que se puede hacer aquí: hay cobros
+// colgando de él y un paciente al que se le prometió un calendario. Por eso
+// pregunta tres veces y la última obliga a escribir, que es lo único que un
+// clic de más no puede atravesar sin querer. Un borrador se borra de una.
+const confirmarBorradoPlan = (plan, paciente) => {
+  const quien = paciente?.name ? ` de ${paciente.name}` : "";
+  if (plan.estado !== "activo") {
+    return confirm(`¿Eliminar este plan de pago${quien}? Los cobros ya registrados en Cobros no se tocan.`);
+  }
+  return confirm(
+      `⚠ ESTE PLAN ESTÁ ACTIVO.\n\nVas a eliminar el plan${quien} y su calendario de cuotas.`
+      + `\n\nLos cobros ya registrados en Cobros no se tocan, pero el plan y sus vencimientos desaparecen.`
+      + `\n\n¿Seguir?`)
+    && confirm(
+      `Segunda comprobación.\n\nSi lo que querés es dejar de usarlo sin perderlo, cerrá esto y `
+      + `cambiale el estado a "cancelado" o "terminado".\n\n¿Aun así querés eliminarlo?`)
+    && (prompt(`Última comprobación. Escribí ELIMINAR para confirmar.`) || "").trim().toUpperCase() === "ELIMINAR";
+};
+
 const planParaPresupuesto = (patient, plans) => {
   const existente = plans.find(pl => pl.patient_id === patient.id && pl.estado === "activo")
                  || plans.find(pl => pl.patient_id === patient.id);
@@ -4333,7 +4352,7 @@ function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], waClicks =
   };
 
   const borrar = async () => {
-    if (!confirm("¿Eliminar este plan de pago? Los cobros ya registrados en Cobros no se tocan.")) return;
+    if (!confirmarBorradoPlan(plan, paciente)) return;
     await onDeletePlan(plan.id);
     setMsg("Plan eliminado");
     if (paciente) elegir(paciente); else setSelId(null);
@@ -4871,7 +4890,9 @@ const escucharCambiosDePlanes = (nombre, alCambiar) => {
 const cargarDatosPortal = async () => {
   const [{ data: pl }, { data: cu }, { data: pg }, { data: pa }, { data: av }] = await Promise.all([
     supabase.from("payment_plans").select("*")
-      .in("estado", ["activo","terminado","borrador"]).order("fecha_inicio"),
+      .in("estado", ["activo","terminado","borrador"])
+      // por última modificación: lo que se acaba de tocar es lo que se busca
+      .order("updated_at", { ascending: false }),
     supabase.from("payment_plan_cuotas").select("*").order("vence_el"),
     supabase.from("payments").select("*"),
     supabase.from("patients").select("id,name,hc,budget_no,treatments,phone"),
@@ -5480,7 +5501,7 @@ function AppCompleta() {
   const fetchTranslations = async () => { const {data,error}=await supabase.from("treatment_translations").select("*").order("name_es"); if(!error){setTranslations(data||[]);setTranslationDict(data||[]);} };
   const fetchPayments     = async () => { const {data}=await supabase.from("payments").select("*").order("date",{ascending:false}); setPayments(data||[]); };
   const fetchWaClicks     = async () => { const {data}=await supabase.from("wa_clicks").select("*"); setWaClicks(data||[]); };
-  const fetchPlans        = async () => { const {data}=await supabase.from("payment_plans").select("*").order("created_at",{ascending:false}); setPlans(data||[]); };
+  const fetchPlans        = async () => { const {data}=await supabase.from("payment_plans").select("*").order("updated_at",{ascending:false}); setPlans(data||[]); };
   const fetchPlanCuotas   = async () => { const {data}=await supabase.from("payment_plan_cuotas").select("*").order("vence_el"); setPlanCuotas(data||[]); };
   const fetchPlanAvisos   = async () => { const {data}=await supabase.from("plan_avisos").select("*"); setPlanAvisos(data||[]); };
   const [clinicStats, setClinicStats] = useState([]);
@@ -5514,7 +5535,7 @@ function AppCompleta() {
     if (!hasSession) return;
     return escucharCambiosDePlanes("dueno", async () => {
       const [{ data: pl }, { data: cu }, { data: pg }, { data: av }] = await Promise.all([
-        supabase.from("payment_plans").select("*").order("created_at", { ascending:false }),
+        supabase.from("payment_plans").select("*").order("updated_at", { ascending:false }),
         supabase.from("payment_plan_cuotas").select("*").order("vence_el"),
         supabase.from("payments").select("*").order("date", { ascending:false }),
         supabase.from("plan_avisos").select("*"),
