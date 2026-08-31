@@ -1,0 +1,45 @@
+-- ============================================================
+-- Quitar jefe_actualiza: el jefe sólo toca lo que él crea
+-- Ejecutar en: Supabase Dashboard → SQL Editor
+-- ============================================================
+-- ⚠ TOCA PERMISOS.
+--
+-- Qué había:
+--   UPDATE · jefe_actualiza
+--     rol_actual() = 'jefe' AND estado IN ('activo','terminado')
+--
+-- Sin acotar por creado_por. Es decir, el jefe podía modificar CUALQUIER
+-- plan activo o terminado del dueño: importes, cuotas, fechas, todo. Se
+-- creó para que pudiera mover tratamientos entre meses desde el portal,
+-- pero da mucho más que eso, y esa función ya no se le ofrece: el portal
+-- deja en solo lectura todo lo que no creó él.
+--
+-- Lo que le queda después de esto, y es lo que tiene que poder hacer:
+--   INSERT · jefe_crea_planes        → crear planes a su nombre
+--   UPDATE · jefe_edita_sus_planes   → editar los suyos, en cualquier estado
+--   DELETE · jefe_borra_sus_borradores → borrar sus borradores
+--   SELECT · jefe_lee_sus_planes     → ver los suyos
+--   SELECT · personal_lee            → ver activos y terminados de todos
+--
+-- Los planes del dueño le quedan en sólo lectura, que es como debe ser.
+
+DROP POLICY IF EXISTS "jefe_actualiza" ON payment_plans;
+
+-- ── Comprobación ────────────────────────────────────────────────────
+-- Todo dentro de una transacción que se deshace: no deja rastro.
+-- Cambiá el email por el de Hernán.
+--
+-- BEGIN;
+--   SET LOCAL ROLE authenticated;
+--   SET LOCAL request.jwt.claims = '{"email":"EMAIL_DE_HERNAN"}';
+--
+--   -- tocar un plan del dueño: debe dar 0
+--   WITH x AS (UPDATE payment_plans SET n_meses = n_meses
+--              WHERE creado_por IS NULL RETURNING 1)
+--   SELECT count(*) AS planes_del_dueno_tocados FROM x;
+--
+--   -- tocar uno suyo: debe dar los que tenga
+--   WITH x AS (UPDATE payment_plans SET n_meses = n_meses
+--              WHERE creado_por = 'EMAIL_DE_HERNAN' RETURNING 1)
+--   SELECT count(*) AS planes_suyos_tocados FROM x;
+-- ROLLBACK;
