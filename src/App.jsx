@@ -3972,6 +3972,10 @@ function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobra
   const [filtro, setFiltro] = useState("todos");
   const [busca,  setBusca]  = useState("");
   const [cobrando, setCobrando] = useState(null);
+  // Dos maneras de mirar la misma lista: "reciente" para encontrar lo que
+  // acabás de tocar, "vencimiento" para cobrar. Por defecto la primera, que es
+  // como se busca un plan; la segunda es la vista de trabajo del mostrador.
+  const [orden, setOrden] = useState("reciente");
   const hoy = today();
 
   // Cómo de urgente es, en palabras
@@ -4005,8 +4009,12 @@ function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobra
     .filter(Boolean)
     .filter(f => filtro === "todos" ? f.resumen.estado !== "cancelado" : f.resumen.estado === filtro)
     .filter(f => coincideBusqueda(busca, f.paciente, f.plan))
-    // el vencimiento más próximo primero; sin próxima cuota, al final
     .sort((a, b) => {
+      if (orden === "reciente") {
+        // lo último tocado arriba; sin updated_at, al final
+        return String(b.plan.updated_at || "").localeCompare(String(a.plan.updated_at || ""));
+      }
+      // el vencimiento más próximo primero; sin próxima cuota, al final
       const va = a.resumen.proxima?.vence_el || "9999-12-31";
       const vb = b.resumen.proxima?.vence_el || "9999-12-31";
       return va.localeCompare(vb);
@@ -4033,6 +4041,16 @@ function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobra
             style={{background:filtro===id?"#c9a84c22":"#ffffff", border:`1px solid ${filtro===id?"#c9a84c":"#dde4ef"}`,
               borderRadius:6, color:filtro===id?"#c9a84c":"#555", padding:"5px 12px", cursor:"pointer",
               fontSize:12, fontWeight:filtro===id?700:400}}>
+            {label}
+          </button>
+        ))}
+        <div style={{flex:1, minWidth:8}}/>
+        <span style={{fontSize:11.5, color:"#888", alignSelf:"center"}}>Ordenar por</span>
+        {[["reciente","Más reciente"],["vencimiento","Vencimiento"]].map(([id,label])=>(
+          <button key={id} onClick={()=>setOrden(id)}
+            style={{background:orden===id?"#dce8fa":"#ffffff", border:`1px solid ${orden===id?"#3498db":"#dde4ef"}`,
+              borderRadius:6, color:orden===id?"#2c6ea8":"#555", padding:"5px 12px", cursor:"pointer",
+              fontSize:12, fontWeight:orden===id?700:400}}>
             {label}
           </button>
         ))}
