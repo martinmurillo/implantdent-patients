@@ -10,6 +10,7 @@ import { colocacionInicial, parsePlanPDF, importeFila } from "./pdfPlan";
 import { htmlPlanImpreso } from "./planPrint";
 import { htmlFichaCobro, htmlHojaFichas } from "./fichaCobro";
 import { DIRECCION_TEXTO, ETIQUETAS_LINEA, PAGO } from "./legalPlan";
+import { mensajePropuesta } from "./mensajePropuesta";
 import { PLAZOS as FRAG_PLAZOS, financiable, motivoNoFinanciable,
          comisionFrakmenta, calcFrakmenta, lineaDeTiempo, fraseTramos,
          etiquetaMes } from "./frakmenta";
@@ -4217,6 +4218,9 @@ function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], waClicks =
   const [sueltos, setSueltos] = useState(null);   // tratamientos leídos de un PDF suelto
   const [msg,    setMsg]    = useState("");
   const [guardando, setGuardando] = useState(false);
+  // Texto de la propuesta mientras el panel de envío está abierto. Es editable:
+  // el mensaje generado es un punto de partida, no un corsé.
+  const [propuesta, setPropuesta] = useState(null);
   const fileRef = useRef();
 
   const paciente = patients.find(p => p.id === selId) || null;
@@ -4435,6 +4439,19 @@ function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], waClicks =
               style={{...s.btnDark, whiteSpace:"nowrap"}}>
               🖨 Imprimir
             </button>
+            {/* Sólo en borrador: una vez el plan está activo ya se habló con el
+                paciente, y este botón sería mandarle la oferta otra vez. */}
+            {paciente && plan.estado === "borrador" && (
+              <button
+                onClick={()=>setPropuesta(propuesta === null
+                  ? mensajePropuesta({ paciente, plan, der: planDerivado(plan, tratamientos) })
+                  : null)}
+                style={{...s.btnSm, whiteSpace:"nowrap", padding:"9px 14px",
+                  background: propuesta === null ? "#25d36618" : "#25d36633",
+                  border:"1px solid #25d36688", color:"#25a244", fontWeight:600}}>
+                💬 Enviar propuesta
+              </button>
+            )}
             {paciente ? (
               <>
                 <button onClick={guardar} disabled={guardando}
@@ -4455,6 +4472,77 @@ function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], waClicks =
               </span>
             )}
           </div>
+
+          {/* ── Enviar la propuesta al paciente ──
+              WhatsApp no deja adjuntar un archivo desde un enlace: el esquema
+              whatsapp:// sólo admite teléfono y texto. Así que esto deja el
+              mensaje escrito y el PDF generado, y el archivo se engancha con el
+              clip. Es un paso manual que no se puede evitar sin la API de Meta. */}
+          {propuesta !== null && paciente && (() => {
+            const der = planDerivado(plan, tratamientos);
+            const tel = paciente.phone
+              ? (n => /^[6789]\d{8}$/.test(n) ? "34"+n : n)(paciente.phone.replace(/\D/g,""))
+              : null;
+            const waKey = `propuesta_${plan.id}`;
+            const enviados = (waClicks.find(c => c.patient_id === paciente.id
+              && c.button_key === waKey)?.count) || 0;
+            return (
+              <div style={{marginBottom:14, background:"#f6fbf8", border:"1px solid #25d36655",
+                borderRadius:12, padding:"14px 16px"}}>
+                <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:10, flexWrap:"wrap"}}>
+                  <span style={{fontSize:11, color:"#25a244", letterSpacing:2, fontWeight:700}}>
+                    ENVIAR LA PROPUESTA
+                  </span>
+                  {enviados > 0 && (
+                    <span style={{fontSize:11.5, color:"#25a244", fontWeight:600}}>
+                      ✓ ya enviada {enviados > 1 ? `${enviados} veces` : "una vez"}
+                    </span>
+                  )}
+                  <div style={{flex:1}}/>
+                  <button onClick={()=>setPropuesta(null)}
+                    style={{background:"none", border:"none", color:"#888", cursor:"pointer", fontSize:12}}>
+                    cerrar
+                  </button>
+                </div>
+
+                <textarea value={propuesta} onChange={e=>setPropuesta(e.target.value)} rows={14}
+                  style={{width:"100%", fontSize:12.5, lineHeight:1.5, padding:"10px 12px",
+                    border:"1px solid #dde4ef", borderRadius:8, resize:"vertical",
+                    fontFamily:"inherit", color:"#2c3250", background:"#ffffff"}}/>
+
+                <div style={{display:"flex", gap:8, alignItems:"center", flexWrap:"wrap", marginTop:10}}>
+                  <button onClick={()=>imprimirPlan({ plan, paciente, der })}
+                    style={{...s.btnDark, whiteSpace:"nowrap"}}>
+                    1 · Generar el PDF
+                  </button>
+                  {tel ? (
+                    <a href={`whatsapp://send?phone=${tel}&text=${encodeURIComponent(propuesta)}`}
+                      onClick={()=>onWaClick(paciente.id, waKey)}
+                      style={{fontSize:13, padding:"9px 14px", borderRadius:8, textDecoration:"none",
+                        fontWeight:600, background:"#25d36618", border:"1px solid #25d36688",
+                        color:"#25a244", whiteSpace:"nowrap"}}>
+                      2 · Abrir WhatsApp con el mensaje
+                    </a>
+                  ) : (
+                    <span style={{fontSize:12, color:"#c0392b"}}>
+                      Este paciente no tiene teléfono cargado.
+                    </span>
+                  )}
+                  <button onClick={()=>{
+                      navigator.clipboard?.writeText(propuesta);
+                      setMsg("Mensaje copiado");
+                    }}
+                    style={{...s.btnSm, padding:"9px 14px"}}>
+                    Copiar mensaje
+                  </button>
+                  <span style={{fontSize:11.5, color:"#888", flex:"1 1 260px", lineHeight:1.35}}>
+                    Guardá el PDF con "Guardar como PDF" y adjuntalo con el clip:
+                    WhatsApp no permite adjuntar archivos desde un enlace.
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* ── Otros planes de este presupuesto ── */}
           {planesDelPaciente.length > 1 && (
