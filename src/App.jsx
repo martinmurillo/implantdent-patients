@@ -5230,7 +5230,6 @@ function PortalPlanes() {
     setPlans(d.planes); setCuotas(d.cuotas); setPagos(d.pagos);
     setPacientes(d.pacientes); setAvisados(d.avisados);
   };
-  const recargarPlanes = recargarTodo;
 
   useEffect(() => {
     if (!sesion) return;
@@ -5263,20 +5262,55 @@ function PortalPlanes() {
     factor: pl.modo === "visita" ? 1 : factorDescuento(pac),
   }) : [];
 
-  const guardarColocacion = async () => {
-    if (!puedeMover || !plan || !abierto) return;
+  // Plan propio: se guarda entero, importes incluidos, y se rehace el
+  // calendario de cuotas igual que en la app del dueño. Las cuotas ya cobradas
+  // se respetan: se borran sólo las impagas y se regeneran las que faltan, para
+  // no dejar huérfano un pago ya registrado.
+  const guardarPlanCompleto = async () => {
+    if (!plan || !abierto || !esSuyo(abierto)) return;
     setGuardando(true);
     const pac = pacientes.find(p => p.id === abierto.patient_id);
     const der = planDerivado(plan, txsDe(pac, plan));
-    // solo se toca dónde va cada tratamiento; importes y cuotas no se mueven
-    const { error } = await supabase.from("payment_plans").update({
-      colocacion: der.txConMes.map(t => ({ tx_id:t.id, nombre:t.nombre, importe:t.importe, mes:t.mes })),
-      n_meses: plan.nMeses,
-      updated_at: new Date().toISOString(),
-    }).eq("id", abierto.id);
+    const fila = {
+      ...filaDesdePlan(plan, { id: abierto.patient_id, name: pac?.name || abierto.patient_name,
+                               budget_no: pac?.budget_no || abierto.budget_no }, der),
+      // sin esto el upsert lo pondría a NULL y la propia RLS rechazaría la fila
+      creado_por: abierto.creado_por || null,
+    };
+    const { error } = await supabase.from("payment_plans").upsert([fila]);
+    if (error) {
+      setGuardando(false);
+      setMsg(error.code === "23505"
+        ? "Error: ya hay otro plan activo para este presupuesto."
+        : "Error: " + error.message);
+      return;
+    }
+
+    const { data: previas } = await supabase.from("payment_plan_cuotas").select("*").eq("plan_id", fila.id);
+    const numPagados = new Set((previas||[]).filter(c => c.payment_id).map(c => c.numero));
+    const impagas    = (previas||[]).filter(c => !c.payment_id).map(c => c.id);
+    if (impagas.length) await supabase.from("payment_plan_cuotas").delete().in("id", impagas);
+    const nuevas = cuotasDelPlan(fila, der.calc)
+      .filter(c => !numPagados.has(c.numero))
+      .map(c => ({ ...c, id: genId(), plan_id: fila.id, patient_id: fila.patient_id }));
+    if (nuevas.length) await supabase.from("payment_plan_cuotas").insert(nuevas);
+
     setGuardando(false);
-    setMsg(error ? "Error: " + error.message : "✓ Guardado");
-    if (!error) await recargarPlanes();
+    setMsg("✓ Guardado");
+    await recargarTodo();
+  };
+
+  const borrarPlan = async () => {
+    if (!abierto || !esSuyo(abierto)) return;
+    const pac = pacientes.find(p => p.id === abierto.patient_id);
+    if (!confirmarBorradoPlan(abierto, pac)) return;
+    setGuardando(true);
+    await supabase.from("payment_plan_cuotas").delete().eq("plan_id", abierto.id);
+    const { error } = await supabase.from("payment_plans").delete().eq("id", abierto.id);
+    setGuardando(false);
+    if (error) { setMsg("Error: " + error.message); return; }
+    setAbierto(null); setPlan(null); setMsg("");
+    await recargarTodo();
   };
 
   if (!listo) return (
@@ -5296,6 +5330,13 @@ function PortalPlanes() {
 
   // el dueño entra al portal con las mismas manos que el jefe
   const puedeMover = rol === "jefe" || rol === "dueno";
+  const emailSesion = (sesion.user?.email || "").toLowerCase();
+  // Con los planes que él mismo creó, el jefe manda igual que el dueño: los
+  // edita enteros y los borra. Con los del dueño no toca nada — y esto no es
+  // sólo cosmética, la RLS tampoco se lo permitiría, así que ofrecer el botón
+  // sería prometer un guardado que el servidor rechaza en silencio.
+  const esSuyo = (pl) => rol === "dueno"
+    || (pl && String(pl.creado_por || "").toLowerCase() === emailSesion);
   const hoy = today();
   const cola = avisosDelDia({ planes: plans, cuotas, pagos, hoy });
 
@@ -5425,19 +5466,28 @@ function PortalPlanes() {
                   {pac?.hc ? `HC ${pac.hc} · ` : ""}#{abierto.budget_no||"—"}
                 </span>
                 <div style={{flex:1}}/>
-                {puedeMover ? (
+                {esSuyo(abierto) ? (
                   <>
-                    <span style={{fontSize:12,color:"#888"}}>Puede mover los tratamientos entre meses</span>
-                    <button onClick={guardarColocacion} disabled={guardando}
+                    <button onClick={borrarPlan} disabled={guardando}
+                      style={{...s.btnSm, background:"#fff0f0", border:"1px solid #e74c3c88",
+                        color:"#e74c3c", padding:"7px 14px", opacity:guardando?0.6:1}}>
+                      Eliminar
+                    </button>
+                    <button onClick={guardarPlanCompleto} disabled={guardando}
                       style={{...s.btnGold,opacity:guardando?0.6:1}}>
                       {guardando ? "Guardando..." : "Guardar cambios"}
                     </button>
                   </>
-                ) : <span style={{fontSize:12,color:"#888"}}>Solo lectura</span>}
+                ) : (
+                  <span style={{fontSize:12,color:"#888"}}>
+                    Solo lectura · este plan lo hizo {abierto.creado_por || "la clínica"}
+                  </span>
+                )}
                 {msg && <span style={{fontSize:12.5,color:msg.startsWith("✓")?"#2ecc71":"#e74c3c"}}>{msg}</span>}
               </div>
+              {/* Con un plan suyo tiene el tablero entero, igual que el dueño */}
               <PlanDePagoBoard tratamientos={txsDe(pac, plan)} plan={plan} onPlanChange={setPlan}
-                cobros={cobros} sinControles soloLectura={!puedeMover}/>
+                cobros={cobros} sinControles={!esSuyo(abierto)} soloLectura={!esSuyo(abierto)}/>
             </>
           );
         })()}
