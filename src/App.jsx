@@ -3553,7 +3553,7 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange, cobros = null,
   const { txConMes, entrega, nCuotas, inicioQ, sugerida, cuota, calc,
           frag, linea, nMesesLinea, desembolsoTotal } = planDerivado(plan, tratamientos);
   const vencimientos = vencimientosPorMes(plan, nMesesLinea);
-  const esFilaTotal = (et) => et === ETIQUETAS_LINEA.total || et === "A cobrar en clínica";
+  const esFilaTotal = (et) => et === ETIQUETAS_LINEA.total;
 
   // ── Frakmenta: financiar la entrega ──
   const puedeFinanciar = financiable(entrega);
@@ -3801,10 +3801,12 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange, cobros = null,
                     const v = vencimientos.get(f.mes);
                     return v ? fmtDate(v).slice(0, 5) : "";
                   }), "#0e3b3e", 11, 700],
-                  // Lo de Frakmenta ya lo tiene la clínica: en cuanto hay
-                  // seguimiento se muestra como cobrado, no como pendiente.
+                  // El importe de Frakmenta se ve siempre, guardado o no: es
+                  // parte de lo que el paciente desembolsa ese mes. Que la
+                  // clínica ya lo tenga en caja se dice en la fila de clínica,
+                  // no borrando el número.
                   ...(frag ? [[ETIQUETAS_LINEA.frakmenta,
-                    linea.map(f => cobros ? (f.frakmenta > 0.005 ? "Pagado" : 0) : f.frakmenta),
+                    linea.map(f => f.frakmenta),
                     "#8e44ad", 12.5, 600]] : []),
                   // con el plan guardado, la fila de clínica muestra el cobro real
                   [ETIQUETAS_LINEA.clinica,
@@ -3818,18 +3820,11 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange, cobros = null,
                       if (e.estado === "vencido" && e.aPagar <= 0.005) return "Vencido";
                       return e.aPagar;
                     }), "#3498db", 12.5, 600],
-                  // En seguimiento el total es lo que hay que COBRARLE en clínica:
-                  // lo de Frakmenta ya está en caja. Al diseñar el plan sigue
-                  // siendo el desembolso del paciente, que es lo que se le enseña.
-                  [cobros ? "A cobrar en clínica" : ETIQUETAS_LINEA.total,
-                    linea.map(f => {
-                      if (!cobros) return f.total;
-                      const e = cobros.meses.find(m => m.mes === f.mes);
-                      if (!e) return 0;
-                      if (e.estado === "pagado") return "Pagado";
-                      if (e.estado === "vencido" && e.aPagar <= 0.005) return "Vencido";
-                      return e.aPagar;
-                    }), "#2c3250", 14, 800],
+                  // El total es siempre el desembolso del paciente ese mes
+                  // (Frakmenta + clínica), esté el plan guardado o no. Lo que
+                  // hay que cobrarle en mostrador ya lo dice la fila de clínica.
+                  [ETIQUETAS_LINEA.total,
+                    linea.map(f => f.total), "#2c3250", 14, 800],
                 ].map(([etiqueta, valores, color, size, weight]) => (
                   <tr key={etiqueta || "meses"}
                     style={{borderTop: esFilaTotal(etiqueta) ? "2px solid #e2e5ed" : "none"}}>
