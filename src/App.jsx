@@ -870,6 +870,28 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
     if (fromDb > 0) return fromDb;
     return parseInt(localStorage.getItem(`wa_${patient.id}_${key}`)||"0");
   };
+  // Ofertas todavía sin cerrar. Un borrador es una propuesta armada; lo que
+  // cambia todo es si salió o no de la clínica, así que se distingue "enviada
+  // por WhatsApp" de "armada y ahí parada". Si ya hay plan activo no se
+  // muestra: la oferta se cerró y lo que manda es el recuadro dorado.
+  const ofertaResumen = (() => {
+    if (planResumen) return null;
+    const borradores = plans.filter(x => x.patient_id === patient.id && x.estado === "borrador");
+    if (!borradores.length) return null;
+    const veces = borradores.map(pl => getWaCount(`propuesta_${pl.id}`));
+    const total = veces.reduce((a, b) => a + b, 0);
+    const pl = borradores[veces.findIndex(n => n > 0)] || borradores[0];
+    const texto = pl.modo === "cuotas"
+      ? `Entrega ${fmtEur(pl.entrega)} y ${pl.n_cuotas} cuotas de ${fmtEur(pl.importe_cuota)}`
+      : `Paga según se va haciendo${parseFloat(pl.entrega) > 0 ? ` · entrega ${fmtEur(pl.entrega)}` : ""}`;
+    const otras = borradores.length > 1 ? ` · ${borradores.length} alternativas armadas` : "";
+    return total > 0
+      ? { enviada: true, titulo: "OFERTA ENVIADA POR WHATSAPP", texto,
+          detalle: `Esperando respuesta · ${total === 1 ? "enviada una vez" : `enviada ${total} veces`}${otras}` }
+      : { enviada: false, titulo: "OFERTA EN BORRADOR", texto,
+          detalle: `Armada pero todavía sin enviar al paciente${otras}` };
+  })();
+
   const grandOffer = fmtEur(Math.round(grand * 0.85 * 100) / 100);
 
   const waLink = (msg) => waPhone ? `whatsapp://send?phone=${waPhone}&text=${encodeURIComponent(msg)}` : null;
@@ -982,6 +1004,23 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
             )}
           </div>
         )}
+        {/* Verde = ya se le mandó por WhatsApp y toca esperar respuesta.
+            Naranja = está armado y no ha salido de aquí, que es lo accionable. */}
+        {ofertaResumen && (() => {
+          const c = ofertaResumen.enviada
+            ? { fondo:"#eef8f1", borde:"#25a24455", barra:"#25a244", titulo:"#1c7a3e" }
+            : { fondo:"#fdf4e3", borde:"#e67e2255", barra:"#e67e22", titulo:"#b3600f" };
+          return (
+            <div style={{background:c.fondo,border:`1px solid ${c.borde}`,borderLeft:`3px solid ${c.barra}`,
+              borderRadius:7,padding:"6px 9px",marginBottom:2}}>
+              <div style={{fontSize:10,color:c.titulo,letterSpacing:1,fontWeight:700}}>
+                {ofertaResumen.titulo}
+              </div>
+              <div style={{fontSize:12.5,color:"#2c3250",fontWeight:600,lineHeight:1.35}}>{ofertaResumen.texto}</div>
+              <div style={{fontSize:11.5,color:"#777",marginTop:1}}>{ofertaResumen.detalle}</div>
+            </div>
+          );
+        })()}
         {historyEntries.length === 0
           ? <span style={{fontSize:12,color:"#ccc",fontStyle:"italic",marginTop:4}}>Sin historial</span>
           : historyEntries.map(e => (
