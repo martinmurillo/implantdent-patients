@@ -5301,14 +5301,23 @@ function PortalPlanes() {
   };
 
   const borrarPlan = async () => {
-    if (!abierto || !esSuyo(abierto)) return;
+    if (!abierto || !puedeBorrar(abierto)) return;
     const pac = pacientes.find(p => p.id === abierto.patient_id);
     if (!confirmarBorradoPlan(abierto, pac)) return;
     setGuardando(true);
-    await supabase.from("payment_plan_cuotas").delete().eq("plan_id", abierto.id);
-    const { error } = await supabase.from("payment_plans").delete().eq("id", abierto.id);
+    // Sólo el plan: las cuotas cuelgan con ON DELETE CASCADE. Borrarlas aparte
+    // y antes sería destruir el calendario aunque la RLS rechazase el plan.
+    // Y .select() para saberlo de verdad: una fila que la RLS no deja borrar
+    // vuelve sin error y con 0 filas, así que sin esto diríamos "borrado" de un
+    // plan que sigue ahí.
+    const { data, error } = await supabase.from("payment_plans")
+      .delete().eq("id", abierto.id).select("id");
     setGuardando(false);
     if (error) { setMsg("Error: " + error.message); return; }
+    if (!data || !data.length) {
+      setMsg("No se pudo eliminar: no tenés permiso sobre este plan.");
+      return;
+    }
     setAbierto(null); setPlan(null); setMsg("");
     await recargarTodo();
   };
@@ -5337,6 +5346,11 @@ function PortalPlanes() {
   // sería prometer un guardado que el servidor rechaza en silencio.
   const esSuyo = (pl) => rol === "dueno"
     || (pl && String(pl.creado_por || "").toLowerCase() === emailSesion);
+  // Eliminar sí que se corta en seco: el jefe borra sus borradores y nada más.
+  // Un plan activo tiene cobros colgando, y para retirarlo está el estado
+  // 'cancelado'. La RLS dice lo mismo; esto es sólo no ofrecer lo imposible.
+  const puedeBorrar = (pl) => esSuyo(pl)
+    && (rol === "dueno" || pl?.estado === "borrador");
   const hoy = today();
   const cola = avisosDelDia({ planes: plans, cuotas, pagos, hoy });
 
@@ -5468,11 +5482,18 @@ function PortalPlanes() {
                 <div style={{flex:1}}/>
                 {esSuyo(abierto) ? (
                   <>
-                    <button onClick={borrarPlan} disabled={guardando}
-                      style={{...s.btnSm, background:"#fff0f0", border:"1px solid #e74c3c88",
-                        color:"#e74c3c", padding:"7px 14px", opacity:guardando?0.6:1}}>
-                      Eliminar
-                    </button>
+                    {puedeBorrar(abierto) ? (
+                      <button onClick={borrarPlan} disabled={guardando}
+                        style={{...s.btnSm, background:"#fff0f0", border:"1px solid #e74c3c88",
+                          color:"#e74c3c", padding:"7px 14px", opacity:guardando?0.6:1}}>
+                        Eliminar
+                      </button>
+                    ) : (
+                      <span style={{fontSize:12,color:"#888"}}
+                        title="Los planes activos no se borran: pasalos a cancelado">
+                        Activo · para retirarlo, pasalo a "cancelado"
+                      </span>
+                    )}
                     <button onClick={guardarPlanCompleto} disabled={guardando}
                       style={{...s.btnGold,opacity:guardando?0.6:1}}>
                       {guardando ? "Guardando..." : "Guardar cambios"}
