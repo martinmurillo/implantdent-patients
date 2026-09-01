@@ -4915,7 +4915,7 @@ function SinAcceso({ email, sugerirPortal = false }) {
           </a>
         )}
         <div>
-          <button onClick={()=>supabase.auth.signOut()} style={s.btnGhost}>Cerrar sesión</button>
+          <button onClick={()=>supabase.auth.signOut({ scope: "local" })} style={s.btnGhost}>Cerrar sesión</button>
         </div>
       </div>
     </div>
@@ -5470,6 +5470,14 @@ function PortalPlanes() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Identidad estable de la sesión, para las dependencias de los efectos.
+  // onAuthStateChange entrega un objeto NUEVO en cada evento, y el token se
+  // refresca solo cada hora y al volver a la pestaña. Dependiendo del objeto,
+  // cada refresco volvía a pedir el rol, recargaba todos los datos y tiraba y
+  // recreaba el canal de tiempo real, con las peticiones anteriores aún en
+  // vuelo. El email no cambia mientras sea la misma persona.
+  const emailDeSesion = (sesion?.user?.email || "").toLowerCase();
+
   // RLS decide qué ve cada uno: activos y terminados para todos, además de sus
   // propios borradores. Recepción no ve ningún borrador.
   const recargarTodo = async () => {
@@ -5479,10 +5487,14 @@ function PortalPlanes() {
   };
 
   useEffect(() => {
-    if (!sesion) return;
+    if (!emailDeSesion) return;
     (async () => {
-      const email = (sesion.user?.email || "").toLowerCase();
-      const { data: u } = await supabase.from("plan_usuarios").select("rol,nombre").eq("email", email).maybeSingle();
+      const { data: u, error: errRol } = await supabase.from("plan_usuarios")
+        .select("rol,nombre").eq("email", emailDeSesion).maybeSingle();
+      // Un corte de red no es una falta de permiso. Confundirlos le planta a
+      // Hernán la pantalla de "no figurás entre los usuarios autorizados" por
+      // un segundo malo de wifi, que es exactamente lo que parece echarle.
+      if (errRol) { setRol("fallo_red"); return; }
       const r = u?.rol || "sin_acceso";
       setRol(r); setNombre(u?.nombre || "");
       if (r === "sin_acceso") return;
@@ -5492,17 +5504,17 @@ function PortalPlanes() {
       setPlans(d.planes); setCuotas(d.cuotas); setPagos(d.pagos);
       setPacientes(d.pacientes); setAvisados(d.avisados);
     })();
-  }, [sesion]);
+  }, [emailDeSesion]);
 
   // Cambios de cualquiera de los tres, sin tener que recargar la página
   useEffect(() => {
-    if (!sesion) return;
+    if (!emailDeSesion) return;
     return escucharCambiosDePlanes("portal", async () => {
       const d = await cargarDatosPortal();
       setPlans(d.planes); setCuotas(d.cuotas); setPagos(d.pagos);
       setPacientes(d.pacientes); setAvisados(d.avisados);
     });
-  }, [sesion]);
+  }, [emailDeSesion]);
 
   const txsDe = (pac, pl) => pac ? txsParaPlan(pac, {
     sinDescuento: pl.modo === "visita",
@@ -5582,6 +5594,25 @@ function PortalPlanes() {
       Comprobando acceso...
     </div>
   );
+  if (rol === "fallo_red") return (
+    <div style={{minHeight:"100vh",background:"#f0f2f7",display:"flex",alignItems:"center",
+      justifyContent:"center",fontFamily:"'DM Sans','Segoe UI',sans-serif",padding:20}}>
+      <div style={{background:"#fff",borderRadius:12,padding:"26px 28px",maxWidth:380,textAlign:"center"}}>
+        <div style={{fontSize:11,letterSpacing:2,fontWeight:700,color:"#b3600f",marginBottom:8}}>
+          SIN CONEXIÓN
+        </div>
+        <p style={{fontSize:14,lineHeight:1.5,color:"#555",margin:"0 0 18px"}}>
+          No se pudo comprobar tu acceso. No es que te falten permisos: no hubo
+          respuesta del servidor. Probá otra vez.
+        </p>
+        <button onClick={()=>window.location.reload()}
+          style={{background:"#c9a84c",color:"#fff",border:"none",borderRadius:8,
+            padding:"10px 20px",fontSize:14,fontWeight:600,cursor:"pointer"}}>
+          Reintentar
+        </button>
+      </div>
+    </div>
+  );
   if (rol === "sin_acceso") return <SinAcceso email={sesion.user?.email}/>;
 
   // el dueño entra al portal con las mismas manos que el jefe
@@ -5619,7 +5650,8 @@ function PortalPlanes() {
         <button onClick={()=>setCambiandoClave(true)} style={{...s.btnSm,padding:"5px 12px"}}>
           Contraseña
         </button>
-        <button onClick={()=>supabase.auth.signOut()} style={{...s.btnSm,padding:"5px 12px"}}>Salir</button>
+        <button onClick={()=>supabase.auth.signOut({ scope: "local" })}
+          style={{...s.btnSm,padding:"5px 12px"}}>Salir</button>
       </div>
       {cambiandoClave && (
         <CambiarContrasena email={sesion.user?.email} onCerrar={()=>setCambiandoClave(false)}/>
