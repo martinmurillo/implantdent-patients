@@ -1,5 +1,5 @@
 ﻿import { Component, useState, useEffect, useRef } from "react";
-import { supabase } from "./supabase";
+import { supabase, hashDeEntrada } from "./supabase";
 import { translateTreatment, setTranslationDict } from "./treatments";
 import { loadPdfJs } from "./pdfjs";
 import { calcPlan, cuotaSugerida, totalTratamientos, cuotasDelPlan,
@@ -115,6 +115,14 @@ function PinLock({ onUnlock }) {
 }
 
 // ─── LOGIN FORM ───────────────────────────────────────────────────────────────
+// Qué traía la URL al entrar. El enlace del correo vuelve con
+// "#access_token=...&type=recovery", o con "#error=...&error_description=..."
+// si ya caducó o alguien lo abrió antes (los antivirus de correo los visitan,
+// y el token es de un solo uso).
+const ENTRADA = new URLSearchParams(String(hashDeEntrada).replace(/^#/, ""));
+const VIENE_A_RECUPERAR = ENTRADA.get("type") === "recovery";
+const ERROR_DEL_ENLACE  = ENTRADA.get("error_description") || ENTRADA.get("error") || "";
+
 // Estilos que ahora comparten el login y las dos pantallas de recuperación.
 const campoAuth = {
   background:"#fff", border:"1px solid #dde4ef", borderRadius:10, color:"#2c3250",
@@ -152,6 +160,9 @@ function LoginForm({ onLogin }) {
   // "entrar" | "recuperar": la segunda sólo pide el email y manda el enlace
   const [modo,    setModo]    = useState("entrar");
   const [aviso,   setAviso]   = useState("");
+  // Si el enlace del correo llegó caducado o ya usado, decirlo aquí: si no, el
+  // usuario vuelve al login sin entender por qué no ha pasado nada.
+  const [enlaceRoto, setEnlaceRoto] = useState(ERROR_DEL_ENLACE);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -210,11 +221,16 @@ function LoginForm({ onLogin }) {
           placeholder="Email" style={campoAuth}/>
         <input ref={passRef} type="password" autoComplete="current-password"
           placeholder="Contraseña" style={{...campoAuth, marginBottom:16}}/>
+        {enlaceRoto && (
+          <div style={{color:"#b3600f",fontSize:12.5,marginBottom:12,lineHeight:1.4,textAlign:"left"}}>
+            El enlace del correo ya no vale ({enlaceRoto}). Pedí uno nuevo abajo.
+          </div>
+        )}
         {error && <div style={{color:"#e74c3c",fontSize:12,marginBottom:12}}>{error}</div>}
         <button type="submit" disabled={loading} style={botonAuth(loading)}>
           {loading ? "Entrando..." : "Entrar"}
         </button>
-        <button type="button" onClick={()=>{setModo("recuperar"); setError("");}}
+        <button type="button" onClick={()=>{setModo("recuperar"); setError(""); setEnlaceRoto("");}}
           style={enlaceAuth}>
           ¿Olvidaste tu contraseña?
         </button>
@@ -5736,10 +5752,12 @@ class Salvavidas extends Component {
 }
 
 export default function App() {
-  // Al volver del enlace del correo, supabase-js recoge el token de la URL y
-  // avisa con PASSWORD_RECOVERY. Se escucha aquí arriba y no dentro de cada
-  // vista porque el enlace puede aterrizar tanto en / como en /planes.
-  const [recuperando, setRecuperando] = useState(false);
+  // Se arranca ya en modo recuperación si la URL de entrada lo decía. El evento
+  // PASSWORD_RECOVERY por sí solo no sirve: se dispara mientras supabase-js
+  // limpia el hash, que es antes de que este efecto llegue a suscribirse, y la
+  // pantalla se quedaba igual que si el enlace no hiciera nada.
+  // Se deja el listener igualmente por si el token tarda en procesarse.
+  const [recuperando, setRecuperando] = useState(VIENE_A_RECUPERAR);
   useEffect(() => {
     const { data } = supabase.auth.onAuthStateChange((evento) => {
       if (evento === "PASSWORD_RECOVERY") setRecuperando(true);
