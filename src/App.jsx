@@ -3914,17 +3914,20 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange, cobros = null,
 
       {/* ── Resumen para el paciente ── */}
       <div style={{background:"#ffffff", color:"#1a1a1a", border:"2px solid #c9a84c", borderRadius:12, padding:"20px 22px", marginTop:14}}>
+        {/* Siempre "en clínica": el que lo lee —recepción o el propio paciente
+            con su copia— tiene que saber que esa cifra es lo que se cobra en el
+            mostrador, no lo que le cuesta el tratamiento. Y si la entrega va
+            financiada ni siquiera pasa por caja: la abona Frakmenta. */}
         <p style={{margin:0, fontSize:24, lineHeight:1.35, fontWeight:600}}>
-          {plan.modo === "cuotas"
-            ? <>Entrega de <b style={{fontSize:30, fontWeight:800}}>{eur0(entrega)}</b> y {nCuotas} cuotas de <b style={{fontSize:30, fontWeight:800}}>{eur2(cuota)}</b>.</>
-            : <>Empieza pagando <b style={{fontSize:30, fontWeight:800}}>{eur0(calc.porMes[0]||0)}</b> y después paga cada vez que viene.</>}
+          {plan.modo !== "cuotas"
+            ? <>En clínica empieza pagando <b style={{fontSize:30, fontWeight:800}}>{eur0(calc.porMes[0]||0)}</b> y después paga cada vez que viene.</>
+            : (!frag && entrega > 0.005)
+              ? <>En clínica paga: entrega de <b style={{fontSize:30, fontWeight:800}}>{eur0(entrega)}</b> y {nCuotas} cuotas de <b style={{fontSize:30, fontWeight:800}}>{eur2(cuota)}</b>.</>
+              : <>En clínica paga {nCuotas} cuotas de <b style={{fontSize:30, fontWeight:800}}>{eur2(cuota)}</b>.</>}
         </p>
-        {/* Este recuadro es el que se le enseña al paciente. Si la entrega va
-            financiada, decir sólo "entrega de 2.000 €" es falso: no la paga de
-            una, la paga en cuotas de Frakmenta y con comisión. */}
         {frag && (
           <p style={{margin:"10px 0 0", fontSize:19, lineHeight:1.4, color:"#5b3a86", fontWeight:600}}>
-            La entrega no se paga de una: va financiada con <b>Frakmenta</b> en {frag.plazo} cuotas
+            La entrega de <b>{eur0(entrega)}</b> no pasa por clínica: la financia <b>Frakmenta</b> en {frag.plazo} cuotas
             {frag.plazo > 1
               ? <> — la primera de <b>{eur2(frag.primera)}</b> y el resto de <b>{eur2(frag.base)}</b></>
               : <> de <b>{eur2(frag.primera)}</b></>}, comisión única <b>{eur2(frag.comision)}</b>.
