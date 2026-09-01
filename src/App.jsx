@@ -187,9 +187,17 @@ function LoginForm({ onLogin }) {
       redirectTo: window.location.origin + window.location.pathname,
     });
     setLoading(false);
-    // No se distingue si el email existe o no: decirlo sería confirmarle a
-    // cualquiera qué cuentas hay dadas de alta.
-    if (err) { setError("No se pudo enviar el correo. Probá de nuevo."); return; }
+    // Aquí sí se enseña el motivo real. No delata qué cuentas existen —para un
+    // email desconocido Supabase responde OK a propósito—, así que lo único que
+    // puede decir es que hay que esperar o que el correo no sale. Callarlo dejó
+    // a Martín mirando "probá de nuevo" sin saber que era un límite de envío.
+    if (err) {
+      const seg = /after (\d+) seconds?/i.exec(err.message || "");
+      setError(seg
+        ? `Hay que esperar ${seg[1]} segundos entre un correo y el siguiente.`
+        : `No salió el correo: ${err.message}`);
+      return;
+    }
     setAviso("Si ese email tiene cuenta, le llega un enlace para poner una contraseña nueva. Mirá también en spam.");
   };
 
