@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from "react";
+﻿import { Component, useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase";
 import { translateTreatment, setTranslationDict } from "./treatments";
 import { loadPdfJs } from "./pdfjs";
@@ -4944,7 +4944,7 @@ const cargarDatosPortal = async () => {
       .order("updated_at", { ascending: false }),
     supabase.from("payment_plan_cuotas").select("*").order("vence_el"),
     supabase.from("payments").select("*"),
-    supabase.from("patients").select("id,name,hc,budget_no,treatments,phone"),
+    supabase.from("patients").select("id,name,hc,budget_no,treatments,phone,appointments"),
     supabase.from("plan_avisos").select("*"),
   ]);
   return { planes: pl || [], cuotas: cu || [], pagos: pg || [], pacientes: pa || [], avisados: av || [] };
@@ -5597,8 +5597,54 @@ const esPortalPlanes = () =>
   typeof window !== "undefined" &&
   window.location.pathname.replace(/\/+$/, "") === "/planes";
 
+// Un error al pintar desmonta todo React y deja la pantalla en blanco, que es
+// lo peor que puede pasarle a alguien a media faena: no sabe si guardó, no ve
+// qué pasó y no tiene a dónde volver. Esto lo atrapa, dice qué fue y deja
+// recargar. El mensaje es feo a propósito: hay que poder copiarlo y mandarlo.
+class Salvavidas extends Component {
+  constructor(props) { super(props); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  componentDidCatch(err, info) {
+    // queda en la consola con la pila entera, que es lo que sirve para arreglarlo
+    console.error("Error de render:", err, info?.componentStack);
+  }
+  render() {
+    if (!this.state.err) return this.props.children;
+    return (
+      <div style={{minHeight:"100vh", background:"#f0f2f7", padding:"40px 24px",
+        fontFamily:"'DM Sans','Segoe UI',sans-serif", color:"#2c3250"}}>
+        <div style={{maxWidth:760, margin:"0 auto", background:"#fff", borderRadius:12,
+          padding:"26px 28px", border:"1px solid #e74c3c55"}}>
+          <div style={{fontSize:11, letterSpacing:2, fontWeight:700, color:"#e74c3c"}}>
+            ALGO SE ROMPIÓ
+          </div>
+          <h1 style={{fontSize:21, margin:"8px 0 10px"}}>La pantalla no se pudo pintar</h1>
+          <p style={{fontSize:14, lineHeight:1.5, color:"#555", margin:"0 0 14px"}}>
+            Lo último que hiciste no se ha guardado. Recargá y volvé a intentarlo.
+            Si se repite, copiá este texto y pasámelo:
+          </p>
+          <pre style={{background:"#f7f7f5", border:"1px solid #dde4ef", borderRadius:8,
+            padding:"12px 14px", fontSize:12, lineHeight:1.45, overflowX:"auto",
+            whiteSpace:"pre-wrap", wordBreak:"break-word", margin:"0 0 16px"}}>
+            {String(this.state.err?.stack || this.state.err)}
+          </pre>
+          <button onClick={()=>window.location.reload()}
+            style={{background:"#c9a84c", color:"#fff", border:"none", borderRadius:8,
+              padding:"10px 20px", fontSize:14, fontWeight:600, cursor:"pointer"}}>
+            Recargar
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
+
 export default function App() {
-  return esPortalPlanes() ? <PortalPlanes/> : <AppCompleta/>;
+  return (
+    <Salvavidas>
+      {esPortalPlanes() ? <PortalPlanes/> : <AppCompleta/>}
+    </Salvavidas>
+  );
 }
 
 function AppCompleta() {
