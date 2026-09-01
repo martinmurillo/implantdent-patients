@@ -109,7 +109,8 @@ function PinLock({ onUnlock }) {
           </button>
         </form>
       </div>
-      <style>{`@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}`}</style>
+      <style>{`@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
+        @keyframes titila{0%,100%{opacity:1}50%{opacity:.35}}`}</style>
     </div>
   );
 }
@@ -4167,10 +4168,67 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange, cobros = null,
   );
 }
 
+// Un color por estado. Lo comparten la lista del dueño y la del portal: si cada
+// una elige el suyo, un borrador parece activo en una de las dos.
+const COLOR_ESTADO = {
+  "atrasado":"#e74c3c", "al día":"#2ecc71", "terminado":"#3498db",
+  "borrador":"#8e44ad", "cancelado":"#7f8c8d",
+};
+
+// Un plan activo sin nº de presupuesto: pasa cuando lo arma el jefe desde el
+// portal, donde ese dato no se pide. En borrador no molesta; activo sí, porque
+// es la referencia con la que se busca el presupuesto en el sistema de la
+// clínica y sin ella el plan queda descolgado.
+const faltaPresupuesto = (plan) =>
+  plan.estado === "activo" && !String(plan.budget_no || "").trim();
+
+function FaltaNumeroPresupuesto({ plan, onGuardar }) {
+  const [abierto, setAbierto] = useState(false);
+  const [valor, setValor] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  const guardar = async () => {
+    const n = valor.trim();
+    if (!n) return;
+    setGuardando(true);
+    await onGuardar(plan, n);
+    setGuardando(false);
+    setAbierto(false);
+  };
+
+  if (!abierto) return (
+    <button onClick={()=>setAbierto(true)}
+      style={{marginTop:5, background:"#fbeae7", border:"1px solid #e74c3c88", borderRadius:6,
+        color:"#8c2d16", padding:"4px 10px", fontSize:11.5, fontWeight:700, cursor:"pointer",
+        animation:"titila 1.1s ease-in-out infinite"}}>
+      ⚠ Falta el nº de presupuesto — ponerlo
+    </button>
+  );
+
+  return (
+    <div style={{marginTop:5, display:"flex", gap:6, alignItems:"center", flexWrap:"wrap"}}>
+      <input value={valor} onChange={e=>setValor(e.target.value)} autoFocus
+        onKeyDown={e=>{ if (e.key === "Enter") guardar(); if (e.key === "Escape") setAbierto(false); }}
+        placeholder="Nº de presupuesto"
+        style={{...s.smInput, width:150, fontSize:12.5}}/>
+      <button onClick={guardar} disabled={guardando || !valor.trim()}
+        style={{...s.btnGold, padding:"5px 12px", fontSize:12,
+          opacity:(guardando || !valor.trim()) ? 0.5 : 1}}>
+        {guardando ? "..." : "Guardar"}
+      </button>
+      <button onClick={()=>setAbierto(false)}
+        style={{background:"none", border:"none", color:"#888", cursor:"pointer", fontSize:12}}>
+        cancelar
+      </button>
+    </div>
+  );
+}
+
 // ─── PendientesDePago ────────────────────────────────────────────────────────
 // Seguimiento de los planes ya acordados. No es la agenda ni los recordatorios
 // de visita: esto es un compromiso económico.
-function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobrar, waClicks = [], onWaClick = () => {} }) {
+function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobrar,
+                            onPonerPresupuesto = async () => {}, waClicks = [], onWaClick = () => {} }) {
   const [filtro, setFiltro] = useState("todos");
   const [busca,  setBusca]  = useState("");
   const [cobrando, setCobrando] = useState(null);
@@ -4222,8 +4280,7 @@ function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobra
       return va.localeCompare(vb);
     });
 
-  const COLOR = { "atrasado":"#e74c3c", "al día":"#2ecc71", "terminado":"#3498db",
-                  "borrador":"#8e44ad", "cancelado":"#7f8c8d" };
+  const COLOR = COLOR_ESTADO;
 
   const cobrar = async (plan, cuota) => {
     setCobrando(cuota.id);
@@ -4282,6 +4339,13 @@ function PendientesDePago({ plans, cuotas, pagos, patients, onAbrirPlan, onCobra
                   {resumen.estado}
                 </span>
               </div>
+              {/* Hernán no tiene el nº de presupuesto cuando arma el plan desde
+                  el portal. Si además lo activa, el plan entra en circulación
+                  sin la referencia con la que la clínica lo identifica, y eso
+                  hay que verlo desde lejos y poder arreglarlo aquí mismo. */}
+              {faltaPresupuesto(plan) && (
+                <FaltaNumeroPresupuesto plan={plan} onGuardar={onPonerPresupuesto}/>
+              )}
               <div style={{fontSize:12, color:"#888", marginTop:3}}>
                 #{plan.budget_no||"—"} · {plan.modo === "cuotas" ? `entrega + ${plan.n_cuotas} cuotas` : "paga por visita"}
                 {" · inicio "}{fmtDate(plan.fecha_inicio)}
@@ -4534,6 +4598,7 @@ const planParaPresupuesto = (patient, plans) => {
 };
 
 function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], waClicks = [], onWaClick = () => {},
+                       onPonerPresupuesto = async () => {},
                        onSavePlan, onDeletePlan, onCobrarCuota, presupuestoInicial = null }) {
   const [tab,    setTab]    = useState(presupuestoInicial ? "tablero" : "pendientes");
   const [selId,  setSelId]  = useState(presupuestoInicial);
@@ -4673,6 +4738,7 @@ function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], waClicks =
       {tab === "pendientes" && (
         <PendientesDePago plans={plans} cuotas={cuotas} pagos={pagos} patients={patients}
           onAbrirPlan={abrirPlan} onCobrar={onCobrarCuota}
+          onPonerPresupuesto={onPonerPresupuesto}
           waClicks={waClicks} onWaClick={onWaClick}/>
       )}
 
@@ -5704,7 +5770,13 @@ function PortalPlanes() {
           const pagosPac = pagosDesde(pagos.filter(pg => pg.patient_id === pl.patient_id), pl.fecha_inicio);
           const r  = resumenPlan({ plan: pl, cuotas: propias, pagos, pagosPaciente: pagosPac, hoy });
           const ec = estadoCobroMeses({ cuotas: propias, pagosPaciente: pagosPac, hoy });
-          const col = ec.todoPagado ? "#2ecc71" : r.estado === "atrasado" ? "#e74c3c" : "#3498db";
+          // El estado manda sobre el resto: un borrador se ve morado aunque
+          // sus cuotas estén al día, porque todavía no es un acuerdo cerrado.
+          const col = COLOR_ESTADO[r.estado]
+            || (ec.todoPagado ? "#2ecc71" : "#3498db");
+          const proxCita = (pac.appointments || [])
+            .filter(a => a.date && a.date >= hoy)
+            .sort((a, b) => a.date.localeCompare(b.date))[0] || null;
           return (
             <div key={pl.id} style={{...s.card, borderLeft:"4px solid "+col, display:"flex",
               justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap"}}>
@@ -5721,6 +5793,10 @@ function PortalPlanes() {
                   #{pl.budget_no||"—"} · {pl.modo==="cuotas" ? "entrega + "+pl.n_cuotas+" cuotas" : "paga por visita"}
                   {" · inicio "}{fmtDate(pl.fecha_inicio)}
                   {pl.creado_por && <> · <span style={{color:"#8e44ad",fontWeight:600}}>lo hizo {pl.creado_por}</span></>}
+                </div>
+                <div style={{fontSize:12, marginTop:3, fontWeight:600,
+                  color: proxCita ? "#3498db" : "#999"}}>
+                  {proxCita ? `🗓 cita ${fmtDate(proxCita.date)}` : "sin cita agendada"}
                 </div>
               </div>
               <div style={{display:"flex",gap:18,alignItems:"center",flexWrap:"wrap"}}>
@@ -6141,6 +6217,21 @@ function AppCompleta() {
       }
     }
     await fetchPlanCuotas();
+  };
+
+  // El nº de presupuesto se pone a mano cuando el plan lo armó el jefe desde
+  // el portal, donde ese dato no se le pide. Se escribe también en el paciente
+  // si está vacío: si no, la ficha y la hoja impresa lo seguirían sin mostrar.
+  const ponerPresupuesto = async (plan, numero) => {
+    await supabase.from("payment_plans")
+      .update({ budget_no: numero, updated_at: new Date().toISOString() })
+      .eq("id", plan.id);
+    const pac = patients.find(p => p.id === plan.patient_id);
+    if (pac && !String(pac.budget_no || "").trim()) {
+      await supabase.from("patients").update({ budget_no: numero }).eq("id", pac.id);
+      await fetchPatients();
+    }
+    await fetchPlans();
   };
 
   const deletePlan = async (planId) => {
@@ -6901,6 +6992,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
         {!dbLoading && view==="planes" && (
           <PlanesPanel key={planPara || "libre"} patients={allPatients} plans={plans} cuotas={planCuotas} pagos={payments}
             waClicks={waClicks} onWaClick={incWaClick}
+            onPonerPresupuesto={ponerPresupuesto}
             onSavePlan={savePlan} onDeletePlan={deletePlan} onCobrarCuota={cobrarCuota} presupuestoInicial={planPara}/>
         )}
 
