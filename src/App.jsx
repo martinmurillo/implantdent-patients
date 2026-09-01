@@ -115,11 +115,43 @@ function PinLock({ onUnlock }) {
 }
 
 // ─── LOGIN FORM ───────────────────────────────────────────────────────────────
+// Estilos que ahora comparten el login y las dos pantallas de recuperación.
+const campoAuth = {
+  background:"#fff", border:"1px solid #dde4ef", borderRadius:10, color:"#2c3250",
+  padding:"12px 16px", fontSize:15, width:"100%", outline:"none",
+  boxSizing:"border-box", marginBottom:10,
+};
+const botonAuth = (loading) => ({
+  background:"linear-gradient(135deg,#c9a84c,#a07830)", border:"none", borderRadius:8,
+  color:"#fff", padding:"12px 0", cursor:"pointer", fontSize:14, fontWeight:700,
+  width:"100%", opacity: loading ? 0.7 : 1,
+});
+const enlaceAuth = {
+  background:"none", border:"none", color:"#a07830", cursor:"pointer",
+  fontSize:12.5, marginTop:14, textDecoration:"underline", padding:0,
+};
+
+// Marco común: logo, título y el hueco para lo que toque.
+function MarcoAuth({ children }) {
+  return (
+    <div style={{minHeight:"100vh",background:"#f0f2f7",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
+      <div style={{background:"#f5f7fa",border:"1px solid #e2e5ed",borderRadius:16,padding:"48px 40px",textAlign:"center",width:320}}>
+        <div style={{fontWeight:900,fontSize:18,letterSpacing:4,color:"#c9a84c",marginBottom:6}}>IMPLANTDENT</div>
+        <div style={{fontSize:11,color:"#444",letterSpacing:2,marginBottom:36}}>GESTIÓN DE PACIENTES</div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function LoginForm({ onLogin }) {
   const emailRef = useRef(null);
   const passRef  = useRef(null);
   const [error,   setError]   = useState("");
   const [loading, setLoading] = useState(false);
+  // "entrar" | "recuperar": la segunda sólo pide el email y manda el enlace
+  const [modo,    setModo]    = useState("entrar");
+  const [aviso,   setAviso]   = useState("");
 
   const submit = async (e) => {
     e.preventDefault();
@@ -133,36 +165,100 @@ function LoginForm({ onLogin }) {
     onLogin();
   };
 
+  // Se vuelve a la MISMA ruta desde la que se pidió: recepción pide el enlace
+  // en /planes y tiene que aterrizar en /planes, no en la app del dueño.
+  const pedirEnlace = async (e) => {
+    e.preventDefault();
+    const email = emailRef.current.value.trim();
+    if (!email) { setError("Escribí tu email"); return; }
+    setError(""); setAviso(""); setLoading(true);
+    const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + window.location.pathname,
+    });
+    setLoading(false);
+    // No se distingue si el email existe o no: decirlo sería confirmarle a
+    // cualquiera qué cuentas hay dadas de alta.
+    if (err) { setError("No se pudo enviar el correo. Probá de nuevo."); return; }
+    setAviso("Si ese email tiene cuenta, le llega un enlace para poner una contraseña nueva. Mirá también en spam.");
+  };
+
+  if (modo === "recuperar") return (
+    <MarcoAuth>
+      <form onSubmit={pedirEnlace}>
+        <div style={{fontSize:13,color:"#555",marginBottom:14,lineHeight:1.45}}>
+          Poné tu email y te mandamos un enlace para cambiar la contraseña.
+        </div>
+        <input ref={emailRef} type="email" autoFocus autoComplete="email"
+          placeholder="Email" style={{...campoAuth, marginBottom:16}}/>
+        {error && <div style={{color:"#e74c3c",fontSize:12,marginBottom:12}}>{error}</div>}
+        {aviso && <div style={{color:"#1c7a3e",fontSize:12.5,marginBottom:12,lineHeight:1.4}}>{aviso}</div>}
+        <button type="submit" disabled={loading} style={botonAuth(loading)}>
+          {loading ? "Enviando..." : "Enviar enlace"}
+        </button>
+        <button type="button" onClick={()=>{setModo("entrar"); setError(""); setAviso("");}}
+          style={enlaceAuth}>
+          Volver
+        </button>
+      </form>
+    </MarcoAuth>
+  );
+
   return (
-    <div style={{minHeight:"100vh",background:"#f0f2f7",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
-      <div style={{background:"#f5f7fa",border:"1px solid #e2e5ed",borderRadius:16,padding:"48px 40px",textAlign:"center",width:320}}>
-        <div style={{fontWeight:900,fontSize:18,letterSpacing:4,color:"#c9a84c",marginBottom:6}}>IMPLANTDENT</div>
-        <div style={{fontSize:11,color:"#444",letterSpacing:2,marginBottom:36}}>GESTIÓN DE PACIENTES</div>
-        <form onSubmit={submit}>
-          <input
-            ref={emailRef} type="email" autoFocus autoComplete="email"
-            placeholder="Email"
-            style={{background:"#fff",border:"1px solid #dde4ef",borderRadius:10,color:"#2c3250",
-              padding:"12px 16px",fontSize:15,width:"100%",outline:"none",
-              boxSizing:"border-box",marginBottom:10}}
-          />
-          <input
-            ref={passRef} type="password" autoComplete="current-password"
-            placeholder="Contraseña"
-            style={{background:"#fff",border:"1px solid #dde4ef",borderRadius:10,color:"#2c3250",
-              padding:"12px 16px",fontSize:15,width:"100%",outline:"none",
-              boxSizing:"border-box",marginBottom:16}}
-          />
-          {error && <div style={{color:"#e74c3c",fontSize:12,marginBottom:12}}>{error}</div>}
-          <button type="submit" disabled={loading}
-            style={{background:"linear-gradient(135deg,#c9a84c,#a07830)",border:"none",borderRadius:8,
-              color:"#fff",padding:"12px 0",cursor:"pointer",fontSize:14,fontWeight:700,
-              width:"100%",opacity:loading?0.7:1}}>
-            {loading ? "Entrando..." : "Entrar"}
-          </button>
-        </form>
-      </div>
-    </div>
+    <MarcoAuth>
+      <form onSubmit={submit}>
+        <input ref={emailRef} type="email" autoFocus autoComplete="email"
+          placeholder="Email" style={campoAuth}/>
+        <input ref={passRef} type="password" autoComplete="current-password"
+          placeholder="Contraseña" style={{...campoAuth, marginBottom:16}}/>
+        {error && <div style={{color:"#e74c3c",fontSize:12,marginBottom:12}}>{error}</div>}
+        <button type="submit" disabled={loading} style={botonAuth(loading)}>
+          {loading ? "Entrando..." : "Entrar"}
+        </button>
+        <button type="button" onClick={()=>{setModo("recuperar"); setError("");}}
+          style={enlaceAuth}>
+          ¿Olvidaste tu contraseña?
+        </button>
+      </form>
+    </MarcoAuth>
+  );
+}
+
+// Pantalla a la que se llega desde el enlace del correo. Supabase ya dejó
+// puesta una sesión de recuperación, así que aquí sólo se escribe la nueva.
+function NuevaContrasena({ onListo }) {
+  const unoRef = useRef(null);
+  const dosRef = useRef(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const guardar = async (e) => {
+    e.preventDefault();
+    const uno = unoRef.current.value, dos = dosRef.current.value;
+    if (uno.length < 8) { setError("Al menos 8 caracteres"); return; }
+    if (uno !== dos)    { setError("Las dos no coinciden"); return; }
+    setError(""); setLoading(true);
+    const { error: err } = await supabase.auth.updateUser({ password: uno });
+    setLoading(false);
+    if (err) { setError(err.message); return; }
+    onListo();
+  };
+
+  return (
+    <MarcoAuth>
+      <form onSubmit={guardar}>
+        <div style={{fontSize:13,color:"#555",marginBottom:14,lineHeight:1.45}}>
+          Escribí tu contraseña nueva.
+        </div>
+        <input ref={unoRef} type="password" autoFocus autoComplete="new-password"
+          placeholder="Contraseña nueva" style={campoAuth}/>
+        <input ref={dosRef} type="password" autoComplete="new-password"
+          placeholder="Repetila" style={{...campoAuth, marginBottom:16}}/>
+        {error && <div style={{color:"#e74c3c",fontSize:12,marginBottom:12}}>{error}</div>}
+        <button type="submit" disabled={loading} style={botonAuth(loading)}>
+          {loading ? "Guardando..." : "Guardar y entrar"}
+        </button>
+      </form>
+    </MarcoAuth>
   );
 }
 
@@ -5640,9 +5736,22 @@ class Salvavidas extends Component {
 }
 
 export default function App() {
+  // Al volver del enlace del correo, supabase-js recoge el token de la URL y
+  // avisa con PASSWORD_RECOVERY. Se escucha aquí arriba y no dentro de cada
+  // vista porque el enlace puede aterrizar tanto en / como en /planes.
+  const [recuperando, setRecuperando] = useState(false);
+  useEffect(() => {
+    const { data } = supabase.auth.onAuthStateChange((evento) => {
+      if (evento === "PASSWORD_RECOVERY") setRecuperando(true);
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
+
   return (
     <Salvavidas>
-      {esPortalPlanes() ? <PortalPlanes/> : <AppCompleta/>}
+      {recuperando
+        ? <NuevaContrasena onListo={()=>{ setRecuperando(false); window.location.reload(); }}/>
+        : esPortalPlanes() ? <PortalPlanes/> : <AppCompleta/>}
     </Salvavidas>
   );
 }
