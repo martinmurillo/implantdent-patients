@@ -6470,6 +6470,10 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
       </div>
 
       {/* ── Agenda semanal modal ──────────────────────────────────────────── */}
+      {cambiandoClave && (
+        <CambiarContrasena email={sesionEmail} onCerrar={()=>setCambiandoClave(false)}/>
+      )}
+
       {showWeekly && (
         <div style={{position:"fixed",inset:0,zIndex:2000,background:"#1e2230",display:"flex",flexDirection:"column"}}>
           {/* Header */}
