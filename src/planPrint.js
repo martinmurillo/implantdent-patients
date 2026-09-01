@@ -138,10 +138,10 @@ export function htmlPlanImpreso({ plan, paciente, der, logoUrl = "" }) {
     const importe = calc.porMes[mes-1] || 0;
     let sub = "";
     if (plan.modo === "cuotas") {
-      // Financiada, la entrega no pasa por el mostrador: decirlo aquí evita que
-      // recepción cobre 2.000 € que ya abonó Frakmenta, y que el paciente crea
-      // que tiene que llevarlos el primer día.
-      if (mes === 1 && entrega > 0) sub = der.frag ? "Entrega · la abona Frakmenta" : "Entrega";
+      // Con la entrega financiada, decirlo aquí evita que recepción se la pida
+      // al paciente y que él crea que tiene que llevar el dinero el primer día.
+      // El importe llega igual a la clínica, pero lo ingresa la financiera.
+      if (mes === 1 && entrega > 0) sub = der.frag ? "Entrega · vía Frakmenta" : "Entrega";
       else if (mes >= inicioQ && mes < inicioQ + nCuotas) sub = `Cuota ${mes-inicioQ+1} de ${nCuotas}`;
     }
     // En la hoja del paciente solo se avisa de lo que falta. El "Cubierto" es
@@ -168,9 +168,10 @@ export function htmlPlanImpreso({ plan, paciente, der, logoUrl = "" }) {
   }).join("");
 
   // Siempre "en clínica": el que lo lee —recepción o el propio paciente con su
-  // copia— tiene que saber que esa cifra es lo que se cobra en el mostrador, no
-  // lo que le cuesta el tratamiento. Y si la entrega va financiada ni siquiera
-  // pasa por caja: la abona Frakmenta, así que sale del titular.
+  // copia— tiene que saber que esa cifra es lo que se le cobra al paciente en el
+  // mostrador, no lo que le cuesta el tratamiento. Si la entrega va financiada
+  // sale del titular, porque no se la pide el mostrador: la adelanta Frakmenta.
+  // Ojo, sí entra en la caja de la clínica, sólo que la ingresa la financiera.
   const conEntrega = !der.frag && entrega > 0.005;
   const titular = plan.modo !== "cuotas"
     ? `En clínica empieza pagando <b>${eur0(calc.porMes[0] || 0)}</b> y después paga cada vez que viene.`

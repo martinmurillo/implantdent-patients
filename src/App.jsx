@@ -3915,9 +3915,10 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange, cobros = null,
       {/* ── Resumen para el paciente ── */}
       <div style={{background:"#ffffff", color:"#1a1a1a", border:"2px solid #c9a84c", borderRadius:12, padding:"20px 22px", marginTop:14}}>
         {/* Siempre "en clínica": el que lo lee —recepción o el propio paciente
-            con su copia— tiene que saber que esa cifra es lo que se cobra en el
-            mostrador, no lo que le cuesta el tratamiento. Y si la entrega va
-            financiada ni siquiera pasa por caja: la abona Frakmenta. */}
+            con su copia— tiene que saber que esa cifra es lo que se le cobra al
+            paciente en el mostrador, no lo que le cuesta el tratamiento. Si la
+            entrega va financiada sale de aquí porque no se la pide el
+            mostrador; a la caja entra igual, pero la ingresa la financiera. */}
         <p style={{margin:0, fontSize:24, lineHeight:1.35, fontWeight:600}}>
           {plan.modo !== "cuotas"
             ? <>En clínica empieza pagando <b style={{fontSize:30, fontWeight:800}}>{eur0(calc.porMes[0]||0)}</b> y después paga cada vez que viene.</>
@@ -3927,7 +3928,7 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange, cobros = null,
         </p>
         {frag && (
           <p style={{margin:"10px 0 0", fontSize:19, lineHeight:1.4, color:"#5b3a86", fontWeight:600}}>
-            La entrega de <b>{eur0(entrega)}</b> no pasa por clínica: la financia <b>Frakmenta</b> en {frag.plazo} cuotas
+            La entrega de <b>{eur0(entrega)}</b> no se le pide en el mostrador: la adelanta <b>Frakmenta</b> a la clínica y el paciente se la devuelve en {frag.plazo} cuotas
             {frag.plazo > 1
               ? <> — la primera de <b>{eur2(frag.primera)}</b> y el resto de <b>{eur2(frag.base)}</b></>
               : <> de <b>{eur2(frag.primera)}</b></>}, comisión única <b>{eur2(frag.comision)}</b>.
