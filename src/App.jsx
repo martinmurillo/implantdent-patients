@@ -3919,6 +3919,17 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange, cobros = null,
             ? <>Entrega de <b style={{fontSize:30, fontWeight:800}}>{eur0(entrega)}</b> y {nCuotas} cuotas de <b style={{fontSize:30, fontWeight:800}}>{eur2(cuota)}</b>.</>
             : <>Empieza pagando <b style={{fontSize:30, fontWeight:800}}>{eur0(calc.porMes[0]||0)}</b> y después paga cada vez que viene.</>}
         </p>
+        {/* Este recuadro es el que se le enseña al paciente. Si la entrega va
+            financiada, decir sólo "entrega de 2.000 €" es falso: no la paga de
+            una, la paga en cuotas de Frakmenta y con comisión. */}
+        {frag && (
+          <p style={{margin:"10px 0 0", fontSize:19, lineHeight:1.4, color:"#5b3a86", fontWeight:600}}>
+            La entrega no se paga de una: va financiada con <b>Frakmenta</b> en {frag.plazo} cuotas
+            {frag.plazo > 1
+              ? <> — la primera de <b>{eur2(frag.primera)}</b> y el resto de <b>{eur2(frag.base)}</b></>
+              : <> de <b>{eur2(frag.primera)}</b></>}, comisión única <b>{eur2(frag.comision)}</b>.
+          </p>
+        )}
         <div style={{fontSize:16, color:"#333", marginTop:12, lineHeight:1.6}}>
           {meses.map(mes => {
             const nombres = [...new Set(txConMes.filter(t=>t.mes===mes).map(t=>t.nombre))];
@@ -3928,6 +3939,8 @@ function PlanDePagoBoard({ tratamientos, plan, onPlanChange, cobros = null,
           <div style={{color:"#666", marginTop:8, fontSize:15}}>
             Tratamiento {eur2(calc.totalTratamiento)}
             {plan.modo === "cuotas" && ` · Plan ${eur2(calc.totalPlan)}`}
+            {frag && <> · Comisión Frakmenta {eur2(frag.comision)} · <b style={{color:"#2c3250"}}>
+              Desembolso total {eur2(desembolsoTotal)}</b></>}
           </div>
         </div>
       </div>
@@ -4254,6 +4267,55 @@ const colocacionPara = (txs) =>
 
 // Un plan ya guardado se abre para editar; si no hay ninguno, se arranca uno
 // con los tratamientos colocados por defecto.
+// Fecha de inicio, primer cobro, estado y notas. Vive aparte porque lo usan
+// las dos pantallas —la del dueño y el portal del jefe—, y cuando estaba
+// escrito dentro de la del dueño el jefe no podía tocar ninguna fecha de sus
+// propios planes: el portal sólo montaba el tablero.
+function CamposDelPlan({ plan, setPlan, sinEstado = false }) {
+  return (
+    <>
+      <div style={{minWidth:150}}>
+        <label style={{...s.label, fontSize:10}}>Fecha de inicio</label>
+        <input type="date" value={plan.fechaInicio}
+          onChange={e=>setPlan({...plan, fechaInicio:e.target.value})} style={s.smInput}/>
+      </div>
+      <div style={{minWidth:150}}>
+        <label style={{...s.label, fontSize:10, display:"flex", justifyContent:"space-between", alignItems:"center"}}>
+          <span>1er cobro</span>
+          {plan.fechaPrimerCobro
+            ? <button onClick={()=>setPlan({...plan, fechaPrimerCobro:""})}
+                style={{background:"none",border:"none",color:"#c9a84c",cursor:"pointer",fontSize:10,padding:0,textDecoration:"underline"}}>
+                auto
+              </button>
+            : <span style={{color:"#777",fontSize:9,letterSpacing:0}}>al mes</span>}
+        </label>
+        <input type="date"
+          value={plan.fechaPrimerCobro || (plan.fechaInicio ? addMeses(plan.fechaInicio, Math.max(1, parseInt(plan.mesInicioCuotas)||1) - 1) : "")}
+          onChange={e=>setPlan({...plan, fechaPrimerCobro:e.target.value})}
+          style={{...s.smInput, background: plan.fechaPrimerCobro ? "#ffffff" : "#f0f4f8",
+                  color: plan.fechaPrimerCobro ? "#2c3250" : "#5a6b8c"}}/>
+      </div>
+      {!sinEstado && (
+        <div style={{minWidth:130}}>
+          <label style={{...s.label, fontSize:10}}>Estado</label>
+          <select value={plan.estado} onChange={e=>setPlan({...plan, estado:e.target.value})}
+            style={{...s.smInput, cursor:"pointer"}}>
+            <option value="activo">Activo</option>
+            <option value="borrador">Borrador</option>
+            <option value="terminado">Terminado</option>
+            <option value="cancelado">Cancelado</option>
+          </select>
+        </div>
+      )}
+      <div style={{flex:1, minWidth:200}}>
+        <label style={{...s.label, fontSize:10}}>Notas</label>
+        <input value={plan.notas} onChange={e=>setPlan({...plan, notas:e.target.value})}
+          placeholder="Financiera, condiciones acordadas..." style={s.smInput}/>
+      </div>
+    </>
+  );
+}
+
 // Borrar un plan activo es lo más caro que se puede hacer aquí: hay cobros
 // colgando de él y un paciente al que se le prometió un calendario. Por eso
 // pregunta tres veces y la última obliga a escribir, que es lo único que un
@@ -4475,42 +4537,7 @@ function PlanesPanel({ patients, plans = [], cuotas = [], pagos = [], waClicks =
         <>
           {/* ── Datos del plan y guardado ── */}
           <div className="np" style={{...s.card, display:"flex", gap:12, alignItems:"flex-end", flexWrap:"wrap", marginBottom:14}}>
-            <div style={{minWidth:150}}>
-              <label style={{...s.label, fontSize:10}}>Fecha de inicio</label>
-              <input type="date" value={plan.fechaInicio}
-                onChange={e=>setPlan({...plan, fechaInicio:e.target.value})} style={s.smInput}/>
-            </div>
-            <div style={{minWidth:150}}>
-              <label style={{...s.label, fontSize:10, display:"flex", justifyContent:"space-between", alignItems:"center"}}>
-                <span>1er cobro</span>
-                {plan.fechaPrimerCobro
-                  ? <button onClick={()=>setPlan({...plan, fechaPrimerCobro:""})}
-                      style={{background:"none",border:"none",color:"#c9a84c",cursor:"pointer",fontSize:10,padding:0,textDecoration:"underline"}}>
-                      auto
-                    </button>
-                  : <span style={{color:"#777",fontSize:9,letterSpacing:0}}>al mes</span>}
-              </label>
-              <input type="date"
-                value={plan.fechaPrimerCobro || (plan.fechaInicio ? addMeses(plan.fechaInicio, Math.max(1, parseInt(plan.mesInicioCuotas)||1) - 1) : "")}
-                onChange={e=>setPlan({...plan, fechaPrimerCobro:e.target.value})}
-                style={{...s.smInput, background: plan.fechaPrimerCobro ? "#ffffff" : "#f0f4f8",
-                        color: plan.fechaPrimerCobro ? "#2c3250" : "#5a6b8c"}}/>
-            </div>
-            <div style={{minWidth:130}}>
-              <label style={{...s.label, fontSize:10}}>Estado</label>
-              <select value={plan.estado} onChange={e=>setPlan({...plan, estado:e.target.value})}
-                style={{...s.smInput, cursor:"pointer"}}>
-                <option value="activo">Activo</option>
-                <option value="borrador">Borrador</option>
-                <option value="terminado">Terminado</option>
-                <option value="cancelado">Cancelado</option>
-              </select>
-            </div>
-            <div style={{flex:1, minWidth:200}}>
-              <label style={{...s.label, fontSize:10}}>Notas</label>
-              <input value={plan.notas} onChange={e=>setPlan({...plan, notas:e.target.value})}
-                placeholder="Financiera, condiciones acordadas..." style={s.smInput}/>
-            </div>
+            <CamposDelPlan plan={plan} setPlan={setPlan}/>
             <button onClick={()=>imprimirPlan({ plan, paciente, der: planDerivado(plan, tratamientos) })}
               style={{...s.btnDark, whiteSpace:"nowrap"}}>
               🖨 Imprimir
@@ -5115,6 +5142,14 @@ function NuevoPlanJefe({ email, onCancelar, onGuardado }) {
             <option value="borrador">Borrador</option>
             <option value="activo">Activo — acuerdo cerrado</option>
           </select>
+          <button onClick={()=>imprimirPlan({ plan,
+              paciente: sueltos
+                ? { name: sueltos.nombre, hc: sueltos.hc, budget_no: sueltos.budgetNo }
+                : elegido,
+              der: planDerivado(plan, tratamientos) })}
+            style={{...s.btnDark, whiteSpace:"nowrap"}}>
+            🖨 Imprimir
+          </button>
           <button onClick={guardar} disabled={guardando} style={{...s.btnGold, opacity:guardando?0.6:1}}>
             {guardando ? "Guardando..." : "Guardar plan"}
           </button>
@@ -5142,6 +5177,10 @@ function NuevoPlanJefe({ email, onCancelar, onGuardado }) {
           </div>
         )}
 
+        <div className="np" style={{...s.card, display:"flex", gap:12, alignItems:"flex-end",
+          flexWrap:"wrap", marginBottom:14}}>
+          <CamposDelPlan plan={plan} setPlan={setPlan} sinEstado/>
+        </div>
         <PlanDePagoBoard tratamientos={tratamientos} plan={plan} onPlanChange={setPlan}/>
       </>
     );
@@ -5498,6 +5537,11 @@ function PortalPlanes() {
                   {pac?.hc ? `HC ${pac.hc} · ` : ""}#{abierto.budget_no||"—"}
                 </span>
                 <div style={{flex:1}}/>
+                <button onClick={()=>imprimirPlan({ plan, paciente: pac,
+                    der: planDerivado(plan, txsDe(pac, plan)) })}
+                  style={{...s.btnDark, whiteSpace:"nowrap"}}>
+                  🖨 Imprimir
+                </button>
                 {esSuyo(abierto) ? (
                   <>
                     {puedeBorrar(abierto) ? (
@@ -5525,6 +5569,12 @@ function PortalPlanes() {
                 {msg && <span style={{fontSize:12.5,color:msg.startsWith("✓")?"#2ecc71":"#e74c3c"}}>{msg}</span>}
               </div>
               {/* Con un plan suyo tiene el tablero entero, igual que el dueño */}
+              {esSuyo(abierto) && (
+                <div className="np" style={{...s.card, display:"flex", gap:12, alignItems:"flex-end",
+                  flexWrap:"wrap", marginBottom:14}}>
+                  <CamposDelPlan plan={plan} setPlan={setPlan}/>
+                </div>
+              )}
               <PlanDePagoBoard tratamientos={txsDe(pac, plan)} plan={plan} onPlanChange={setPlan}
                 cobros={cobros} sinControles={!esSuyo(abierto)} soloLectura={!esSuyo(abierto)}/>
             </>
