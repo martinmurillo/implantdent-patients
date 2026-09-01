@@ -286,6 +286,71 @@ function NuevaContrasena({ onListo }) {
   );
 }
 
+// Cambiar la contraseña teniendo ya la sesión abierta, sin pasar por el correo.
+// Hace falta porque el correo de recuperación depende del servicio de Supabase,
+// que tiene un cupo de pocos envíos por hora: quien se queda fuera un viernes
+// por la tarde no vuelve a entrar hasta que el contador se reinicia.
+//
+// No pide la contraseña actual: Supabase no la exige si hay sesión válida. A
+// cambio, quien deje la app abierta en el mostrador deja también esto abierto,
+// así que el botón vive junto al de salir y no en un menú escondido.
+function CambiarContrasena({ email, onCerrar }) {
+  const unoRef = useRef(null);
+  const dosRef = useRef(null);
+  const [error, setError]     = useState("");
+  const [listo, setListo]     = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const guardar = async (e) => {
+    e.preventDefault();
+    const uno = unoRef.current.value, dos = dosRef.current.value;
+    if (uno.length < 8) { setError("Al menos 8 caracteres"); return; }
+    if (uno !== dos)    { setError("Las dos no coinciden"); return; }
+    setError(""); setLoading(true);
+    const { error: err } = await supabase.auth.updateUser({ password: uno });
+    setLoading(false);
+    if (err) { setError(err.message); return; }
+    setListo(true);
+  };
+
+  return (
+    <div onClick={onCerrar}
+      style={{position:"fixed", inset:0, background:"#0009", zIndex:9999,
+        display:"flex", alignItems:"center", justifyContent:"center", padding:20}}>
+      <div onClick={e=>e.stopPropagation()}
+        style={{background:"#fff", borderRadius:14, padding:"26px 28px", width:340,
+          fontFamily:"'DM Sans','Segoe UI',sans-serif", color:"#2c3250"}}>
+        <div style={{fontSize:11, letterSpacing:2, fontWeight:700, color:"#c9a84c", marginBottom:6}}>
+          CONTRASEÑA
+        </div>
+        {listo ? (
+          <>
+            <p style={{fontSize:14, lineHeight:1.5, margin:"0 0 18px"}}>
+              Cambiada. La próxima vez que entres, usá la nueva.
+            </p>
+            <button onClick={onCerrar} style={botonAuth(false)}>Cerrar</button>
+          </>
+        ) : (
+          <form onSubmit={guardar}>
+            <p style={{fontSize:13, color:"#555", lineHeight:1.45, margin:"0 0 14px"}}>
+              Para <b>{email}</b>. Mínimo 8 caracteres.
+            </p>
+            <input ref={unoRef} type="password" autoFocus autoComplete="new-password"
+              placeholder="Contraseña nueva" style={campoAuth}/>
+            <input ref={dosRef} type="password" autoComplete="new-password"
+              placeholder="Repetila" style={{...campoAuth, marginBottom:16}}/>
+            {error && <div style={{color:"#e74c3c",fontSize:12,marginBottom:12}}>{error}</div>}
+            <button type="submit" disabled={loading} style={botonAuth(loading)}>
+              {loading ? "Guardando..." : "Guardar"}
+            </button>
+            <button type="button" onClick={onCerrar} style={enlaceAuth}>Cancelar</button>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── UTILS ───────────────────────────────────────────────────────────────────
 const genId    = () => Math.random().toString(36).slice(2,10);
 const today    = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
@@ -5385,6 +5450,7 @@ function PortalPlanes() {
   const [listo,     setListo]     = useState(false);
   const [rol,       setRol]       = useState(null);   // null = todavía sin comprobar
   const [nombre,    setNombre]    = useState("");
+  const [cambiandoClave, setCambiandoClave] = useState(false);
   const [plans,     setPlans]     = useState([]);
   const [cuotas,    setCuotas]    = useState([]);
   const [pagos,     setPagos]     = useState([]);
@@ -5550,8 +5616,14 @@ function PortalPlanes() {
         <span style={{fontSize:12,color:"#888"}}>
           {sesion.user?.email} · <b style={{color:puedeMover?"#c9a84c":"#777"}}>{rol}</b>
         </span>
+        <button onClick={()=>setCambiandoClave(true)} style={{...s.btnSm,padding:"5px 12px"}}>
+          Contraseña
+        </button>
         <button onClick={()=>supabase.auth.signOut()} style={{...s.btnSm,padding:"5px 12px"}}>Salir</button>
       </div>
+      {cambiandoClave && (
+        <CambiarContrasena email={sesion.user?.email} onCerrar={()=>setCambiandoClave(false)}/>
+      )}
 
       <div style={{padding:"24px 28px"}}>
         {!nuevo && !abierto && (
@@ -5784,6 +5856,7 @@ export default function App() {
 
 function AppCompleta() {
 
+  const [cambiandoClave, setCambiandoClave] = useState(false);
   const [unlocked,       setUnlocked]       = useState(false);
   const [hasSession,     setHasSession]     = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
@@ -6298,6 +6371,12 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
         <NavBtn id="clinica"       label="Clínica"/>
         <NavBtn id="stats"     label="Estadísticas" badge={0}/>
 
+        {/* ── Contraseña ────────────────────────────────────────────── */}
+        <button onClick={()=>setCambiandoClave(true)} title="Cambiar mi contraseña"
+          style={{background:"none",border:"none",cursor:"pointer",fontSize:18,lineHeight:1,padding:"4px 6px",color:"#444"}}>
+          🔑
+        </button>
+
         {/* ── Agenda semanal ────────────────────────────────────────── */}
         <button onClick={()=>setShowWeekly(true)}
           style={{background:"none",border:"none",cursor:"pointer",fontSize:20,lineHeight:1,padding:"4px 6px",color:"#444"}}>
@@ -6391,6 +6470,10 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
       </div>
 
       {/* ── Agenda semanal modal ──────────────────────────────────────────── */}
+      {cambiandoClave && (
+        <CambiarContrasena email={sesionEmail} onCerrar={()=>setCambiandoClave(false)}/>
+      )}
+
       {showWeekly && (
         <div style={{position:"fixed",inset:0,zIndex:2000,background:"#1e2230",display:"flex",flexDirection:"column"}}>
           {/* Header */}
