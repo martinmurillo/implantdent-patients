@@ -1,0 +1,116 @@
+{
+  "_estado": "BORRADOR_OCR",
+  "_aviso": "Generado automáticamente por OCR. Cotejar contra originales/PROTESISIMPLANTOSOPORTADA_1_p1.jpg antes de usar.",
+  "codigo": "PROTESISIMPLANTOSOPORTADA",
+  "titulo": "Documento de consentimiento informado para : protesis fija implantosoportada",
+  "version": 1,
+  "idioma": "es",
+  "pide_piezas": true,
+  "profesional_por_defecto": null,
+  "composicion": [
+    {
+      "ref": "preambulo"
+    },
+    {
+      "ref": "identificacion"
+    },
+    {
+      "ref": "representante"
+    },
+    {
+      "ref": "diagnostico_plan"
+    },
+    {
+      "nodos": [
+        {
+          "tipo": "parrafo",
+          "texto": "Los procedimientos propios de la prótesis fija implantosoportada van dirigidos a la sustitución de los dientes perdidos para así reparar la pérdida o disminución de las funciones masticadora y fonatoria, y limitar el defecto estético, mediante aparatología que el paciente no puede retirar por sus propios medios. Este tipo de prótesis va sujeta sobre implantes y en el momento de su colocación han de estar ya osteointegrados. Es evidente que la función esperable de una prótesis nunca será la misma que la que proporcionaron los dientes naturales. La prótesis fija implantosoportada es en la que la estructura protésica puede ir atornillada o cementada sobre unos vástagos (pilares) atornillados, a su vez, a los implantes. Si se trata de prótesis fijas implantosoportadas cementadas, el cemento, generalmente de carácter temporal (para permitir el desmontaje de la prótesis, en caso de aparecer algún tipo de patología periimplantaria, está llamado a experimentar degradación con el paso de un tiempo no excesivo y producir despegamiento de la prótesis, salvo cuando se emplean cementos definitivos, que pueden imposibilitar el levantamiento de la prótesis sin deteriorarla o tener que destruirla. Deberá consultar inmediatamente tan pronto como perciba movimiento en la misma, a fin de proceder a su recementado. Una variante de ésta es la llamada prótesis híbrida que, siendo fija, recuerda a la removible por la presencia de una falsa encía que permite restaurar con un símil de encía los tejidos óseos perdidos por el edentulismo."
+        },
+        {
+          "tipo": "titulo",
+          "nivel": 2,
+          "texto": "Alternativas terapéuticas"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Las alternativas terapéuticas a los tratamientos de prótesis fija sobre implantes pueden ser de distinto tipo según las características del paciente: prótesis removibles, prótesis fijas dentosoportadas (que implican el tallado o \"rebaje\" de los dientes pilares, etc). En este caso concreto las alternativas terapéuticas son:"
+        },
+        {
+          "tipo": "titulo",
+          "nivel": 2,
+          "texto": "Limitaciones y riesgos"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "EV/la paciente ha sido informado/a y conoce los riesgos e inconvenientes estadísticamente frecuentes que puede comportar este tratamiento:"
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "Problemas de adaptación a la prótesis. Una prótesis fija no deja de ser un cuerpo extraño que se instala en la boca intentando sustituir las funciones dentarias y por lo tanto requerirá un tiempo de adaptación que variará según la situación del paciente y el tipo de prótesis. Requerirá adaptación para la correcta masticación, posibles mordeduras, e hipersalivación en algunos individuos. Estos inconvenientes suelen pasar, pero en algunos pacientes persisten en un grado variable",
+            "Riesgo de no responder a las expectativas estéticas de los pacientes. Es preciso tener claro que estas prótesis, por sus materiales y sistemas de retención nunca podrán igualar la estética de los: dientes naturales. Este tipo de prótesis precisan, además, espacios para asegurar la posibilidad de una correcta higiene alrededor de los implantes, espacios que pueden afectar a la estética a nivel gingival dejando \"espacios oscuros\" que podrían ser visibles en algunas circunstancias"
+          ]
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Las prótesis implantosoportadas llamadas prótesis híbridas plantean mayores dificultades para"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "conseguir una buena higiene, que, de no realizarse concienzudamente, puede causar halitosis y"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "poner en peligro la duración de los implantes."
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Además la anchura dentaria vendrá determinada por el diámetro del implante que se haya podido"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "utilizar y el ángulo de éste."
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Es importante destacar que la pérdida de hueso (reabsorción) que se produce después de la E pérdida del diente propio no se recupera cuando se colocan los implantes y la prótesis fija implantosoportada. El hundimiento que a veces se aprecia en el labio superior, en la zona canina"
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "en otras localizaciones debido a la pérdida de hueso, no se solucionará completamente de esta",
+            "Riesgo de pequeñas zonas de inflamación en la encía alrededor de las coronas. La prótesis es un cuerpo extraño y hay que extremar la higiene en toda la zona, en especial si por motivos estéticos la corona se sitúa parcialmente subgingival",
+            "Riesgo de que se introduzcan restos de alimentos bajo la prótesis o en los espacios vacíos que debe respetar",
+            "Riesgo de fractura de los materiales o despegamiento o aflojamiento de los sistemas de retención de la prótesis con el paso del tiempo. No hay que olvidar que las prótesis dentarias soportan grandes fuerzas masticatorias, y que esto, irremediablemente, afectará a los materiales y requerirá su sustitución",
+            "Riesgo de que el paciente manifieste o desarrolle algún tipo de intolerancia o alergia a los materiales de los que está construida la prótesis. Esta circunstancia es muy rara, difícilmente previsible, y de difícil solución salvo la sustitución de la prótesis"
+          ]
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Asimismo el St/STa ……… cmreereenceee eee eee eee eeeeees=..POL SUS ESPeciales condiciones personales ( ……… <.--.<i.-ecicai o e e e N É I ee s) PUEdE Presentar riesgos añadidos consistentes en: El paciente también ha sido informado de que las prótesis fijas implantosoportadas, debido a las fuerzas que soportan y al paso del tiempo, sufrirán deterioros (fisuras, roturas, despegamientos, etc) que harán necesario su renovación periódica. Igualmente ha sido informado de que la propia prótesis facilita la acumulación de placa bacteriana, hecho que puede dañar las encías, y que deberá ser eliminada mediante una detenida higiene de la prótesis y de los dientes remanentes después de cada comida. Para prevenir estas circunstancias se le informa que debe seguir las instrucciones dadas por su dentista y a someterse a revisiones periódicas, en ningún caso espaciadas más seis meses, y siempre que tenga cualquier tipo de molestia o duda sobre el tratamiento. Estas revisiones pueden implicar la necesidad de desmontar la prótesis para su completa higiene y reajuste."
+        }
+      ]
+    },
+    {
+      "ref": "riesgos_personalizados"
+    },
+    {
+      "ref": "contraindicaciones"
+    },
+    {
+      "ref": "declaracion"
+    },
+    {
+      "ref": "revocacion"
+    },
+    {
+      "ref": "proteccion_datos"
+    },
+    {
+      "ref": "lugar_fecha"
+    },
+    {
+      "ref": "firmas_paciente"
+    }
+  ]
+}

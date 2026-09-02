@@ -1,0 +1,117 @@
+{
+  "_estado": "BORRADOR_OCR",
+  "_aviso": "Generado automáticamente por OCR. Cotejar contra originales/ORTODONCIA_1_p1.jpg antes de usar.",
+  "codigo": "ORTODONCIA",
+  "titulo": "Documento de consentimiento informado para ortodoncia",
+  "version": 1,
+  "idioma": "es",
+  "pide_piezas": true,
+  "profesional_por_defecto": null,
+  "composicion": [
+    {
+      "ref": "preambulo"
+    },
+    {
+      "ref": "identificacion"
+    },
+    {
+      "ref": "representante"
+    },
+    {
+      "ref": "diagnostico_plan"
+    },
+    {
+      "nodos": [
+        {
+          "tipo": "parrafo",
+          "texto": "y Ortopedia Dentofacial"
+        },
+        {
+          "tipo": "titulo",
+          "nivel": 2,
+          "texto": "Documento de consentimiento informado para"
+        },
+        {
+          "tipo": "titulo",
+          "nivel": 2,
+          "texto": "Ortodoncia propuesto por la sociedad española"
+        },
+        {
+          "tipo": "titulo",
+          "nivel": 2,
+          "texto": "De ortodoncia"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "En cumplimiento de la Ley 41/2002, básica reguladora de la autonomía del paciente y de derechos y obligaciones en materia de información y documentación clínica, se le presenta para su firma el siguiente documento: 1D DD )1 UN D)| UNO como paciente (en caso de menores o incapacitados consignar el nombre y DNI del padre, madre 0 tutor ……… —..—.. nRe ), DE sido miormado'a por el DeDIS === — — aa o E aE col P rnnnnniiee dErnnnrnnnnnnneee... SODITE los procedimientos clínicos de ortodoncia, que constan en el plan de tratamiento que previamente he aceptado. Los procedimientos propios de la ortodoncia van dirigidos al tratamiento de anomalías en la colocación dentaria o en el desarrollo óseo que pueden producir alteraciones en la función masticatoria y en la estética, principalmente. El propósito principal de la ortodoncia es mejorar la salud bucal al conseguir un alineamiento correcto de los dientes así como una relación intermaxilar adecuada con una oclusión normal. Los tratamientos de ortodoncia también pueden formar parte de tratamientos más complejos y asociarse a tratamientos periodontales o de prótesis dental. En ocasiones la ortodoncia se realiza como preparación de las arcadas para tratamientos de cirugía ortognática (que realizará bajo su responsabilidad el cirujano máxilofacial).La ortodoncia incluye muchos posibles procedimientos. Éstos se podrían clasificar, de forma muy básica, en procedimientos de aparatología fija (vestibular o lingual), aparatología removible, aparatos ortopédicos bucofaciales, y todas sus posibles combinaciones. Todos los aparatos pero en especial los removibles requieren una adecuada colaboración en su uso y cuidados para obtener el resultado previsto. Si el paciente no lo usa el tiempo prescrito, el resultado y la duración no serán los previstos. Este procedimiento está indicado para el problema que tiene el/ la paciente, consistente"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Se han sopesado y descartado por distintos motivos de los que ha sido informado/a otros procedimientos terapéuticos alternativos COMO ……… e2e00000 000"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "El/la paciente ha sido informado/a y conoce los riesgos que puede comportar este tratamiento:"
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "Riesgo de sensibilidad dentaria debido a las fuerzas ejercidas sobre los dientes o maxilares",
+            "Riesgo de que se suelten partes de la aparatología fija (brackets, bandas, arcos, etc.) debido a las fuerzas masticatorias. Ante esta situación hay que consultar con el profesional",
+            "Riesgo de ingestión, o incluso aspiración, de los materiales empleados en ortodoncia fija (brackets, etc.) que se hubiesen podido despegar completamente",
+            "Riesgo de pequeñas molestias dolorosas de los dientes y la irritación de encías, labios, mejillas y lengua (llagas). Estas molestias suelen ser iniciales y remiten espontáneamente en unos días",
+            "Riesgo de alergia a los materiales empleados que podría provocar su retirada y un eventual cambio en el plan de tratamiento",
+            "Riesgo de que una deficiente higiene facilite la aparición de manchas blancas permanentes (descalcificaciones), caries dental o gingivitis (encías inflamadas)"
+          ]
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Se me ha explicado con toda claridad que durante el tratamiento debo de extremar las medidas higiénicas y evitar la ingesta frecuente de productos muy azucarados."
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "En caso de tratamientos ortodóncicos con finalidad principalmente estética existirá siempre el riesgo de no cumplir con las expectativas del paciente por motivos dificilmente evitables: imprevisibilidad del crecimiento bucofacial, etc",
+            "Riesgo de que el desarrollo imprevisible de la erupción dentaria, el crecimiento de los maxilares o de respuesta de dientes o hueso a las fuerzas ortodóncicas obliguen a cambiar el plan de tratamiento, requiriendo en ocasiones extracciones de dientes definitivos para conseguir espacio y el alargamiento del tiempo de tratamiento",
+            "Algunos pacientes son mas susceptibles a que se produzca la reabsorción",
+            "acortamiento) de la raíz de uno o varios dientes sometidos a fuerzas ortodóncicas. Este fenómeno es infrecuente, de etiología desconocida pero imprevisible. Habitualmente esto no tiene consecuencias apreciables, pero en ocasiones puede afectar a la longevidad del diente e implicaría alterar el plan de tratamiento",
+            "Riesgo de molestias o dolor en la articulación témporo-mandibular debido a la modificación del patrón oclusal necesario para el correcto alineamiento dental"
+          ]
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Estos problemas pueden ocurrir con o sin tratamiento de ortodoncia y en general son debidos a factores previos predisponentes (hiperlaxitud ligamentosa, traumatismos previos, artrosis, artritis, bruxismo, stress etc.) y también a un fenómeno de maduración esquelética."
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "Riesgo de retracciones de la encía, no previsibles, debidas al efecto de los movimientos dentarios. También pueden aparecer hipertrofiadas como consecuencia del acumulo de placa bacteriana",
+            "Los dientes incluidos tienen un tratamiento mas complejo y sus resultados no se pueden asegurar. Existe la posibilidad que el diente incluido dañe la raíz de los dientes vecinos hasta en ocasiones, provocar su pérdida. En ocasiones el tratamiento falla por anquilosis dental que es imposible diagnosticar previo al tratamiento y que conllevaría la necesidad de extraerlo y reponerlo y estas actuaciones corresponderían a su dentista",
+            "Riesgo de que se produzcan modificaciones en los resultados conseguidos a la conclusión del tratamiento por factores de desarrollo o erupción dentaria, o por modificaciones en el hueso de soporte dental. Estos factores son dificilmente predecibles pero pueden ser paliados siguiendo las indicaciones dadas por el profesional respecto a la utilización de retenedores y a las revisiones una vez terminado el tratamiento"
+          ]
+        }
+      ]
+    },
+    {
+      "ref": "riesgos_personalizados"
+    },
+    {
+      "ref": "contraindicaciones"
+    },
+    {
+      "ref": "declaracion"
+    },
+    {
+      "ref": "revocacion"
+    },
+    {
+      "ref": "proteccion_datos"
+    },
+    {
+      "ref": "lugar_fecha"
+    },
+    {
+      "ref": "firmas_paciente"
+    }
+  ]
+}

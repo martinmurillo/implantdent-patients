@@ -1,0 +1,101 @@
+{
+  "_estado": "BORRADOR_OCR",
+  "_aviso": "Generado automáticamente por OCR. Cotejar contra originales/PROTESISDENTOSOPORTADA_1_p1.jpg antes de usar.",
+  "codigo": "PROTESISDENTOSOPORTADA",
+  "titulo": "Documento de consentimiento informado para prótesis fija dentosoportada",
+  "version": 1,
+  "idioma": "es",
+  "pide_piezas": true,
+  "profesional_por_defecto": null,
+  "composicion": [
+    {
+      "ref": "preambulo"
+    },
+    {
+      "ref": "identificacion"
+    },
+    {
+      "ref": "representante"
+    },
+    {
+      "ref": "diagnostico_plan"
+    },
+    {
+      "nodos": [
+        {
+          "tipo": "parrafo",
+          "texto": "penenenenerenenerenererereveses. ME ha diagnosticado:"
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "Patología destructiva dentaria de ……… e.0e0e000e0i 0e DeD DD e e",
+            "Edemtulismo en: ………  A AE E E n"
+          ]
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "| Coronas =a AA D5 RA A",
+            "Canillaneos.=au-7d aaa N A E E",
+            "Rehabilitación protésica mediante puentes dentosoportados con pilares ………  y pónticos ………"
+          ]
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Los procedimientos propios de la prótesis fija dentosoportada van dirigidos a la sustitución de los dientes perdidos mediante aparatología que el paciente no puede retirar por sus propios medios. Aunque se intenta conservar al máximo las estructuras dentarias, este tipo de prótesis implica la necesidad de tallar (rebajar) los dientes pilares. Este hecho, a su vez, implica en ocasiones la necesidad de realizar el tratamiento endodóncico (desvitalizar) del diente tallado. La rehabilitación protésica fija tiene como finalidad reponer los dientes ausentes para así reparar la pérdida o disminución de las funciones masticadora y fonatoria, y limitar el defecto estético. Es evidente que la función esperable de una prótesis nunca será la misma que la que proporcionaron los dientes naturales. Las altemativas terapéuticas a los tratamientos de prótesis fija dentosoportada pueden ser de distinto tipo según las características del paciente: prótesis removibles, prótesis fijas implantosoportadas, etc). En este caso concreto la altérnativas terapéuticas:Son: ……… esuecsres re eoó r scaacor eee ceee ElVla paciente ha sido informado/a y conoce los riesgos e inconvenientes estadísticamente frecuentes que puede comportar este tratamiento:"
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "Riesgos propios de la inyección de anestesia local: posibles hipersensibilidades al anestésico dificilmente previsibles, anestesia prolongada, daños locales por la punción, excepcionalmente dolores neuropáticos, etc",
+            "Problemas de adaptación a la prótesis. Una prótesis fija no deja de ser un cuerpo extraño que se instala en la boca intentando sustituir las funciones dentarias y por lo tanto requerirá un tiempo de adaptación que variará según la situación del paciente y el tipo de prótesis. Requerirá adaptación para la correcta masticación, posibles mordeduras, e hipersalivación en algunos individuos. Estos inconvenientes suelen pasar, pero en algunos pacientes persisten en un grado variable",
+            "Riesgo de no responder a las expectativas estéticas de los pacientes. Es preciso tener claro que estas prótesis, por sus materiales y sistemas de retención nunca podrán igualar la estética de los dientes naturales",
+            "Riesgo de pequeñas zonas de inflamación en la encía de los dientes que soportan la prótesis. La prótesis es un cuerpo extraño y hay que extremar la higiene en toda la zona",
+            "Riesgo de que se introduzcan restos de alimentos bajo los pónticos (pieza que sustituye al diente ausente) de este tipo de prótesis",
+            "Riesgo de que los dientes tallados puedan dar hipersensibilidad, y en ocasiones dolor e infección por daños en la pulpa dentaria (vulgarmente, nervio del diente). Estos daños son propios del tallado y pueden darse inmediatamente después del procedimiento o muy diferido en el tiempo. En caso de producirse se precisaría la endodoncia (desvitalización del diente afectado)",
+            "Riesgo de experimentar sensibilidad exagerada (hiperestesia) durante el periodo de fabricación de las prótesis fijas dentosoportadas (en el que los dientes tallados estarán protegidos con prótesis provisionales), con determinados estímulos, como los cambios de temperatura, dulces, ácidos, fríos, etc., debido a inevitables imperfecciones en el ajuste de dichos provisionales",
+            "Riesgo de que los dientes tallados puedan desarrollar caries en la Zona de terminación de la corona protésica"
+          ]
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Este proceso es evitable si vigilamos la zona en las revisiones periódicas."
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "Riesgo de fractura de los materiales o despegamiento de la prótesis con el paso del tiempo. No hay que olvidar que las prótesis dentarias soportan grandes fuerzas masticatorias, y que esto, irremediablemente, afectará a los materiales y requerirá su sustitución",
+            "Riesgo de que el paciente manifieste o desarrolle algún tipo de intolerancia o alergia a los materiales de los que está construida la prótesis. Esta circunstancia es muy rara, difícilmente previsible, y de difícil solución salvo el cambio de la prótesis",
+            "Siel procedimiento protésico empleado consiste en carillas de porcelana, es preciso señalar el riesgo de que no respondan completamente a las expectativas estéticas de los pacientes. Existe además un riesgo mayor de fracturas y despegamientos de este tipo de prótesis"
+          ]
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Auinismo el SISIN — ua — ee e rr en ir eo eee ad egLensrer ae teepoticonónictas tererer ael eee toee a DONSUS OSDOCIAJES condiciones personales (-...:::::...mes10a be ii aa ó ss re eee eoe i) PUBE PrEsentar riesgos añadidos consistentes en: El paciente también ha sido informado de que las prótesis fijas dentosoportadas, debido a las fuerzas que soportan y al paso del tiempo, sufrirán deterioros (fisuras, roturas despegamientos, etc) que harán necesario su renovación periódica. Igualmente ha sido informado de que la propia corona protésica facilita la acumulación de placa bacteriana, hecho que puede dañar a dientes y encías, y que deberá ser eliminada mediante una detenida higiene de la prótesis y de los dientes remanentes después de cada comida. Para prevenir estas circunstancias es informado que debe seguir las instrucciones dadas por su dentista y a someterse a revisiones periódicas, en ningún caso espaciadas más de un año, y siempre que tenga cualquier tipo de molestia o duda sobre el tratamiento. Y, DIDÍA ……… —.eontocacronsenaos rcaucoicereo o c N Ne CN e oe ee eee eee COMO PACIENTA (y'El procede"
+        }
+      ]
+    },
+    {
+      "ref": "riesgos_personalizados"
+    },
+    {
+      "ref": "contraindicaciones"
+    },
+    {
+      "ref": "declaracion"
+    },
+    {
+      "ref": "revocacion"
+    },
+    {
+      "ref": "proteccion_datos"
+    },
+    {
+      "ref": "lugar_fecha"
+    },
+    {
+      "ref": "firmas_paciente"
+    }
+  ]
+}

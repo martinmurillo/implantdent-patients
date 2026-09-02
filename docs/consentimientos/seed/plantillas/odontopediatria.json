@@ -1,0 +1,92 @@
+{
+  "_estado": "BORRADOR_OCR",
+  "_aviso": "Generado automáticamente por OCR. Cotejar contra originales/ODONTOPEDIATRIA_1_p1.jpg antes de usar.",
+  "codigo": "ODONTOPEDIATRIA",
+  "titulo": "Documento de consentimiento informado para . odontopediatría",
+  "version": 1,
+  "idioma": "es",
+  "pide_piezas": true,
+  "profesional_por_defecto": null,
+  "composicion": [
+    {
+      "ref": "preambulo"
+    },
+    {
+      "ref": "identificacion"
+    },
+    {
+      "ref": "representante"
+    },
+    {
+      "ref": "diagnostico_plan"
+    },
+    {
+      "nodos": [
+        {
+          "tipo": "parrafo",
+          "texto": "Los procedimientos propios de la odontopediatría van dirigidos al tratamiento de las patologías dentales"
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "caries, fracturas, hipoplasias, etc) intentando conservar al máximo las estructuras dentarias y su función, y asegurar en-lo posible el correcto recambio dentario. Dentro de estos procedimientos se incluyen: las extracciones, las obturaciones (empastes) realizados con distintos materiales, las pulpotomías",
+            "eliminación parcial de la pulpa dentaria-vulgarmente conocida como nervio-), los mantenedores de espacio, etc"
+          ]
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Se han sopesado y descartado por distintos motivos de los que ha sido informado/a otros procedimientos terapéuticos alternativos COMO ……… e0e0ee0e0e0neeee D El/la paciente ha sido informado/a y conoce los riesgos estadísticamente frecuentes que puede comportar este tratamiento:"
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "Riesgos propios de la inyección de anestesia local: posibles hipersensibilidades al anestésico difícilmente previsibles, anestesias prolongadas, daños locales por la punción, excepcionalmente dolores neuropáticos, etc",
+            "Riesgo de sensibilidad, dolor u otras alteraciones irreversibles en el complejo dentino-pulpar, en caso de obturaciones profundas, que implicarían la necesidad de realizar la endodoncia del diente afectado",
+            "Riesgo de ingestión, o incluso aspiración, de pequeños restos de material de obturación sobrante",
+            "Riesgo de pequeños daños en los tejidos blandos adyacentes a la zona de trabajo (encía, carrillo, lengua, etc) debidos al uso del instrumental de trabajo, instrumentos separadores o clamps para separar el dique de goma. Este riesgo será mayor en caso de niños poco colaboradores",
+            "En caso de tratamientos estéticos existirá siempre el riesgo de no cumplir con las expectativas del paciente por motivos difícilmente evitables: inexistencia de tonos de color exactos, decoloraciones o tinciones no corregibles, etc",
+            "Riesgo de que los tratamientos que afecten a la pulpa dentaria (vulgarmente conocida como nervio) produzcan molestias a veces aparatosas que requerirían tratamiento",
+            "Riesgo de que se despeguen ciertos dispositivos utilizados en odontopediatría como mantenedores de espacio o coronas metálicas. En ese caso habría que acudir a consulta tan pronto como sea posible",
+            "En caso de que sea preciso utilizar medicación relajante existe el riesgo, muy infrecuente, de reacciones adversas a dicha medicación. En caso de ser utilizada se debe estar muy pendiente del niño hasta su completa recuperación",
+            "Riesgo de que el tratamiento no pueda ser realizado si el niño no es mínimamente colaborador"
+          ]
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "En este caso, dentista y padres deberán decidir la actuación a elegir. Asimismo el niño/a ……… — ……… r..0rm0m eeec eeeeeese==-..PO SUS ESPeCiales condiciones personales"
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "puede presentar riesgos añadidos consistentes en:"
+          ]
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "El paciente y sus padres o tutores también han sido informados de que los trabajos de odontopediatría, debido a las fuerzas que soportan y al paso del tiempo, sufrirán deterioros (fisuras, desprendimientos, despegamientos, etc) que harán necesario su renovación periódica hasta que se produzca el recambio dentario. Para prevenir estas circunstancias se informa que debe someterse a revisiones periódicas, en ningún caso espaciadas más de seis meses, y siempre que tenga cualquier tipo de molestia o duda sobre el tratamiento."
+        }
+      ]
+    },
+    {
+      "ref": "riesgos_personalizados"
+    },
+    {
+      "ref": "contraindicaciones"
+    },
+    {
+      "ref": "declaracion"
+    },
+    {
+      "ref": "revocacion"
+    },
+    {
+      "ref": "proteccion_datos"
+    },
+    {
+      "ref": "lugar_fecha"
+    },
+    {
+      "ref": "firmas_paciente"
+    }
+  ]
+}

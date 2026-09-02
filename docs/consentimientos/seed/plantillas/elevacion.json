@@ -1,0 +1,153 @@
+{
+  "_estado": "BORRADOR_OCR",
+  "_aviso": "Generado automáticamente por OCR. Cotejar contra originales/ELEVACION_1_p1.jpg antes de usar.",
+  "codigo": "ELEVACION",
+  "titulo": "Documento de consentimiento informado para cirugia de elevacion sinusal",
+  "version": 1,
+  "idioma": "es",
+  "pide_piezas": true,
+  "profesional_por_defecto": null,
+  "composicion": [
+    {
+      "ref": "preambulo"
+    },
+    {
+      "ref": "identificacion"
+    },
+    {
+      "ref": "representante"
+    },
+    {
+      "ref": "diagnostico_plan"
+    },
+    {
+      "nodos": [
+        {
+          "tipo": "titulo",
+          "nivel": 2,
+          "texto": "Documento de consentimiento informado para"
+        },
+        {
+          "tipo": "titulo",
+          "nivel": 2,
+          "texto": "Cirugia de elevacion sinusal"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "En cumplimiento de la Ley 41/2002, básica reguladora de la autonomía del paciente y de derechos y"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "obligaciones en materia de información y documentación clínica, se le presenta para su firma el"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "siguiente documento:"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "paciente (en caso de menores o incapacitados consignar el nombre y DNI del padre, madre o tutor ), ha sido informado/a por"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "de. Sobre los procedimientos clínicos de cirugía de elevación sinusal, que"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "constan en el plan del tratamiento propuesto."
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Los procedimientos de cirugía de elevación sinusal van dirigidos básicamente a interponer entre el"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "seno maxilar y la cavidad oral una cantidad de hueso suficiente que nos permita insertar, con"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "mayores posibilidades de éxito, implantes osteointegrables. La técnica consiste en acceder al seno"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "maxilar a través de una incisión realizada en la cavidad oral y una ventana practicada en el hueso"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "maxilar. Una vez en el seno se procede a despegar y levantar su mucosa y a introducir, si procede,"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "algún material de relleno óseo. En el mismo acto quirúrgico se pueden colocar implantes"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "osteointegrables o no. Muy raramente se precisan procedimientos de fijación u osteosíntesis"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "externos como placas, mallas o tornillos. Posteriormente se sutura la zona."
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Este procedimiento está indicado para el problema que tiene el/la paciente, consistente en una"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "insuficiente cantidad de hueso en la zona del seno maxilar para permitir la inserción de implantes"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Se han sopesado y descartado por distintos motivos, de los que ha sido informado/a, otros"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "procedimientos terapéuticos alternativos como:"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "El/la paciente ha sido informado/a y conoce los riesgos estadísticamente frecuentes que puede"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "comportar este tratamiento:"
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "Riesgos propios de la inyección de anestesia local: posibles hipersensibilidades al anestésico difícilmente previsibles, anestesias prolongadas, daños locales por la punción, etc",
+            "Riesgo de inflamación y dolor en la zona tratada debido al procedimiento quirúrgico",
+            "Riesgo de hemorragia y aparición de hematomas en la zona o áreas adyacentes",
+            "Riesgo de dehiscencia (separación) de las suturas empleadas",
+            "Riesgo de que se produzcan pequeños daños en las zonas próximas a las tratadas debido a la manipulación y separación de tejidos propios de la cirugía, en especial desgarros de la mucosa sinusal y rotura de la cortical ósea (que obligaría a utilizar otros procedimientos de cierre del seno maxilar)",
+            "Riesgo de sobreinfección de las heridas quirúrgicas por los gérmenes bucales",
+            "Riesgo de pérdida de sensibilidad, temporal o no, en la zona tratada por los daños producidos a las pequeñas terminaciones nerviosas",
+            "Complicaciones infrecuentes propias del procedimiento quirúrgico de elevación sinusal: aparición de sinusitis aguda o crónica (que en ocasiones puede obligar a la reintervención), comunicación orosinusal (que sería indicación de nueva cirugía), alergia a los materiales de relleno utilizados no povenientes del paciente (hueso liofilizado, hidroxiapatita de origen animal, etc.) y colección hemática persistente en seno maxilar (que obligaría a su drenaje)",
+            "Riesgos y complicaciones debidas a los procedimientos de injertos de hueso autólogos (del propio paciente) en caso de utilizarse. La zona donante de hueso puede sufrir complicaciones propias de la extracción de dicho hueso: dolor, inflamación, etc"
+          ]
+        }
+      ]
+    },
+    {
+      "ref": "riesgos_personalizados"
+    },
+    {
+      "ref": "contraindicaciones"
+    },
+    {
+      "ref": "declaracion"
+    },
+    {
+      "ref": "revocacion"
+    },
+    {
+      "ref": "proteccion_datos"
+    },
+    {
+      "ref": "lugar_fecha"
+    },
+    {
+      "ref": "firmas_paciente"
+    }
+  ]
+}

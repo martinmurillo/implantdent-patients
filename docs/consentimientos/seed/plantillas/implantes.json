@@ -1,0 +1,143 @@
+{
+  "_estado": "REVISAR",
+  "_aviso": "Modelo argentino. No cita la Ley 41/2002, sin cláusula de revocación, terminología ajena.",
+  "codigo": "IMPLANTES",
+  "titulo": "Documento de consentimiento informado para implantes dentales",
+  "version": 1,
+  "idioma": "es",
+  "pide_piezas": true,
+  "profesional_por_defecto": null,
+  "composicion": [
+    {
+      "ref": "preambulo"
+    },
+    {
+      "ref": "identificacion"
+    },
+    {
+      "ref": "representante"
+    },
+    {
+      "ref": "diagnostico_plan"
+    },
+    {
+      "nodos": [
+        {
+          "tipo": "titulo",
+          "nivel": 2,
+          "texto": "Modelo de consentimiento informado"
+        },
+        {
+          "tipo": "titulo",
+          "nivel": 2,
+          "texto": "Implantes dentales"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Lugar y fecha Usted tiene derecho a conocer el procedimiento al que va a ser sometido y las complicaciones mas frecuentes que ocurren. Este documento intenta explicarle todas estas cuestiones, léalo atentamente y consulte todas las dudas que se le planteen. Le recordamos que por imperativo legal, tendrá que firmar, usted o su representante legal, el consentimiento informado para que pueda realizarle dicho procedimiento. El/la que suscribe,DNI N¡,con domicilio en calle otorgo mi consentimiento a la colocación de un implante dental fija en el/los elemento/s N* propuesto por el/la Dr. Asimismo declaro conocer que el objeto del tratamiento es reponer dientes perdidos. Se que alternativamente podría recurrir a prótesis convencionales, de menor costo, pero lo descarto por los beneficios que se pueden obtener con la técnica implantológica. El procedimiento se lleva a cabo en dos fases, una primera en la que se fijan tornillos o laminas al hueso mediante la realización con fresas de un lecho artificial, y una segunda (pasados varios meses) cuando el hueso y el tornillo esta integrados, se coloca un pilar sobre ellos para recibir posteriormente los aditamentos protésicos. ANESTESIA: la intervención requiere anestesia local cuyos riesgos son:"
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "Ulceración de la mucosa, dolor,",
+            "Limitaciones en el movimiento de la apertura de la boca (que puede requerir tratamiento ulterior)",
+            "Baja de tensión, sensación de mareo",
+            "Menos frecuentemente: alergias, urticaria, dermatitis de contacto,, edema angioneurotico, fibrilación ventricular, que pueden requerir tratamiento ulterior"
+          ]
+        },
+        {
+          "tipo": "titulo",
+          "nivel": 2,
+          "texto": "Material convenido"
+        },
+        {
+          "tipo": "titulo",
+          "nivel": 2,
+          "texto": "Limitaciones"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Aunque la técnica se realice correctamente, existe la posibilidad de fracaso por razones biológicas, que puede requerir la repetición de la intervención"
+        },
+        {
+          "tipo": "titulo",
+          "nivel": 2,
+          "texto": "Riesgos tipicos"
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "Procesos edematosos, inflamación, hematomas, dolor, laceraciones en la mucosa del labio o mejilla, o en lengua que no dependen de la técnica ni de su correcta realización",
+            "Posibilidad de lesionar el seno maxilar,",
+            "Sinusitis, que deba ser tratada por un especialista competente;",
+            "Lesiones de tipo nervioso, por afectar terminaciones nerviosas o nervios próximos que generara perdida de sensibilidad en labios, mentón, lengua o encía — según cual sea el nervio afectado",
+            "Generalmente la perdida de sensibilidad es transitoria, aunque puede llegar a ser permanente,",
+            "Comunicación con las fosas nasales y lesionar raíces de dientes adyacentes, que pueden requerir tratamiento posterior",
+            "Excepcionalmente, la fractura maxilar que requiera tratamiento posterior"
+          ]
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Firma del Paciente o Representante Firma del Profesional Firma Jefe de Equipo Aclaración Aclaración Aclaracion"
+        },
+        {
+          "tipo": "titulo",
+          "nivel": 2,
+          "texto": "Riesgos personalizados"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Además de los riesgos antes descriptos, por mi circunstancias especiales hay que esperar los siguientes riesgos:"
+        },
+        {
+          "tipo": "titulo",
+          "nivel": 2,
+          "texto": "Indicaciones"
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "Esimportante mantener una correcta higiene bucal luego del tratamiento",
+            "La colocación del implante no constituye el acto final del tratamiento, sino que es necesario visitar periódicamente al facultativo a y realizar un seguimiento cada meses a los fines de detectar precozmente y tratar con mejor pronostico la aparición de cualquier complicación",
+            "Acudir a una consulta inmediata siempre que aparezcan ulceraciones, alguna anormalidad o movilidad del implante"
+          ]
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "He comprendido todas las explicaciones que se me han facilitado en lenguaje claro y sencillo, he podido realizar todas las observaciones y se me han aclarado todas las dudas; por lo que estoy completamente de acuerdo con lo consignado en esta formula de consentimiento. Me comprometo a regresar a la próxima consulta el día A / Hora;"
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "Firmadel Paciente o Representante — FirmadelProfesional — FirmaJefedeEquipo"
+          ]
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Aclaración Aclaración Aclaración"
+        }
+      ]
+    },
+    {
+      "ref": "riesgos_personalizados"
+    },
+    {
+      "ref": "contraindicaciones"
+    },
+    {
+      "ref": "declaracion"
+    },
+    {
+      "ref": "revocacion"
+    },
+    {
+      "ref": "proteccion_datos"
+    },
+    {
+      "ref": "lugar_fecha"
+    },
+    {
+      "ref": "firmas_paciente"
+    }
+  ]
+}

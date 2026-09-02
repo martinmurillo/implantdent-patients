@@ -1,0 +1,130 @@
+{
+  "_estado": "BORRADOR_OCR",
+  "_aviso": "Generado automáticamente por OCR. Cotejar contra originales/CONSERVADORA_1_p1.jpg antes de usar.",
+  "codigo": "CONSERVADORA",
+  "titulo": "Documento de consentimiento informado para odontologia conservadora",
+  "version": 1,
+  "idioma": "es",
+  "pide_piezas": true,
+  "profesional_por_defecto": null,
+  "composicion": [
+    {
+      "ref": "preambulo"
+    },
+    {
+      "ref": "identificacion"
+    },
+    {
+      "ref": "representante"
+    },
+    {
+      "ref": "diagnostico_plan"
+    },
+    {
+      "nodos": [
+        {
+          "tipo": "parrafo",
+          "texto": "Los dientes pueden destruirse por caries y por desgastes crónicos (atrición, abrasión, erosión y abfracción)."
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "Lacaries es una enfermedad causada por microbios que se nutren de los restos alimenticios acumulados en las bocas con higiene deficiente. De estos restos, los más importantes son los carbohidratos (sobre todo, azúcares refinados), a partir de los cuales se producen ácidos que desmineralizan los dientes y los hacen presa fácil de otros microbios que posteriormente degradan y destruyen la estructura debilitada. Las caries son reversibles mientras la superficie dentaria se mantenga lisa y regular, pero una vez alterada, avanza irremediablemente",
+            "Los desgastes dentarios crónicos pueden deberse a:",
+            "Causas mecánicas, responsables de la atrición fisiológica (desgaste por la masticación), de la atrición patológica (desgaste por el apretamiento o el rechinamiento de los dientes) y de la abrasión (desgaste por fuerzas no masticadoras, como, por ejemplo, el cepillado dental intempestivo)",
+            "Causas químicas, como la erosión o desgaste por acción de ácidos (el jugo gástrico en los grandes vomitadores, cuales son las personas bulímicas) o el abuso de cítricos y bebidas carbonatadas",
+            "Causas desconocidas, como la abfracción o milólisis, consistente en unas lesiones a manera de sacabocados, progresivas e inevitables, en los cuellos, que se relacionan, al parecer, con debilidad del esmalte y con alteraciones en la oclusión o \"engranaje\" de los dientes"
+          ]
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Una restauración es una reconstrucción de una porción dentaria destruida, fracturada, desgastada o afectada irreversiblemente por patología, previa terapéutica de la misma y \"preparación\" dentaria apropiada."
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Según su amplitud o extensión, las restauraciones también se dividen en obturaciones o reconstrucciones."
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Atendiendo al procedimiento de realización y otras características, la restauraciones se dividen en:"
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "Obturaciones (popularmente, \"empastes\") realizados con distintos materiales y procedimientos, en los que los materiales se colocan en el diente en estado blando y se endurecen y conforman en la boca; pueden ser de amalgama (metálicas), de resina compuesta o \"composite\" (material estético) o de algún tipo de cemento",
+            "ionómero de vidrio por ejemplo)",
+            "Incrustaciones, consistentes en pequeñas piezas rígidas (metálicas, de porcelana o de resina compuesta) sustitutivas de las partes perdidas, prefabricadas a medida de la cavidad dentaria preparada por el dentista y cementadas o adheridas a los tejidos dentarios remanentes; se clasifican en inlays, onlays y overlays, según su situación y extensión",
+            "Carillas o frentes laminados estéticos: son unas láminas muy delgadas de porcelana o de resina, bien prefabricadas o bien fabricadas a medida, que se adhieren a la superficie labial o anterior de los dientes para restaurar sus defectos anatómicos o estéticos",
+            "Coronas o fundas coronarias; son coberturas completas o parciales de la superficie de los dientes. Se fabrican a medida, después de que el dentista realice la preparación dentaria (tallado de muñones, que es el desgaste adecuado los dientes) y obtenga un molde del muñón o eje dentario de sujeción, y las cemente o adhiera a"
+          ]
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "dicho muñón. Pueden ser de metal, porcelana, metal-porcelana, resina o metal-resina."
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "También se consideran restauraciones, ciertos medios accesorios o complementarios de retención (pernos, pins, ó etc), que tienen por función reforzar el diente debilitado y ayudar a la sujeción de la parte reconstruida del diente"
+          ]
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Las principales finalidades de este tipo de restauraciones son detener la progresión de la enfermedad cariosa y evitar"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "que siga la destrucción del diente hasta su definitiva pérdida; y devolverle al diente su forma natural (anatómica), su"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "función y, si es posible, su estética, mediante el reemplazo de los tejidos perdidos o enfermos e irrecuperables."
+        },
+        {
+          "tipo": "titulo",
+          "nivel": 2,
+          "texto": "Limitaciones y riesgos"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Ella paciente ha sido informado/a y conoce los riesgos estadísticamente frecuentes que puede comportar este \" tratamiento:"
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "Riesgos propios de la inyección de anestesia local: posibles hipersensibilidades al anestésico dificilmente previsibles, anestesias prolongadas, daños locales por la punción, excepcionalmente dolores neuropáticos, etc",
+            "Riesgo de sensibilidad, dolor u otras alteraciones irreversibles en el complejo dentino-pulpar, en caso de obturaciones profundas, que implicarían la necesidad de realizar la endodoncia del diente afectado",
+            "Riesgo de pequeñas molestias al masticar, generalmente debidas a pequeños contactos previos o excesivos de la restauración con el diente antagonista, que puede pasar inadvertido tras la colocación por el efecto de la anestesia. Habitualmente desaparecen espontáneamente o se solucionan con muy pequeños retoques o ajustes",
+            "Riesgo de inflamación crónica de la encía en restauraciones muy subgingivales debido a que resulta dificil la higiene oral diaria. Siendo la única solución quirúrgica: consistente en quitar encía y hueso para alargar la corona o parte visible del diente y dejar expuesto el margen de la restauración",
+            "Riesgo de alteración en el color del diente y, a veces, tinciones de la encía (tatuajes), producidas por las obturaciones metálicas, en las zonas adyacentes a la restauración",
+            "Respecto a las obturaciones dentocoloreadas, puede existir riesgo de sufrir cambios de color con el tiempo, además de su tendencia a mancharse más que los dientes naturales",
+            "Riesgo de ingestión, o incluso aspiración, de pequeños restos de material de obturación sobrante",
+            "Riesgo de pequeños daños en los tejidos blandos adyacentes a la zona de trabajo (encía, carrillo, lengua, etc) debidos al uso del instrumental de trabajo, instrumentos separadores o clamps para sujetar el dique de goma",
+            "En caso de tratamientos estéticos existirá siempre el riesgo de no cumplir con las expectativas del paciente por motivos difícilmente evitables: inexistencia de tonos de color exactos, decoloraciones o tinciones no corregibles, etc"
+          ]
+        }
+      ]
+    },
+    {
+      "ref": "riesgos_personalizados"
+    },
+    {
+      "ref": "contraindicaciones"
+    },
+    {
+      "ref": "declaracion"
+    },
+    {
+      "ref": "revocacion"
+    },
+    {
+      "ref": "proteccion_datos"
+    },
+    {
+      "ref": "lugar_fecha"
+    },
+    {
+      "ref": "firmas_paciente"
+    }
+  ]
+}
