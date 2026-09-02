@@ -34,10 +34,6 @@
           ]
         },
         {
-          "tipo": "parrafo",
-          "texto": "Para dicho diagnóstico me ha propuesto y presupuestado el siguiente plan de tratamiento:"
-        },
-        {
           "tipo": "lista",
           "items": [
             "| Coronas =a AA D5 RA A",
@@ -69,7 +65,7 @@
         {
           "tipo": "lista",
           "items": [
-            "Riesgo de fractura de los materiales o despegamiento de la prótesis con el paso del tiempo. No hay que olvidar que las prótesis dentarias soportan grandes fuerzas masticatorias, y que esto, irremediablemente, afectará a los - materiales y requerirá su sustitución",
+            "Riesgo de fractura de los materiales o despegamiento de la prótesis con el paso del tiempo. No hay que olvidar que las prótesis dentarias soportan grandes fuerzas masticatorias, y que esto, irremediablemente, afectará a los materiales y requerirá su sustitución",
             "Riesgo de que el paciente manifieste o desarrolle algún tipo de intolerancia o alergia a los materiales de los que está construida la prótesis. Esta circunstancia es muy rara, difícilmente previsible, y de difícil solución salvo el cambio de la prótesis",
             "Siel procedimiento protésico empleado consiste en carillas de porcelana, es preciso señalar el riesgo de que no respondan completamente a las expectativas estéticas de los pacientes. Existe además un riesgo mayor de fracturas y despegamientos de este tipo de prótesis"
           ]

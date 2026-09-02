@@ -24,12 +24,12 @@
       "nodos": [
         {
           "tipo": "parrafo",
-          "texto": "En relación con el diagnóstico, el facultativo me-ha explicado, y comprendo; que: Los procedimientos propios de la odontopediatría van dirigidos al tratamiento de las patologías dentales"
+          "texto": "Los procedimientos propios de la odontopediatría van dirigidos al tratamiento de las patologías dentales"
         },
         {
           "tipo": "lista",
           "items": [
-            "caries, fracturas, hipoplasias, etc) intentando conservar al máximo las estructuras dentarias y su función, y asegurar en-lo posible el correcto recambio dentario. Dentro de estos procedimientos se incluyen: las extracciones, las obturaciones (empastes) realizados con- distintos materiales, las - pulpotomías",
+            "caries, fracturas, hipoplasias, etc) intentando conservar al máximo las estructuras dentarias y su función, y asegurar en-lo posible el correcto recambio dentario. Dentro de estos procedimientos se incluyen: las extracciones, las obturaciones (empastes) realizados con distintos materiales, las pulpotomías",
             "eliminación parcial de la pulpa dentaria-vulgarmente conocida como nervio-), los mantenedores de espacio, etc"
           ]
         },
@@ -53,7 +53,7 @@
         },
         {
           "tipo": "parrafo",
-          "texto": "En este caso, dentista y padres deberán decidir la actuación a elegir. - Asimismo el niño/a ……… — ……… r..0rm0m eeec eeeeeese==-..PO SUS ESPeCiales condiciones personales"
+          "texto": "En este caso, dentista y padres deberán decidir la actuación a elegir. Asimismo el niño/a ……… — ……… r..0rm0m eeec eeeeeese==-..PO SUS ESPeCiales condiciones personales"
         },
         {
           "tipo": "lista",

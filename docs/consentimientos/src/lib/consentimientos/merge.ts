@@ -73,7 +73,21 @@ function fusionarNodo(nodo: Nodo, datos: DatosFusion, firmante: TipoFirmante): N
       return { ...nodo, items: nodo.items.map((i) => aplicarFusion(i, datos)) };
     case 'recuadro':
       return { ...nodo, nodos: fusionarNodos(nodo.nodos, datos, firmante) };
-    default:
+    // campo_manual y firmas también llevan texto visible. Si caen en un
+    // default genérico, sus etiquetas nunca se fusionan y el marcador
+    // {{...}} se imprime literal en el documento del paciente.
+    case 'campo_manual':
+      return nodo.etiqueta
+        ? { ...nodo, etiqueta: aplicarFusion(nodo.etiqueta, datos) }
+        : nodo;
+    case 'firmas':
+      return {
+        ...nodo,
+        columnas: nodo.columnas.map((c) => ({
+          ...c, etiqueta: aplicarFusion(c.etiqueta, datos),
+        })),
+      };
+    case 'salto_pagina':
       return nodo;
   }
 }

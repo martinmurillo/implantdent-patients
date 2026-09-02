@@ -24,10 +24,6 @@
       "nodos": [
         {
           "tipo": "parrafo",
-          "texto": "En relación con el diagnóstico, el facultativo me ha explicado, y comprendo, que:"
-        },
-        {
-          "tipo": "parrafo",
           "texto": "Los dientes pueden destruirse por caries y por desgastes crónicos (atrición, abrasión, erosión y abfracción)."
         },
         {

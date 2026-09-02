@@ -29,18 +29,10 @@
           ]
         },
         {
-          "tipo": "parrafo",
-          "texto": "Para dicho diagnóstico me ha propuesto y presupuestado el siguiente plan de tratamiento:"
-        },
-        {
           "tipo": "lista",
           "items": [
             "Endodoncia de las piezas {{tratamiento.piezas}}."
           ]
-        },
-        {
-          "tipo": "parrafo",
-          "texto": "En relación con el diagnóstico, el facultativo me ha explicado, y comprendo, que:"
         },
         {
           "tipo": "parrafo",
