@@ -147,32 +147,62 @@ function RenderNodo({ nodo }) {
   }
 }
 
+// Una hoja de consentimiento. Va aparte del Document para poder meter varios
+// en un solo PDF: el navegador bloquea el segundo window.open de un bucle, así
+// que si se piden tres consentimientos se imprime un archivo con los tres.
+function PaginaConsentimiento({ titulo, nodos, datos, logoUrl }) {
+  return (
+    <Page size="A4" style={s.page}>
+      {logoUrl && <Image src={logoUrl} style={s.logo} />}
+      <Text style={s.tituloDoc}>{titulo}</Text>
+
+      {nodos.map((n, k) => <RenderNodo nodo={n} key={k} />)}
+
+      {/* Rúbrica al pie de cada página: práctica estándar para que
+          no se pueda cuestionar la sustitución de una hoja suelta.
+          La numeración es subPage y no page: cada consentimiento cuenta
+          sus propias hojas aunque vayan varios en el mismo archivo, que es
+          lo que tiene sentido en un documento que se firma por separado. */}
+      <View style={s.pie} fixed>
+        <Text>
+          {datos.clinica.razon_social} · CIF {datos.clinica.cif} · Reg. sanitario{' '}
+          {datos.clinica.registro_sanitario}
+        </Text>
+        <Text
+          render={({ subPageNumber, subPageTotalPages }) =>
+            `Rúbrica ________   Pág. ${subPageNumber} de ${subPageTotalPages}`
+          }
+        />
+      </View>
+    </Page>
+  );
+}
+
 export function DocumentoPDF({ titulo, nodos, datos, logoUrl }) {
   return (
     <Document
       title={`Consentimiento ${titulo} — ${datos.paciente.nombre}`}
       author={datos.clinica.razon_social}
     >
-      <Page size="A4" style={s.page}>
-        {logoUrl && <Image src={logoUrl} style={s.logo} />}
-        <Text style={s.tituloDoc}>{titulo}</Text>
+      <PaginaConsentimiento titulo={titulo} nodos={nodos} datos={datos} logoUrl={logoUrl} />
+    </Document>
+  );
+}
 
-        {nodos.map((n, k) => <RenderNodo nodo={n} key={k} />)}
-
-        {/* Rúbrica al pie de cada página: práctica estándar para que
-            no se pueda cuestionar la sustitución de una hoja suelta. */}
-        <View style={s.pie} fixed>
-          <Text>
-            {datos.clinica.razon_social} · CIF {datos.clinica.cif} · Reg. sanitario{' '}
-            {datos.clinica.registro_sanitario}
-          </Text>
-          <Text
-            render={({ pageNumber, totalPages }) =>
-              `Rúbrica ________   Pág. ${pageNumber} de ${totalPages}`
-            }
-          />
-        </View>
-      </Page>
+// Varios consentimientos en un solo archivo, cada uno empezando en hoja nueva.
+// Es lo que se manda a la impresora: se firman por separado, pero se imprimen
+// de una vez.
+export function DocumentoConjunto({ docs, logoUrl }) {
+  const primero = docs[0];
+  return (
+    <Document
+      title={`Consentimientos — ${primero.datos.paciente.nombre}`}
+      author={primero.datos.clinica.razon_social}
+    >
+      {docs.map((d, k) => (
+        <PaginaConsentimiento key={k} titulo={d.titulo} nodos={d.nodos}
+          datos={d.datos} logoUrl={logoUrl} />
+      ))}
     </Document>
   );
 }

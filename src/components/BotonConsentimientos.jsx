@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { pdf } from "@react-pdf/renderer";
 import { supabase } from "../supabase";
-import { DocumentoPDF } from "../lib/consentimientos/DocumentoPDF";
+import { DocumentoPDF, DocumentoConjunto } from "../lib/consentimientos/DocumentoPDF";
 import { componerDocumento, fechaLarga } from "../lib/consentimientos/merge";
 
 // Botón de la ficha del paciente: salen los consentimientos, se marcan los que
-// hagan falta, y cada uno lleva su propio profesional. Sale un PDF por cada
-// marcado, listo para imprimir y firmar en papel.
+// hagan falta, y cada uno lleva su propio profesional. Sale un archivo con
+// todos los marcados, cada uno en hoja nueva, listo para imprimir y firmar.
 //
 // El `paciente` que llega es la fila de patients tal cual, con los nombres de
 // esta base (name, dni, phone). El modelo de fusión usa otros (nombre,
@@ -80,6 +80,10 @@ export function BotonConsentimientos({ paciente }) {
     setGenerando(true);
     setError(null);
     try {
+      // Se juntan para imprimirlos de una sola vez. Abrir una ventana por
+      // consentimiento no funciona: el navegador deja pasar la primera y
+      // bloquea las demás por antipopup, así que solo salía uno.
+      const paraImprimir = [];
       for (const plantillaId of ids) {
         const plantilla = plantillas.find(p => p.id === plantillaId);
         const doctor = doctores.find(d => d.id === elegidos[plantillaId]);
@@ -147,8 +151,18 @@ export function BotonConsentimientos({ paciente }) {
         });
         await supabase.from("consent_documentos").update({ pdf_path: ruta }).eq("id", doc.id);
 
-        window.open(URL.createObjectURL(blob), "_blank");
+        paraImprimir.push({ titulo: plantilla.titulo, nodos, datos, blob });
       }
+
+      // Un solo archivo con todos, cada uno empezando en hoja nueva y con su
+      // propia numeración. Se firman por separado, se imprimen de una vez.
+      // Con uno solo se reaprovecha el que ya se generó para archivarlo, que
+      // es idéntico: no hay por qué renderizarlo dos veces.
+      const juntos = paraImprimir.length === 1
+        ? paraImprimir[0].blob
+        : await pdf(<DocumentoConjunto docs={paraImprimir} logoUrl={config.logo_url}/>).toBlob();
+      window.open(URL.createObjectURL(juntos), "_blank");
+
       setAbierto(false);
       setElegidos({});
     } catch (e) {
