@@ -1,0 +1,90 @@
+{
+  "_estado": "BORRADOR_OCR",
+  "_aviso": "Generado automáticamente por OCR. Cotejar contra originales/PROTESISREMOVIBLE_1_p1.jpg antes de usar.",
+  "codigo": "PROTESISREMOVIBLE",
+  "titulo": "Documento de consentimiento informado para prótesis removible",
+  "version": 1,
+  "idioma": "es",
+  "pide_piezas": true,
+  "profesional_por_defecto": null,
+  "composicion": [
+    {
+      "ref": "preambulo"
+    },
+    {
+      "ref": "identificacion"
+    },
+    {
+      "ref": "representante"
+    },
+    {
+      "ref": "diagnostico_plan"
+    },
+    {
+      "nodos": [
+        {
+          "tipo": "parrafo",
+          "texto": "En relación con el diagnóstico, el facultativo me ha explicado, y comprendo, que:"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Los procedimientos propios de la prótesis removible van dirigidos a la sustitución de los dientes perdidos mediante aparatología no fija, susceptibles de ser retirados de la boca a voluntad del propio paciente y en cualquier momento, teniendo como finalidad la reparación de la pérdida o disminución de las funciones de masticación y fonación, y limitar el defecto estético."
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Esta aparatología removible consta de dientes artificiales que se sujetan sobre una base acrílica, metálica y/o flexible. Dicha estructura base, a su vez, se apoya sobre la encía y se sujeta a dientes remanentes, si es que existen, mediante retenedores directos (vulgarmente conocidos como \"ganchos\") o retenedores indirectos (ataches)."
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Es evidente que la función esperable de una prótesis nunca será la misma que la que proporcionaron los dientes naturales. Dentro de estos procedimientos se incluyen las prótesis parciales y las prótesis completas de cualquiera de las dos arcadas"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Se han sopesado y descartado por distintos motivos de los que ha sido informado/a otros procedimientos terapéuticos AlEMAtIVOS COMO +.:-200:-.=5> e=e conersnano o A ANAN AA AR ElVla paciente ha sido informado/a y conoce los riesgos e inconvenientes estadísticamente frecuentes que puede comportar este tratamiento:"
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "Problemas de adaptación a la prótesis. Una prótesis removible no deja de ser un cuerpo extraño que se instala en la boca intentando sustituir las funciones dentarias y por lo tanto requerirá un tiempo de adaptación que variará según la situación del paciente y el tipo de prótesis. Requerirá adaptación para la correcta pronunciación, masticación y deglución, posibles nauseas, mordeduras, disminución del sentido del gusto y sequedad de boca. Estos inconvenientes suelen pasar, pero en algunos pacientes persisten en un grado variable",
+            "Riesgo de no responder a las expectativas estéticas de los pacientes. Es preciso tener claro que estas prótesis, por sus materiales nunca podrán igualar el tono y brillo exactos de los dientes naturales originales del paciente"
+          ]
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Además, en el caso de las prótesis parciales, los sistemas de retención o \"ganchos\" pueden generar aspectos inestéticos en Zonas visibles de la boca."
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "Riesgo de aparición de llagas y rozaduras en partes blandas, sobre todo al principio, y que requerirían pequeños retoques por parte del dentista",
+            "Riesgo de aparición de problemas de movilidad de la prótesis, en especial si no hay dientes o si el hueso alveolar está muy reabsorbido, como ocurre con frecuencia en la prótesis completa inferior",
+            "Riesgo de que los ganchos y retenedores de la prótesis dañen los dientes de soporte con el paso del tiempo",
+            "Riesgo de que el paciente manifieste o desarrolle algún tipo de intolerancia o alergia a los materiales de los que está construida la prótesis. Esta circunstancia es, difícilmente previsible, de difiícil solución, y puede obligar a la sustitución de la prótesis por otra realizada en otros materiales",
+            "Respecto a la masticación, estas estructuras móviles nunca podrán sustituir a los dientes originales. Su - capacidad de corte y trituración es menor y la fuerza que podemos ejercer sobre este tipo de prótesis también es menor que la que podíamos ejercer sobre los dientes naturales"
+          ]
+        }
+      ]
+    },
+    {
+      "ref": "riesgos_personalizados"
+    },
+    {
+      "ref": "contraindicaciones"
+    },
+    {
+      "ref": "declaracion"
+    },
+    {
+      "ref": "revocacion"
+    },
+    {
+      "ref": "proteccion_datos"
+    },
+    {
+      "ref": "lugar_fecha"
+    },
+    {
+      "ref": "firmas_paciente"
+    }
+  ]
+}

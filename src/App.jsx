@@ -11,6 +11,8 @@ import { htmlPlanImpreso } from "./planPrint";
 import { htmlFichaCobro, htmlHojaFichas } from "./fichaCobro";
 import { DIRECCION_TEXTO, ETIQUETAS_LINEA, PAGO } from "./legalPlan";
 import { mensajePropuesta } from "./mensajePropuesta";
+import { BotonConsentimientos } from "./components/BotonConsentimientos";
+import { EditorPlantillas } from "./components/EditorPlantillas";
 import { PLAZOS as FRAG_PLAZOS, financiable, motivoNoFinanciable,
          comisionFrakmenta, calcFrakmenta, lineaDeTiempo, fraseTramos,
          etiquetaMes } from "./frakmenta";
@@ -1124,6 +1126,7 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
             )}
           </div>
           <div style={{display:"flex",gap:5,flexShrink:0,marginLeft:10}}>
+            <BotonConsentimientos paciente={patient}/>
             <button onClick={()=>onEdit(patient)} style={{...s.btnDark,padding:"5px 12px",fontSize:12}}>Editar</button>
             <button onClick={()=>onDelete(patient)}
               style={{...s.btnSm,background:"#fff0f0",border:"1px solid #e74c3c88",color:"#e74c3c",padding:"5px 12px",fontSize:12}}>
@@ -2908,7 +2911,7 @@ function ClinicaPanel({ doctors, templates, translations, onRefreshDoctors, onRe
   return (
     <div>
       <div style={{display:"flex",gap:0,marginBottom:20,background:"#ffffff",borderRadius:10,padding:4,width:"fit-content"}}>
-        {[["doctors","Doctores"],["plantillas","Plantillas"],["traducciones","Traducciones"]].map(([id,label])=>(
+        {[["doctors","Doctores"],["plantillas","Plantillas"],["traducciones","Traducciones"],["consentimientos","Consentimientos"]].map(([id,label])=>(
           <button key={id} onClick={()=>setTab(id)}
             style={{background:tab===id?"#dce8fa":"none",border:"none",borderRadius:8,color:tab===id?"#c9a84c":"#555",padding:"8px 20px",cursor:"pointer",fontSize:13,fontWeight:tab===id?700:400,transition:"all 0.15s"}}>
             {label}
@@ -2916,6 +2919,7 @@ function ClinicaPanel({ doctors, templates, translations, onRefreshDoctors, onRe
         ))}
       </div>
       {tab==="doctors"    && <DoctorsPanel doctors={doctors} onRefresh={onRefreshDoctors}/>}
+      {tab==="consentimientos" && <EditorPlantillas/>}
       {tab==="plantillas"   && <PlantillasPanel templates={templates} onRefresh={onRefreshTemplates}/>}
       {tab==="traducciones" && <TraduccionesPanel translations={translations} onRefresh={onRefreshTranslations}/>}
     </div>

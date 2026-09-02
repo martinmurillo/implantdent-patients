@@ -1,0 +1,114 @@
+{
+  "_estado": "BORRADOR_OCR",
+  "_aviso": "Generado automáticamente por OCR. Cotejar contra originales/FERULA_1_p1.jpg antes de usar.",
+  "codigo": "FERULA",
+  "titulo": "Documento de consentimiento informado para documento de qonsentimiento informado para",
+  "version": 1,
+  "idioma": "es",
+  "pide_piezas": true,
+  "profesional_por_defecto": null,
+  "composicion": [
+    {
+      "ref": "preambulo"
+    },
+    {
+      "ref": "identificacion"
+    },
+    {
+      "ref": "representante"
+    },
+    {
+      "ref": "diagnostico_plan"
+    },
+    {
+      "nodos": [
+        {
+          "tipo": "parrafo",
+          "texto": "En relación con el diagnóstico, el facultativo me ha explicado, y comprendo, que: Los trastornos disfuncionales témporo-mandibulares o cráneo-mandibulares son un conjunto muy variado de patologías de la ATM (articulación temporo-mandíbular), o de sus estructuras asociadas, que afectan a la función normal de dicha articulación y/o producen dolor. Las causas de estas patologías son muy variadas, algunas son congénitas (como la hiperlaxitud ligamentaría) y otras son adquiridas (como la ausencia de dientes que puede provocar problemas en la oclusión dentaria, o traumatismos directos o indirectos en la zona). Los principales factores de riesgo son:"
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "Ausencia de piezas dentarias no rehabilitadas mediante prótesis bucodental",
+            "Hábitos nocivos como el \"apretamiento dentario\" o el bruxismo (apretamiento y rechinamiento dentarios)"
+          ]
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "La gran mayoría de los trastornos disfuncionales de la ATM no curan, y el tratamiento está encaminado a controlar la sintomatología y evitar en lo posible la progresión del proceso. Al ser un trastorno crónico, los tratamientos y las visitas de control, también lo son. Los trastomos disfuncionales de la ATM son de muy variada etiología, y por tanto, los tratamientos también son muy diferentes. No obstante hay fases de estos tratamientos que son comunes:"
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "Equilibrar la oclusión dentaria, rehabilitando los dientes perdidos y ajustando la oclusión",
+            "Proteger la ATM mediante el uso de \"férulas oclusales o de descarga\"",
+            "Uso de fármacos antiinflamatorios y/o relajantes musculares en las fases agudas",
+            "El tratamiento quirúrgico de la ATM es excepcional, y está reservado para casos muy graves"
+          ]
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "En ocasiones los problemas disfuncionales de la ATM tienen como origen o factor de agravamiento un problema psicológico (estrés, ansiedad, etc.). En estos casos se precisaría también un tratamiento psicológico asociado al odontológico. La finalidad del tratamiento consiste en aliviar la sintomatología de la disfunción de la articulación témporo-mandíbular e intentar detener su progresión. Para ello los objetivos son:"
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "Aliviar las fuerzas oclusales anómalas generadas en el aparato estomatognático y que afectan a la"
+          ]
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "ATM 0 sus estructuras asociadas (musculatura masticatoria, ligamentos, etc.). —"
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "Reposicionar, en ocasiones, la mandíbula para lograr una mejor posición en reposo de la ATM"
+          ]
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Las \"férulas de descarga\" son productos sanitarios a medida. Esto implica que se precisará tomar impresiones de sus arcadas dentarias y diversos registros de la relación existente entre ellas. Precisan ser renovadas periódicamente, y ello por dos motivos: soportan fuerzas oclusales potentes que deterioran los"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "materiales, y además se deben adaptar a los cambios producidos en el aparato masticatorio."
+        },
+        {
+          "tipo": "titulo",
+          "nivel": 2,
+          "texto": "Limitaciones y riesgos"
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "Riesgo de no habituarse a la \"férulas de descarga\", lo que suele requerir un tiempo y, en ocasiones, retoques de las partes de la férula que irriten los tejidos blandos de la boca",
+            "Riesgo de presentar alergia a los materiales acrílicos, provocando una irritación alérgica en los tejidos blandos bucales (labios,encías, lengua, etc.)",
+            "Riesgo de irritación mecánica, ingestión o aspiración de algún fragmento desprendido de la férula, si se produce la rotura de la férula"
+          ]
+        }
+      ]
+    },
+    {
+      "ref": "riesgos_personalizados"
+    },
+    {
+      "ref": "contraindicaciones"
+    },
+    {
+      "ref": "declaracion"
+    },
+    {
+      "ref": "revocacion"
+    },
+    {
+      "ref": "proteccion_datos"
+    },
+    {
+      "ref": "lugar_fecha"
+    },
+    {
+      "ref": "firmas_paciente"
+    }
+  ]
+}

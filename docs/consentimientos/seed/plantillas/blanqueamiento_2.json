@@ -1,0 +1,65 @@
+{
+  "_estado": "REVISAR",
+  "_aviso": "Hoja oculta en el Excel. Confirmar si sigue en uso.",
+  "codigo": "BLANQUEAMIENTO_2",
+  "titulo": "Documento de consentimiento informado para blanqueamiento 2",
+  "version": 1,
+  "idioma": "es",
+  "pide_piezas": true,
+  "profesional_por_defecto": null,
+  "composicion": [
+    {
+      "ref": "preambulo"
+    },
+    {
+      "ref": "identificacion"
+    },
+    {
+      "ref": "representante"
+    },
+    {
+      "ref": "diagnostico_plan"
+    },
+    {
+      "nodos": [
+        {
+          "tipo": "parrafo",
+          "texto": "me ha informado del riego de resorción radicular que algunas veces pueden producir estos tratamientos, aunque dicho riesgo es muy bajo. He entendido todo lo que se me ha explicado, he hecho todas las preguntas que me han surgido y se me han aclarado adecuadamente. De todos modos puedo revocar el consentimiento que ahora firmo en cualquier momento. Firmado: DENTISTA: PACIENTE:"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "D/D* con N* de historia de años de edad, con domicilio en y con D.N.I. N*."
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "de años de edad, con domicilio en y Con D.N.I. N* en calidad de ( padre, madre, tutor) del/ de la paciente."
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "REVOCO El consentimiento prestado en fecha y no deseo proseguir el tratamiento, que doy en esta fecha por finalizado. Firmado: DENTISTA: PACIENTE:"
+        }
+      ]
+    },
+    {
+      "ref": "riesgos_personalizados"
+    },
+    {
+      "ref": "contraindicaciones"
+    },
+    {
+      "ref": "declaracion"
+    },
+    {
+      "ref": "revocacion"
+    },
+    {
+      "ref": "proteccion_datos"
+    },
+    {
+      "ref": "lugar_fecha"
+    },
+    {
+      "ref": "firmas_paciente"
+    }
+  ]
+}

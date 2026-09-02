@@ -28,3 +28,9 @@ dist-ssr
 
 # Caché del CLI de Supabase (incluye la URL de conexión a la base)
 supabase/.temp
+
+# bundle temporal del previsualizador de consentimientos
+.preview-dist/
+
+# el paquete de consentimientos, ya extraido en docs/consentimientos/
+docs/consentimientos/*.zip

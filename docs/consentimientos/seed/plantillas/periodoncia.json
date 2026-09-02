@@ -1,0 +1,105 @@
+{
+  "_estado": "BORRADOR_OCR",
+  "_aviso": "Generado automáticamente por OCR. Cotejar contra originales/PERIODONCIA_1_p1.jpg antes de usar.",
+  "codigo": "PERIODONCIA",
+  "titulo": "Documento de consentimiento informado para periodoncia",
+  "version": 1,
+  "idioma": "es",
+  "pide_piezas": true,
+  "profesional_por_defecto": null,
+  "composicion": [
+    {
+      "ref": "preambulo"
+    },
+    {
+      "ref": "identificacion"
+    },
+    {
+      "ref": "representante"
+    },
+    {
+      "ref": "diagnostico_plan"
+    },
+    {
+      "nodos": [
+        {
+          "tipo": "parrafo",
+          "texto": "En relación con el diagnóstico, el facultativo me ha explicado, y comprendo, que: Los procedimientos propios de la periodoncia van dirigidos al tratamiento de las patologías específicas del sistema de soporte dentario, la enfermedad periodontal, que comprende desde una ligera inflamación de la encía hasta la pérdida de dicho sistema de soporte (formado por la encía, ligamento periodontal, hueso alveolar y cemento radicular) intentando conservar al máximo las estructuras dentarias y su función. La enfermedad periodontal es un proceso de curso crónico en el que intervienen factores infecciosos, hereditarios, inmunológicos, etc. Por tanto la mejoría obtenida mediante el tratamiento nunca se podrá considerar como definitiva porque dependerá del mantenimiento de la higiene por el propio paciente y de otros factores de muy difícil control (inmunológicos, hormonales, etc). Dentro de estos procedimientos propios de la periodoncia se incluyen desde los raspajes y alisados rediculares hasta toda la gama de cirugía periodontal realizada con distintos procedimientos para tratar el hueso, la encía o facilitar los procedimientos higiénicos al paciente. También se incluyen toda una serie de procedimientos de estética gingival. No existe alternativa terapéutica para el tratamiento de esta patología distinta al tratamiento periodontal."
+        },
+        {
+          "tipo": "titulo",
+          "nivel": 2,
+          "texto": "Factores de riesgo"
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "El mal control de placa: sin una correcta técnica de cepillado que elimine los depósitos bacterianos de dientes y encías, el control de la periodontitis no es posible",
+            "El tabaco es un conocido factor agravante de la enfermedad periodontal, por lo que el fumar conlleva una respuesta peor a los tratamientos, y un mayor riesgo de agravamiento de su evolución normal y de reactivación de la enfermedad",
+            "Algunos medicamentos como los anticomiciales, algunos inmunosupresores y los bloqueantes de los canales del calcio, entre otros. Por ello comprendo que es importante comunicar todos los antecedentes clínicos y tratamientos farmacológicos en curso"
+          ]
+        },
+        {
+          "tipo": "titulo",
+          "nivel": 2,
+          "texto": "Cronicidad"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Por todo lo dicho, la enfermedad periodontal no cura (salvo raras excepciones), aunque en la gran mayoría de los casos puede mantenerse detenida mediante tratamiento odontológico si existe una buena cooperación del paciente en el mantenimiento de una buena higiene oral."
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "En ocasiones no existe más posible tratamiento que la extracción de uno o más dientes, para evitar la propagación de la enfermedad o eliminar la sintomatología de dientes muy afectados."
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Además, para poder controlar y frenar la evolución de la enfermedad periodontal es imprescindible, aparte de una cuidadosa higiene oral personal, la realización de visitas periódicas de control y mantenimiento, consistentes en profilaxis (limpiezas) y ocasionales raspados de las irregularidades que los depósitos microbianos provocan en las superficies de las raíces."
+        },
+        {
+          "tipo": "titulo",
+          "nivel": 2,
+          "texto": "Limitaciones y riesgos"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "El/a paciente ha sido informado/a y conoce los riesgos estadísticamente frecuentes que puede comportar este tratamiento:"
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "Riesgos propios de la inyección de anestesia local: posibles hipersensibilidades al anestésico difícilmente previsibles, anestesias prolongadas, daños locales por la punción, excepcionalmente dolores neuropáticos, etc",
+            "Riesgo de aumento de la movilidad dentaria, habitualmente recuperable tras estos tratamientos",
+            "Riesgo de aumento de la sensibilidad dental y de molestias en la zona tratada, también por lo general recuperables ambas. E",
+            "Alteraciones en la estética dentogingival: cualquier tratamiento periodontal, y sobre todo si es quirúrgico y conlleva la eliminación de tejidos enfermos, puede provocar cambios importantes en la estética dental. La alteración más frecuente es la retracción gingival que provoca la sensación de alargamiento de la corona del diente, habitualmente no reversible",
+            "Encaso de cirugía periodontal existen los riesgos específicos de todo procedimiento quirúrgico: dolor, inflamación, hemorragia, hematoma, sobreinfección de la zona, dehiscencia de suturas,",
+            "Riesgo de fracaso de los procedimientos estéticos mucogingivales (de las encías)",
+            "Riesgo de rechazo de los tejidos o materiales injertados (óseos, gingivales, etc)",
+            "Existe siempre el riesgo de reactivación de la enfermedad periodontal que puede deberse a una higiene incompleta o a factores intrínsecos del paciente difícilmente controlables"
+          ]
+        }
+      ]
+    },
+    {
+      "ref": "riesgos_personalizados"
+    },
+    {
+      "ref": "contraindicaciones"
+    },
+    {
+      "ref": "declaracion"
+    },
+    {
+      "ref": "revocacion"
+    },
+    {
+      "ref": "proteccion_datos"
+    },
+    {
+      "ref": "lugar_fecha"
+    },
+    {
+      "ref": "firmas_paciente"
+    }
+  ]
+}

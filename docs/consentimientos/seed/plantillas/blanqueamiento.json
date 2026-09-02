@@ -1,0 +1,80 @@
+{
+  "_estado": "REVISAR",
+  "_aviso": "Papel propio de la clínica, sin estructura legal.",
+  "codigo": "BLANQUEAMIENTO",
+  "titulo": "Documento de consentimiento informado para blanqueamiento dental",
+  "version": 1,
+  "idioma": "es",
+  "pide_piezas": true,
+  "profesional_por_defecto": null,
+  "composicion": [
+    {
+      "ref": "preambulo"
+    },
+    {
+      "ref": "identificacion"
+    },
+    {
+      "ref": "representante"
+    },
+    {
+      "ref": "diagnostico_plan"
+    },
+    {
+      "nodos": [
+        {
+          "tipo": "titulo",
+          "nivel": 2,
+          "texto": "Consentimiento informado para"
+        },
+        {
+          "tipo": "titulo",
+          "nivel": 2,
+          "texto": "Blanqueamiento dental"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "D/D* con N* de historia de años de edad, con domicilio en y con D.N.I. N*."
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "de años de edad, con domicilio en y Con D.N.I. N* en calidad de ( padre, madre, tutor) del/ de la paciente. DECLARO Que el Dr/ D* Me ha informado de uge se me va arealizar u tratamiento de blanqueamiento dental. Interno Sí/ No Externo Sí/ No en: El/ los diente/ es La arcada Dicho tratamiento consiste:"
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "Sí/ No En la aplicación de un gel con peróxido sobre la superficie de los dientes, previa protección de los tejidos blandos",
+            "Sí/ No En la colocación de cubetas hechas a medida que le daremos en la consulta donde usted aplicará el agente blanqueador de forma domiciliaria",
+            "Sí/ No En la combinación de las dos técnicas citadas previamente",
+            "Sí/ No En la aplicación de un gel de peróxido en la cámara pulpar del diente/ es, previa protección de los tejidos blando y duros"
+          ]
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Me han explicado que se me aclararán los dientes como mínimo de un tono, aunque si tengo bandas, éstas se me seguirán notando, aunque más claras. También se que si soy fumador/ a o tomo muchos alimentos o bebidas ricos en colorantes, se me volverán a oscurecer más rápido que no tengo éstos hábitos, de todos modos, me han explicado que los dientes se oscurecen de forma fisiológica por la edad. Si me han hecho un tratamiento con cubetas en casa, puedo repetir el tratamiento periódicamente, según indicación del dentista. Se me ha informado de que puedo tener sensibilidad al frío o a lo largo del tratamiento y que si esto me sucede debo suspender el tratamiento y acudir a la consulta. También se"
+        }
+      ]
+    },
+    {
+      "ref": "riesgos_personalizados"
+    },
+    {
+      "ref": "contraindicaciones"
+    },
+    {
+      "ref": "declaracion"
+    },
+    {
+      "ref": "revocacion"
+    },
+    {
+      "ref": "proteccion_datos"
+    },
+    {
+      "ref": "lugar_fecha"
+    },
+    {
+      "ref": "firmas_paciente"
+    }
+  ]
+}

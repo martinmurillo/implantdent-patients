@@ -1,0 +1,81 @@
+{
+  "_estado": "BORRADOR_OCR",
+  "_aviso": "Generado automáticamente por OCR. Cotejar contra originales/CIRUGIAORAL_1_p1.jpg antes de usar.",
+  "codigo": "CIRUGIAORAL",
+  "titulo": "Documento de consentimiento informado para cirugía oral",
+  "version": 1,
+  "idioma": "es",
+  "pide_piezas": true,
+  "profesional_por_defecto": null,
+  "composicion": [
+    {
+      "ref": "preambulo"
+    },
+    {
+      "ref": "identificacion"
+    },
+    {
+      "ref": "representante"
+    },
+    {
+      "ref": "diagnostico_plan"
+    },
+    {
+      "nodos": [
+        {
+          "tipo": "parrafo",
+          "texto": "En relación con el diagnóstico, el facultativo me ha explicado, y comprendo, que: Los procedimientos propios de la cirugía oral van dirigidos básicamente a la extracción de cualquier tipo de tejidos (dentarios, óseos, gingivales, cuerpos extraños e incluso tejidos tumorales) situados en la zona bucodentaria o a la remodelación de estos tejidos para mejorar su función. Ello implica la invasión y manipulación mecánica del medio interno del organismo. Dentro de estos procedimientos se incluyen las extracciones dentarias simples o complejas, extracción de tejidos granulomatosos o neoplásicos situados en encía, hueso o mucosa oral, remodelación ósea, etc, realizados mediante distintos procedimientos."
+        },
+        {
+          "tipo": "titulo",
+          "nivel": 2,
+          "texto": "Limitaciones y riesgos"
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "El/la paciente ha sido informado/a y conoce los riesgos estadísticamente frecuentes que puede comportar este tratamiento:"
+        },
+        {
+          "tipo": "lista",
+          "items": [
+            "Riesgos propios de la inyección de anestesia local: posibles hipersensibilidades al anestésico difícilmente previsibles, anestesias prolongadas, daños locales por la punción, excepcionalmente dolores neuropáticos, etc",
+            "Riesgo de inflamación y dolor en la zona tratada debido al procedimiento quirúrgico",
+            "Riesgo de hemorragia y aparición de hematomas en la zona o áreas adyacentes",
+            "Riesgo de dehiscencia (separación) de las suturas empleadas",
+            "Riesgo de que se produzcan pequeños daños en las zonas próximas a las tratadas debido a la manipulación y separación de tejidos propios de la cirugía",
+            "Riesgo de alveolitis tras una exodoncia, consistente en una infección en el alvéolo que produce un dolor muy intenso y es rebelde a los tratamientos. Se produce por despegamiento o pérdida prematura del coágulo de sangre que debería ocupar el alvéolo, lo que permite la entrada de saliva en el mismo y su colonización por microbios. Es más frecuente y severa en fumadores",
+            "Riesgo importante de sobreinfección de las heridas quirúrgicas por los gérmenes bucales",
+            "Riesgo de pérdida de sensibilidad, temporal o no, en la zona tratada por los daños producidos a las pequeñas terminaciones nerviosas",
+            "Riesgo de limitación o imposibilidad de abrir la boca durante un tiempo variable (trismo), debido a la inflamación postquirúrgica, y molestias en la articulación témporo-mandibular, por la posición de boca abierta forzadamente que se debe adoptar durante la cirugía, principalmente en la extracción de los cordales, incluidos o no",
+            "Respecto a la extracción de terceros molares, puede existir riesgo de lesión de las estructuras nerviosas cercanas: nervio dentario inferior y nervio lingual. La posición de dichos nervios tiene variaciones anatómicas que en ocasiones los acerca tanto al tercer molar que pueden ser lesionados durante su"
+          ]
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "extracción. En la mayoría de las ocasiones la posición exacta del nervio no puede determinarse con exactitud mediante las pruebas radiológicas habituales. La lesión suele provocar una disminución de la: sensibilidad, en ocasiones total, de determinadas zonas linguales (en caso de lesión del nervio lingual) o cercanas al labio (en caso de lesión del nervio dentario inferior). Estas alteraciones de la sensibilidad suelen remitir en unos meses, pero en ocasiones son permanentes. Muy raramente la lesión de los troncos y terminaciones nerviosas puede provocar dolores de tipo neuropático, habitualmente limitados en el tiempo, pero que en situaciones excepcionales pueden ser permanentes. Debido a la zona donde se efectuará el tratamiento quirúrgico, se podrán producir además los siguientes riesgos y complicaciones: \" Asimismo el St/STa ……… W..meremrereenere eee eee reneereereseee..POL SUS EsPeciales condiciones personales olc c yen PE preseniar riesgos añiadidos consistentes en: El paciente también ha sido informado de que debe seguir los consejos y pautas de tratamiento dados por el profesional y que deberá consultar cualquier eventualidad que ocurra y que le parezca anormal. Debe además acudir a la revisión de la zona tratada y a retirar los puntos de sutura si procede en el plazo que se la ha indicado, y siempre que tenga cualquier tipo de molestia o duda sobre el tratamiento."
+        }
+      ]
+    },
+    {
+      "ref": "riesgos_personalizados"
+    },
+    {
+      "ref": "contraindicaciones"
+    },
+    {
+      "ref": "declaracion"
+    },
+    {
+      "ref": "revocacion"
+    },
+    {
+      "ref": "proteccion_datos"
+    },
+    {
+      "ref": "lugar_fecha"
+    },
+    {
+      "ref": "firmas_paciente"
+    }
+  ]
+}

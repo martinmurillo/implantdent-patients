@@ -1,0 +1,231 @@
+{
+  "_nota": "Bloques compartidos por las 18 plantillas. La redacción sale de los propios consentimientos que la clínica ya usa (familia mayoritaria, la que cita la Ley 41/2002), salvo 'proteccion_datos' y 'contraindicaciones', que no existen en ninguno de los dieciocho y hay que aprobar antes de usar.",
+  "bloques": [
+    {
+      "codigo": "preambulo",
+      "version": 1,
+      "titulo": "Preámbulo legal",
+      "notas": "Literal de la familia mayoritaria. No tocar.",
+      "contenido": [
+        {
+          "tipo": "parrafo",
+          "texto": "En cumplimiento de la Ley 41/2002, básica reguladora de la autonomía del paciente y de derechos y obligaciones en materia de información y documentación clínica, le presentamos para su firma el siguiente documento:"
+        }
+      ]
+    },
+    {
+      "codigo": "identificacion",
+      "version": 1,
+      "titulo": "Identificación del paciente y del facultativo",
+      "notas": "Adaptado del original. El texto entre paréntesis sobre menores se ha sacado a un bloque aparte que solo se imprime cuando corresponde por edad.",
+      "contenido": [
+        {
+          "tipo": "parrafo",
+          "texto": "D./Dña. {{paciente.nombre}}, con documento {{paciente.documento}}, nacido/a el {{paciente.fecha_nacimiento}} y con domicilio en {{paciente.domicilio}}, como paciente, declaro que el Dr./Dra. {{profesional.nombre}}, con número de colegiado {{profesional.colegiado}}, me ha diagnosticado:"
+        }
+      ]
+    },
+    {
+      "codigo": "representante",
+      "version": 1,
+      "titulo": "Representación legal",
+      "notas": "Solo se imprime si el firmante es representante (paciente menor de 16 años). Los datos NO salen de la base: se escriben a mano, que es como trabaja la clínica.",
+      "contenido": [
+        {
+          "tipo": "bloque_representante",
+          "nodos": [
+            {
+              "tipo": "recuadro",
+              "nodos": [
+                {
+                  "tipo": "parrafo",
+                  "texto": "El paciente es menor de edad. Consigne a continuación el nombre y documento del padre, madre o tutor que presta el consentimiento en su representación."
+                },
+                {
+                  "tipo": "campo_manual",
+                  "etiqueta": "Nombre y apellidos:",
+                  "lineas": 1
+                },
+                {
+                  "tipo": "campo_manual",
+                  "etiqueta": "Documento de identidad:",
+                  "lineas": 1
+                },
+                {
+                  "tipo": "campo_manual",
+                  "etiqueta": "Parentesco o relación con el paciente:",
+                  "lineas": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "codigo": "diagnostico_plan",
+      "version": 1,
+      "titulo": "Diagnóstico y plan de tratamiento",
+      "notas": "En los originales estas líneas se rellenan siempre a mano, porque el diagnóstico y las piezas cambian en cada paciente. Se mantiene manuscrito. Si algún día el presupuesto de la app puede volcar aquí el plan, se sustituye por campos de fusión.",
+      "contenido": [
+        {
+          "tipo": "campo_manual",
+          "etiqueta": "Diagnóstico:",
+          "lineas": 2
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Para dicho diagnóstico me ha propuesto y presupuestado el siguiente plan de tratamiento:"
+        },
+        {
+          "tipo": "campo_manual",
+          "etiqueta": "Plan de tratamiento (piezas {{tratamiento.piezas}}):",
+          "lineas": 3
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "En relación con el diagnóstico, el facultativo me ha explicado, y comprendo, que:"
+        }
+      ]
+    },
+    {
+      "codigo": "riesgos_personalizados",
+      "version": 1,
+      "titulo": "Riesgos personalizados",
+      "notas": "Original de la clínica. Cubre el art. 10.1.b de la Ley 41/2002 (riesgos ligados a las circunstancias personales). Es el bloque que más peso tiene si algún día hay reclamación: conviene rellenarlo siempre que haya algo que anotar.",
+      "contenido": [
+        {
+          "tipo": "titulo",
+          "texto": "Riesgos personalizados",
+          "nivel": 2
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Asimismo, D./Dña. {{paciente.nombre}}, por sus especiales condiciones particulares, puede presentar riesgos añadidos consistentes en:"
+        },
+        {
+          "tipo": "campo_manual",
+          "lineas": 3
+        }
+      ]
+    },
+    {
+      "codigo": "contraindicaciones",
+      "version": 1,
+      "titulo": "Contraindicaciones",
+      "notas": "BORRADOR PENDIENTE DE VALIDACIÓN CLÍNICA. El art. 10.1.d de la Ley 41/2002 exige informar de las contraindicaciones y no aparecen en ninguno de los 18 consentimientos actuales. El marco de abajo es genérico y correcto, pero las contraindicaciones ESPECÍFICAS de cada tratamiento las tiene que escribir un dentista desde el editor de plantillas. Hasta entonces queda la línea manuscrita.",
+      "contenido": [
+        {
+          "tipo": "titulo",
+          "texto": "Contraindicaciones",
+          "nivel": 2
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "He informado al facultativo de mi estado de salud, de las enfermedades que padezco o he padecido, de la medicación que tomo actualmente y de mis alergias conocidas. Comprendo que determinadas condiciones médicas, tratamientos farmacológicos o hábitos pueden desaconsejar este tratamiento, obligar a modificarlo o empeorar su pronóstico, y que el facultativo me ha explicado si alguna de ellas concurre en mi caso."
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Contraindicaciones específicas advertidas en mi caso:"
+        },
+        {
+          "tipo": "campo_manual",
+          "lineas": 2
+        }
+      ]
+    },
+    {
+      "codigo": "declaracion",
+      "version": 1,
+      "titulo": "Declaración de comprensión",
+      "notas": "Literal del original.",
+      "contenido": [
+        {
+          "tipo": "parrafo",
+          "texto": "Yo, D./Dña. {{paciente.nombre}}, como paciente, he sido informado/a por el Dr./Dra. {{profesional.nombre}}, comprendo el alcance y el significado de dicha información, he podido formular cuantas preguntas he considerado oportunas y se me han aclarado todas las dudas, y consiento en someterme al procedimiento clínico descrito en este documento."
+        }
+      ]
+    },
+    {
+      "codigo": "revocacion",
+      "version": 1,
+      "titulo": "Revocación",
+      "notas": "Literal del original de la familia mayoritaria. Da cumplimiento al art. 8.5 de la Ley 41/2002. Falta en siete de los dieciocho consentimientos actuales: implantes, elevación, injertos, regeneración, carillas, blanqueamiento y ortodoncia.",
+      "contenido": [
+        {
+          "tipo": "parrafo",
+          "texto": "También he sido informado/a de la posibilidad de revocar este consentimiento por escrito y en cualquier momento, sin necesidad de expresar el motivo, incluyendo las posibles consecuencias que conlleva el no someterse al tratamiento propuesto, así como los riesgos que de esta decisión pudieran derivarse en relación con mi salud bucodental."
+        }
+      ]
+    },
+    {
+      "codigo": "proteccion_datos",
+      "version": 1,
+      "titulo": "Protección de datos",
+      "notas": "PENDIENTE DE APROBACIÓN POR EL RESPONSABLE SANITARIO Y, PREFERIBLEMENTE, POR EL DPD DE LA CLÍNICA. No existe en ninguno de los 18 consentimientos actuales. El plazo de 15 años sale de la Llei 21/2000 art. 12.4, redactado por la Llei 16/2010. Verificar la base jurídica antes de publicar: en asistencia sanitaria suele ser el art. 9.2.h del RGPD, no el consentimiento.",
+      "contenido": [
+        {
+          "tipo": "titulo",
+          "texto": "Información sobre protección de datos",
+          "nivel": 2
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Responsable: {{clinica.razon_social}}, CIF {{clinica.cif}}, con domicilio en {{clinica.direccion}}. Finalidad: la prestación de asistencia odontológica y la gestión de su historia clínica. Legitimación: el tratamiento es necesario para fines de medicina preventiva, diagnóstico médico y prestación de asistencia sanitaria (art. 9.2.h del Reglamento (UE) 2016/679), así como para el cumplimiento de las obligaciones legales del centro."
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "Conservación: su historia clínica se conservará durante los plazos legalmente establecidos, con un mínimo de quince años desde el alta de cada proceso asistencial. Destinatarios: no se ceden datos a terceros salvo obligación legal o cuando resulte necesario para su asistencia. Derechos: puede ejercer los derechos de acceso, rectificación, supresión, limitación, oposición y portabilidad dirigiéndose a {{clinica.email_dpd}}, así como presentar una reclamación ante la Autoritat Catalana de Protecció de Dades."
+        }
+      ]
+    },
+    {
+      "codigo": "lugar_fecha",
+      "version": 1,
+      "titulo": "Lugar y fecha",
+      "contenido": [
+        {
+          "tipo": "parrafo",
+          "texto": "En {{lugar}}, a {{fecha}}."
+        }
+      ]
+    },
+    {
+      "codigo": "firmas_paciente",
+      "version": 1,
+      "titulo": "Firmas (paciente adulto)",
+      "contenido": [
+        {
+          "tipo": "firmas",
+          "columnas": [
+            {
+              "etiqueta": "El paciente"
+            },
+            {
+              "etiqueta": "El odontoestomatólogo informante"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "codigo": "firmas_representante",
+      "version": 1,
+      "titulo": "Firmas (con representante legal)",
+      "notas": "Se usa en lugar de firmas_paciente cuando el paciente tiene menos de 16 años.",
+      "contenido": [
+        {
+          "tipo": "firmas",
+          "columnas": [
+            {
+              "etiqueta": "El padre, madre o tutor"
+            },
+            {
+              "etiqueta": "El odontoestomatólogo informante"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
