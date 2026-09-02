@@ -11,8 +11,6 @@ type Paciente = {
   id: string;
   nombre: string;
   documento: string;
-  fecha_nacimiento: string;
-  domicilio: string | null;
   telefono: string | null;
   historia_clinica: string | null;
 };
@@ -32,20 +30,11 @@ export function BotonConsentimientos({ paciente }: { paciente: Paciente }) {
   const [generando, setGenerando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // La mayoría de las fichas antiguas no tienen fecha de nacimiento:
-  // el Excel nunca la usó. En vez de bloquear el módulo hasta que
-  // alguien rellene miles de fichas, se pide aquí la primera vez y se
-  // guarda en la ficha. El dato se va completando solo, a medida que
-  // se emiten consentimientos.
-  const [nacimientoManual, setNacimientoManual] = useState('');
-  const [guardarEnFicha, setGuardarEnFicha] = useState(true);
-
-  const nacimiento = paciente.fecha_nacimiento || nacimientoManual;
-  const edad = useMemo(
-    () => (nacimiento ? calcularEdad(nacimiento) : null),
-    [nacimiento],
-  );
-  const firmante = edad === null ? null : determinarFirmante(edad);
+  // Quién firma se elige aquí, no se calcula. La clínica no guarda la
+  // fecha de nacimiento y el consentimiento no la imprime, así que no
+  // hay de dónde deducirlo. La regla de los 16 años va en la etiqueta
+  // del selector para que quien emite el documento la tenga delante.
+  const [firmante, setFirmante] = useState<TipoFirmante>('paciente');
 
   useEffect(() => {
     if (!abierto) return;
@@ -77,30 +66,14 @@ export function BotonConsentimientos({ paciente }: { paciente: Paciente }) {
 
   async function generar() {
     if (!config || seleccion.size === 0) return;
-    if (edad === null || firmante === null) {
-      setError('Indica la fecha de nacimiento: determina quién debe firmar.');
-      return;
-    }
     setGenerando(true);
     setError(null);
 
     try {
-      // Si la fecha se ha tecleado ahora, se guarda en la ficha para
-      // no volver a pedirla nunca más para este paciente.
-      if (!paciente.fecha_nacimiento && nacimientoManual && guardarEnFicha) {
-        await supabase.from('patients')
-          .update({ fecha_nacimiento: nacimientoManual })
-          .eq('id', paciente.id);
-      }
       for (const plantillaId of seleccion) {
         const plantilla = plantillas.find((p) => p.id === plantillaId)!;
 
-        // El profesional por defecto de la plantilla manda (implantes
-        // siempre Sergio), pero si el usuario ha elegido otro, gana el
-        // elegido: hace falta el día que el titular esté de baja.
-        const doctor =
-          doctores.find((x) => x.id === doctorId) ??
-          doctores.find((x) => x.id === plantilla.profesional_por_defecto);
+        const doctor = doctores.find((x) => x.id === doctorId);
 
         if (!doctor) {
           setError('Selecciona el profesional que realizará el tratamiento.');
@@ -112,11 +85,7 @@ export function BotonConsentimientos({ paciente }: { paciente: Paciente }) {
           paciente: {
             nombre: paciente.nombre,
             documento: paciente.documento,
-            fecha_nacimiento: new Date(paciente.fecha_nacimiento).toLocaleDateString('es-ES'),
-            edad,
-            domicilio: paciente.domicilio ?? '',
             telefono: paciente.telefono ?? '',
-            historia_clinica: paciente.historia_clinica ?? '',
           },
           profesional: { nombre: doctor.nombre, colegiado: doctor.colegiado },
           clinica: {
@@ -165,7 +134,6 @@ export function BotonConsentimientos({ paciente }: { paciente: Paciente }) {
             profesional_nombre: doctor.nombre,
             profesional_colegiado: doctor.colegiado,
             firmante_tipo: firmante,
-            edad_al_emitir: edad,
             emitido_por: (await supabase.auth.getUser()).data.user?.id,
           })
           .select('id')
@@ -194,7 +162,6 @@ export function BotonConsentimientos({ paciente }: { paciente: Paciente }) {
     }
   }
 
-  const faltaDomicilio = !paciente.domicilio;
 
   return (
     <>
@@ -204,51 +171,25 @@ export function BotonConsentimientos({ paciente }: { paciente: Paciente }) {
         <div role="dialog" aria-label="Generar consentimientos">
           <h2>Consentimientos para {paciente.nombre}</h2>
 
-          {edad === null ? (
-            <div>
-              <p>
-                Esta ficha no tiene fecha de nacimiento. Hace falta para saber
-                quién firma: a partir de 16 años firma el propio paciente, por
-                debajo firma el padre, la madre o el tutor.
-              </p>
-              <label>
-                Fecha de nacimiento
-                <input
-                  type="date"
-                  value={nacimientoManual}
-                  max={new Date().toISOString().slice(0, 10)}
-                  onChange={(e) => setNacimientoManual(e.target.value)}
-                />
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={guardarEnFicha}
-                  onChange={(e) => setGuardarEnFicha(e.target.checked)}
-                />
-                Guardarla en la ficha del paciente
-              </label>
-            </div>
-          ) : (
-            <p>
-              {edad} años.{' '}
-              {firmante === 'representante'
-                ? 'Firma el padre, madre o tutor. El documento incluirá espacio para escribir sus datos a mano.'
-                : 'Firma el propio paciente.'}
-            </p>
-          )}
+          <fieldset>
+            <legend>Quién firma</legend>
+            <label>
+              <input type="radio" checked={firmante === 'paciente'}
+                onChange={() => setFirmante('paciente')} />
+              El propio paciente (adulto, o menor de 16 años o más)
+            </label>
+            <label>
+              <input type="radio" checked={firmante === 'representante'}
+                onChange={() => setFirmante('representante')} />
+              Padre, madre o tutor (paciente menor de 16 años)
+            </label>
+          </fieldset>
 
-          {faltaDomicilio && (
-            <p>
-              Este paciente no tiene domicilio en la ficha. El documento
-              dejará una línea para escribirlo a mano.
-            </p>
-          )}
 
           <label>
             Profesional
             <select value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
-              <option value="">Por defecto según el tratamiento</option>
+              <option value="">Selecciona el profesional</option>
               {doctores.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.nombre} — col. {d.colegiado}

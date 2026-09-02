@@ -111,7 +111,12 @@
       "Bash(rm -f preview-consent.html src/preview-consent.jsx)",
       "Bash(rm -rf .preview-dist)",
       "Bash(sed -i 's|\"./lib/consentimientos/DocumentoPDF\"|\"../src/lib/consentimientos/DocumentoPDF\"|; s|\"./lib/consentimientos/merge\"|\"../src/lib/consentimientos/merge\"|' scripts/preview-consentimiento.jsx)",
-      "Bash(grep -vE \"^$\")"
+      "Bash(grep -vE \"^$\")",
+      "Bash(cp -r _tmp/consentimientos/. .)",
+      "Bash(rm -rf _tmp consentimientos-v3.zip)",
+      "Bash(grep -oE '\"frase\": \"[^\"]{0,60}')",
+      "Bash(cp \"C:/Users/marti/AppData/Local/Temp/real.mjs\" ./real-tmp.mjs)",
+      "Bash(rm -f real-tmp.mjs)"
     ]
   }
 }

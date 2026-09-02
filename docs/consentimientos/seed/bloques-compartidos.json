@@ -15,21 +15,21 @@
     },
     {
       "codigo": "identificacion",
-      "version": 1,
+      "version": 2,
       "titulo": "Identificación del paciente y del facultativo",
-      "notas": "Adaptado del original. El texto entre paréntesis sobre menores se ha sacado a un bloque aparte que solo se imprime cuando corresponde por edad.",
+      "notas": "v2: se quitaron la fecha de nacimiento y el domicilio. Los escaneos originales no los llevan (ver ENDODONCIAS_1_p1.jpg): solo nombre y documento, que es lo que ya trae el presupuesto. Añadirlos obligaba a mantener dos datos que la clínica no necesita.",
       "contenido": [
         {
           "tipo": "parrafo",
-          "texto": "D./Dña. {{paciente.nombre}}, con documento {{paciente.documento}}, nacido/a el {{paciente.fecha_nacimiento}} y con domicilio en {{paciente.domicilio}}, como paciente, declaro que el Dr./Dra. {{profesional.nombre}}, con número de colegiado {{profesional.colegiado}}, me ha diagnosticado:"
+          "texto": "D./Dña. {{paciente.nombre}}, con documento {{paciente.documento}}, como paciente, declaro que el Dr./Dra. {{profesional.nombre}}, con número de colegiado {{profesional.colegiado}}, me ha diagnosticado:"
         }
       ]
     },
     {
       "codigo": "representante",
-      "version": 1,
+      "version": 2,
       "titulo": "Representación legal",
-      "notas": "Solo se imprime si el firmante es representante (paciente menor de 16 años). Los datos NO salen de la base: se escriben a mano, que es como trabaja la clínica.",
+      "notas": "Se imprime cuando en el modal se marca que firma el representante. Ya no se calcula por fecha de nacimiento: se elige a mano, y la etiqueta del selector lleva la regla (16 años) para que no haya duda.",
       "contenido": [
         {
           "tipo": "bloque_representante",

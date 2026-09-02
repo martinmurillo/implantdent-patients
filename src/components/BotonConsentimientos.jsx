@@ -1,17 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { pdf } from "@react-pdf/renderer";
 import { supabase } from "../supabase";
 import { DocumentoPDF } from "../lib/consentimientos/DocumentoPDF";
-import {
-  calcularEdad, determinarFirmante, componerDocumento, fechaLarga,
-} from "../lib/consentimientos/merge";
+import { componerDocumento, fechaLarga } from "../lib/consentimientos/merge";
 
-// Botón de la ficha del paciente: elegir tratamientos y sacar el PDF.
+// Botón de la ficha del paciente: se marcan los consentimientos que hagan
+// falta y sale un PDF por cada uno, listo para imprimir y firmar en papel.
 //
 // El `paciente` que llega es la fila de patients tal cual, con los nombres de
-// esta base (name, dni, hc, phone). El modelo de fusión usa otros
-// (nombre, documento, historia_clinica), así que la traducción se hace aquí y
-// en un solo sitio.
+// esta base (name, dni, phone). El modelo de fusión usa otros (nombre,
+// documento, telefono), así que la traducción se hace aquí y en un solo sitio.
+//
+// Quién firma se elige a mano. No se deduce de la edad: la ficha no guarda
+// fecha de nacimiento, y una regla automática que se equivoque invalida el
+// consentimiento. La norma va escrita en la propia etiqueta, para que quien
+// lo marque la tenga delante.
 
 const est = {
   fondo: { position:"fixed", inset:0, background:"#0009", zIndex:9999,
@@ -41,19 +44,9 @@ export function BotonConsentimientos({ paciente }) {
   const [seleccion, setSeleccion] = useState(new Set());
   const [doctorId, setDoctorId] = useState("");
   const [piezas, setPiezas] = useState("");
+  const [firmante, setFirmante] = useState("paciente");
   const [generando, setGenerando] = useState(false);
   const [error, setError] = useState(null);
-
-  // La mayoría de las fichas antiguas no tienen fecha de nacimiento: el Excel
-  // del que vienen nunca la usó. En vez de bloquear el módulo hasta que
-  // alguien rellene miles de fichas, se pide aquí la primera vez y se guarda.
-  // El dato se va completando solo, a medida que se emiten consentimientos.
-  const [nacimientoManual, setNacimientoManual] = useState("");
-  const [guardarEnFicha, setGuardarEnFicha] = useState(true);
-
-  const nacimiento = paciente.fecha_nacimiento || nacimientoManual;
-  const edad = useMemo(() => (nacimiento ? calcularEdad(nacimiento) : null), [nacimiento]);
-  const firmante = edad === null ? null : determinarFirmante(edad);
 
   useEffect(() => {
     if (!abierto) return;
@@ -83,45 +76,21 @@ export function BotonConsentimientos({ paciente }) {
 
   async function generar() {
     if (!config || seleccion.size === 0) return;
-    if (edad === null || firmante === null) {
-      setError("Indicá la fecha de nacimiento: determina quién debe firmar.");
-      return;
-    }
+    const doctor = doctores.find(x => x.id === doctorId);
+    if (!doctor) { setError("Elegí el profesional que realizará el tratamiento."); return; }
+
     setGenerando(true);
     setError(null);
-
     try {
-      if (!paciente.fecha_nacimiento && nacimientoManual && guardarEnFicha) {
-        await supabase.from("patients")
-          .update({ fecha_nacimiento: nacimientoManual })
-          .eq("id", paciente.id);
-      }
-
       for (const plantillaId of seleccion) {
         const plantilla = plantillas.find(p => p.id === plantillaId);
         if (!plantilla) continue;
-
-        // El profesional por defecto de la plantilla manda (implantes siempre
-        // Sergio), pero si el usuario eligió otro, gana el elegido: hace falta
-        // el día que el titular esté de baja.
-        const doctor = doctores.find(x => x.id === doctorId)
-          || doctores.find(x => x.id === plantilla.profesional_por_defecto);
-        if (!doctor) {
-          setError("Elegí el profesional que realizará el tratamiento.");
-          setGenerando(false);
-          return;
-        }
 
         const datos = {
           paciente: {
             nombre: paciente.name || "",
             documento: paciente.dni || "",
-            // la fecha que vale es la que hay, venga de la ficha o de este modal
-            fecha_nacimiento: new Date(nacimiento).toLocaleDateString("es-ES"),
-            edad,
-            domicilio: paciente.domicilio || "",
             telefono: paciente.phone || "",
-            historia_clinica: paciente.hc || "",
           },
           profesional: { nombre: doctor.name, colegiado: doctor.colegiado || "" },
           clinica: {
@@ -165,7 +134,6 @@ export function BotonConsentimientos({ paciente }) {
             profesional_nombre: doctor.name,
             profesional_colegiado: doctor.colegiado || "",
             firmante_tipo: firmante,
-            edad_al_emitir: edad,
             emitido_por: (await supabase.auth.getUser()).data.user?.id,
           })
           .select("id")
@@ -185,11 +153,25 @@ export function BotonConsentimientos({ paciente }) {
       setSeleccion(new Set());
     } catch (e) {
       console.error(e);
-      setError("No se ha podido generar el documento. Volvé a intentarlo.");
+      setError("No se ha podido generar el documento: " + (e?.message || "error desconocido"));
     } finally {
       setGenerando(false);
     }
   }
+
+  const radio = (valor, titulo, pie) => (
+    <label style={{display:"flex", gap:8, alignItems:"flex-start", padding:"7px 9px",
+      borderRadius:8, cursor:"pointer", marginBottom:5,
+      background: firmante === valor ? "#f7f3e6" : "#fff",
+      border:`1px solid ${firmante === valor ? "#c9a84c" : "#dde4ef"}`}}>
+      <input type="radio" name="firmante" checked={firmante === valor}
+        onChange={()=>setFirmante(valor)} style={{marginTop:2}}/>
+      <span>
+        <b style={{fontSize:13}}>{titulo}</b>
+        <span style={{display:"block", fontSize:11.5, color:"#777", lineHeight:1.35}}>{pie}</span>
+      </span>
+    </label>
+  );
 
   return (
     <>
@@ -206,44 +188,18 @@ export function BotonConsentimientos({ paciente }) {
             <div style={est.rotulo}>CONSENTIMIENTOS</div>
             <h2 style={{fontSize:18, margin:"0 0 14px"}}>{paciente.name}</h2>
 
-            {edad === null ? (
-              <div style={{...est.nota, background:"#fdf4e3", color:"#6e4c0c"}}>
-                <p style={{margin:"0 0 10px"}}>
-                  Esta ficha no tiene fecha de nacimiento. Hace falta para saber quién
-                  firma: a partir de los 16 firma el propio paciente, por debajo firma
-                  el padre, la madre o el tutor.
-                </p>
-                <label style={est.label}>Fecha de nacimiento</label>
-                <input type="date" value={nacimientoManual} style={{...est.campo, maxWidth:190}}
-                  max={new Date().toISOString().slice(0, 10)}
-                  onChange={e=>setNacimientoManual(e.target.value)}/>
-                <label style={{display:"flex", alignItems:"center", gap:7, marginTop:9, fontSize:12.5}}>
-                  <input type="checkbox" checked={guardarEnFicha}
-                    onChange={e=>setGuardarEnFicha(e.target.checked)}/>
-                  Guardarla en la ficha del paciente
-                </label>
-              </div>
-            ) : (
-              <div style={{...est.nota, background:"#eef3f2", color:"#0e3b3e"}}>
-                <b>{edad} años.</b>{" "}
-                {firmante === "representante"
-                  ? "Firma el padre, la madre o el tutor. El documento llevará espacio para escribir sus datos a mano."
-                  : "Firma el propio paciente."}
-              </div>
-            )}
+            <label style={est.label}>Quién firma</label>
+            {radio("paciente", "El propio paciente",
+              "Desde los 16 años firma él, aunque sea menor de edad.")}
+            {radio("representante", "Padre, madre o tutor",
+              "Por debajo de 16. El documento lleva espacio para escribir sus datos a mano.")}
 
-            {!paciente.domicilio && (
-              <div style={{...est.nota, background:"#f7f7f5", color:"#666"}}>
-                Sin domicilio en la ficha: el documento dejará una línea para escribirlo a mano.
-              </div>
-            )}
-
-            <div style={{display:"flex", gap:12, marginBottom:14, flexWrap:"wrap"}}>
+            <div style={{display:"flex", gap:12, margin:"14px 0", flexWrap:"wrap"}}>
               <div style={{flex:2, minWidth:210}}>
                 <label style={est.label}>Profesional</label>
                 <select value={doctorId} onChange={e=>setDoctorId(e.target.value)}
                   style={{...est.campo, cursor:"pointer"}}>
-                  <option value="">Por defecto según el tratamiento</option>
+                  <option value="">Elegir...</option>
                   {doctores.map(d => (
                     <option key={d.id} value={d.id}>
                       {d.name}{d.colegiado ? ` — col. ${d.colegiado}` : ""}
@@ -258,7 +214,7 @@ export function BotonConsentimientos({ paciente }) {
               </div>
             </div>
 
-            <label style={est.label}>Tratamientos</label>
+            <label style={est.label}>Consentimientos a generar</label>
             {plantillas.length === 0 ? (
               <div style={{...est.nota, background:"#f7f7f5", color:"#666"}}>
                 No hay ninguna plantilla activa todavía. Se activan una a una desde
@@ -266,7 +222,7 @@ export function BotonConsentimientos({ paciente }) {
               </div>
             ) : (
               <div style={{border:"1px solid #dde4ef", borderRadius:8, padding:"6px 10px",
-                marginBottom:14, maxHeight:210, overflowY:"auto"}}>
+                marginBottom:14, maxHeight:230, overflowY:"auto"}}>
                 {plantillas.map(p => (
                   <label key={p.id} style={{display:"flex", alignItems:"center", gap:8,
                     padding:"5px 0", fontSize:13, cursor:"pointer"}}>
@@ -286,8 +242,9 @@ export function BotonConsentimientos({ paciente }) {
 
             <div style={{display:"flex", gap:8, justifyContent:"flex-end"}}>
               <button onClick={()=>setAbierto(false)} style={est.gris}>Cancelar</button>
-              <button onClick={generar} disabled={generando || seleccion.size === 0}
-                style={{...est.oro, opacity:(generando || seleccion.size === 0) ? 0.5 : 1}}>
+              <button onClick={generar} disabled={generando || seleccion.size === 0 || !doctorId}
+                style={{...est.oro,
+                  opacity:(generando || seleccion.size === 0 || !doctorId) ? 0.5 : 1}}>
                 {generando ? "Generando..." : `Generar ${seleccion.size || ""}`}
               </button>
             </div>

@@ -17,9 +17,6 @@
       "ref": "representante"
     },
     {
-      "ref": "diagnostico_plan"
-    },
-    {
       "nodos": [
         {
           "tipo": "lista",
@@ -29,10 +26,18 @@
           ]
         },
         {
+          "tipo": "parrafo",
+          "texto": "Para dicho diagnóstico me ha propuesto y presupuestado el siguiente plan de tratamiento:"
+        },
+        {
           "tipo": "lista",
           "items": [
             "Endodoncia de las piezas {{tratamiento.piezas}}."
           ]
+        },
+        {
+          "tipo": "parrafo",
+          "texto": "En relación con el diagnóstico, el facultativo me ha explicado, y comprendo, que:"
         },
         {
           "tipo": "parrafo",
@@ -130,5 +135,5 @@
     }
   ],
   "_estado": "VERIFICADA",
-  "_aviso": "Transcrita leyendo el escaneo original, no por OCR. Aun así, cotejar contra originales/ENDODONCIAS_1_p1.jpg y _p2.jpg antes de producción."
+  "_aviso": "Transcrita a mano del escaneo. NO usa el bloque compartido diagnostico_plan: es la única plantilla cuyo cuerpo trae sus propias viñetas de diagnóstico y plan, que deben ir intercaladas entre las dos frases de enlace. Ver ENDODONCIAS_1_p1.jpg."
 }
