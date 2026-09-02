@@ -1126,7 +1126,6 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
             )}
           </div>
           <div style={{display:"flex",gap:5,flexShrink:0,marginLeft:10}}>
-            <BotonConsentimientos paciente={patient}/>
             <button onClick={()=>onEdit(patient)} style={{...s.btnDark,padding:"5px 12px",fontSize:12}}>Editar</button>
             <button onClick={()=>onDelete(patient)}
               style={{...s.btnSm,background:"#fff0f0",border:"1px solid #e74c3c88",color:"#e74c3c",padding:"5px 12px",fontSize:12}}>
@@ -1151,9 +1150,8 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
               </button>
             ))}
           </div>
-          {waPhone && (
           <div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center"}}>
-            {[
+            {waPhone && [
               {label:"saludo",    msg:msgSaludo,    color:"#25a244", key:"saludo"},
               {label:"oferta",    msg:msgOferta,    color:"#c9a84c", key:"oferta"},
               {label:"cita",      msg:msgCita,      color:"#3498db", key:"cita",      disabled:!msgCita},
@@ -1177,8 +1175,8 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
                   </div>
                 )
             ))}
+            <BotonConsentimientos paciente={patient}/>
           </div>
-          )}
         </div>
       </div>
       {/* ── History sidebar ── */}
