@@ -117,7 +117,8 @@
       "Bash(grep -oE '\"frase\": \"[^\"]{0,60}')",
       "Bash(cp \"C:/Users/marti/AppData/Local/Temp/real.mjs\" ./real-tmp.mjs)",
       "Bash(rm -f real-tmp.mjs)",
-      "Bash(awk '{print $5, $9}')"
+      "Bash(awk '{print $5, $9}')",
+      "Bash(grep -vE \"^--$\")"
     ]
   }
 }

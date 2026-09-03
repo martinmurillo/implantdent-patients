@@ -100,7 +100,11 @@ export function BotonConsentimientos({ paciente }) {
       }
       setElegidos(marcados);
     })();
-  }, [abierto]);
+    // paciente.treatments queda fuera a proposito: el presupuesto se lee una
+    // vez, al abrir. Si cambiara con el modal abierto y esto se repitiera,
+    // borraria lo que el usuario ya hubiera marcado a mano.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abierto, paciente.id]);
 
   // Al marcar un consentimiento entra ya con su profesional habitual, si lo
   // tiene: implantes siempre los pone Sergio, la implantosoportada Leticia.
@@ -139,9 +143,7 @@ export function BotonConsentimientos({ paciente }) {
       const [{ pdf }, { DocumentoPDF, DocumentoConjunto }] = await cargarPdf();
       // Se juntan para imprimirlos de una sola vez.
       const paraImprimir = [];
-      let hechos = 0;
       for (const plantillaId of ids) {
-        setProgreso(`${++hechos} de ${ids.length}`);
         const plantilla = plantillas.find(p => p.id === plantillaId);
         const doctor = doctores.find(d => d.id === elegidos[plantillaId]);
         if (!plantilla || !doctor) continue;
@@ -179,16 +181,15 @@ export function BotonConsentimientos({ paciente }) {
 
         const nodos = componerDocumento(composicion, bloques, datos, firmante);
 
-        const blob = await pdf(
-          <DocumentoPDF titulo={plantilla.titulo} nodos={nodos} datos={datos}
-            logoUrl={config.logo_url}/>
-        ).toBlob();
-
         paraImprimir.push({ titulo: plantilla.titulo, nodos, datos });
       }
 
       // Un solo archivo con todos, cada uno empezando en hoja nueva y con su
       // propia numeración. Se firman por separado, se imprimen de una vez.
+      // Un solo render para todos: componer los nodos es instantáneo, lo que
+      // cuesta es maquetar el PDF, y hacerlo una vez en lugar de una por
+      // consentimiento es la diferencia entre un segundo y diez.
+      setProgreso("montando el PDF");
       const juntos = paraImprimir.length === 1
         ? await pdf(<DocumentoPDF {...paraImprimir[0]} logoUrl={config.logo_url}/>).toBlob()
         : await pdf(<DocumentoConjunto docs={paraImprimir} logoUrl={config.logo_url}/>).toBlob();
