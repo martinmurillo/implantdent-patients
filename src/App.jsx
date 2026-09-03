@@ -41,7 +41,12 @@ const parsePDF = async (file) => {
     treatments.push({ id:genId(), name:m[2].trim(), value:String(value), discount:m[5] });
   }
   const phone = get(/Móv\.?\s*[\/]\s*Tel[eé]f\.?\s*:?\s*([\d\s\+\(\)\-\.]{6,})/i).replace(/[\s\.]/g,"").replace(/\/$/, "");
-  return { hc, name, dni, budgetNo, date, time:"", phone, treatments };
+  // El profesional que firma el presupuesto viene en la cabecera, y con su
+  // número de colegiado: "NIF : B17962564 Colegiado : 9239 WEB : ...". Se
+  // guarda el número y no el nombre porque es clave exacta contra
+  // doctors.colegiado; emparejar por nombre es lo que ya falló con "Dr Sergio".
+  const doctorColegiado = get(/Colegiado\s*:\s*(\d{3,6})/i);
+  return { hc, name, dni, budgetNo, date, time:"", phone, treatments, doctorColegiado };
 };
 
 // Al reimportar un PDF hay que conservar el id de las líneas que ya existían:
@@ -722,6 +727,7 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
       setP(prev=>({...prev, name:parsed.name||prev.name, hc:parsed.hc||prev.hc,
         dni:parsed.dni||prev.dni, budgetNo:parsed.budgetNo||prev.budgetNo, date:parsed.date||prev.date,
         phone:parsed.phone||prev.phone,
+        doctor_colegiado:parsed.doctorColegiado||prev.doctor_colegiado,
         treatments:parsed.treatments.length?reuseTxIds(prev.treatments, parsed.treatments):prev.treatments,
         // los importes importados son los del PDF: descuento directo, sin inflar
         pdfPriced:parsed.treatments.length?true:prev.pdfPriced,
@@ -6094,6 +6100,8 @@ function AppCompleta() {
     const payload = {
       name:p.name, hc:p.hc, dni:p.dni||"", budget_no:p.budgetNo||p.budget_no, date:p.date, time:p.time,
       phone:p.phone||"",
+      // el nº de colegiado que venía en la cabecera del presupuesto
+      doctor_colegiado:p.doctor_colegiado||null,
       treatments:{ items: p.treatments, discountPct: p.discountPct||"0", priceMode: p.pdfPriced ? "pdf" : "legacy" },
       appointments:p.appointments||[], reminders:p.reminders||[], notes:p.notes, history:p.history||[],
       status:p.status||"pendiente", last_contact:p.last_contact||today(), closed:isCerrado(p.status),

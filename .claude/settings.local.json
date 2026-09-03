@@ -118,7 +118,11 @@
       "Bash(cp \"C:/Users/marti/AppData/Local/Temp/real.mjs\" ./real-tmp.mjs)",
       "Bash(rm -f real-tmp.mjs)",
       "Bash(awk '{print $5, $9}')",
-      "Bash(grep -vE \"^--$\")"
+      "Bash(grep -vE \"^--$\")",
+      "Bash(\"/c/Program Files/Google/Chrome/Application/chrome.exe\" --headless=new --disable-gpu --no-sandbox --virtual-time-budget=45000 --dump-dom \"http://127.0.0.1:5199/lee-pdf.html\")",
+      "Bash(curl -sS -o /dev/null -w \"cdnjs: %{http_code}\\\\n\" \"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js\")",
+      "Bash(rm -f public/_muestra.pdf lee-pdf.html src/lee-pdf.jsx)",
+      "Bash(npm uninstall *)"
     ]
   }
 }

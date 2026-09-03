@@ -91,12 +91,16 @@ export function BotonConsentimientos({ paciente }) {
       const codigos = consentimientosDelPresupuesto(
         Array.isArray(paciente.treatments) ? paciente.treatments
           : (paciente.treatments?.items || []));
+      // El profesional que firmó el presupuesto, por su nº de colegiado, que
+      // es clave exacta. Sirve de valor por defecto salvo en las plantillas
+      // que ya tienen el suyo fijado -implantes siempre Sergio-.
+      const delPresu = docs.find(x => x.colegiado && x.colegiado === paciente.doctor_colegiado);
       const marcados = {};
       for (const cod of codigos) {
         const pl = todas.find(x => x.codigo === cod);
         if (!pl) continue;
-        const pd = pl.profesional_por_defecto;
-        marcados[pl.id] = docs.some(x => x.id === pd) ? pd : "";
+        const fijo = docs.find(x => x.id === pl.profesional_por_defecto);
+        marcados[pl.id] = (fijo || delPresu)?.id || "";
       }
       setElegidos(marcados);
     })();
@@ -113,8 +117,9 @@ export function BotonConsentimientos({ paciente }) {
     const n = { ...prev };
     if (id in n) { delete n[id]; return n; }
     const p = plantillas.find(x => x.id === id);
-    const porDefecto = p?.profesional_por_defecto;
-    n[id] = doctores.some(d => d.id === porDefecto) ? porDefecto : "";
+    const fijo = doctores.find(d => d.id === p?.profesional_por_defecto);
+    const delPresu = doctores.find(d => d.colegiado && d.colegiado === paciente.doctor_colegiado);
+    n[id] = (fijo || delPresu)?.id || "";
     return n;
   });
   const ponerDoctor = (id, docId) => setElegidos(prev => ({ ...prev, [id]: docId }));
