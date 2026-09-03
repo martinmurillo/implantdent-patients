@@ -26,7 +26,8 @@ const bloques = new Map(bl.map(b => [b.codigo, b]));
 // Misma construcción que BotonConsentimientos
 const datos = {
   paciente: { nombre: pac.name || "", documento: pac.dni || "", telefono: pac.phone || "" },
-  profesional: { nombre: doc.name, colegiado: doc.colegiado || "" },
+  profesional: { nombre: doc.name, colegiado: doc.colegiado || "",
+                 tratamiento: doc.tratamiento || "el Dr./la Dra." },
   clinica: {
     razon_social: cfg.razon_social, cif: cfg.cif,
     registro_sanitario: cfg.registro_sanitario, direccion: cfg.direccion,

@@ -39,7 +39,7 @@ const datos = {
     domicilio: "Carrer Exemple 1, Girona", telefono: "600000000",
     historia_clinica: "20700",
   },
-  profesional: { nombre: "Sergio Molina", colegiado: "5296" },
+  profesional: { nombre: "Sergio Molina", colegiado: "5296", tratamiento: "el Dr." },
   clinica: {
     razon_social: "CLINICA IMPLANTDENT SL",
     cif: "FALTA CIF", registro_sanitario: "FALTA REGISTRO SANITARIO",

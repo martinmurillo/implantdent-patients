@@ -28,7 +28,8 @@ const logo = "data:image/png;base64," +
 
 const datos = {
   paciente: { nombre: "Nombre Apellido Apellido", documento: "00000000X", telefono: "600000000" },
-  profesional: { nombre: doc.name, colegiado: doc.colegiado || "" },
+  profesional: { nombre: doc.name, colegiado: doc.colegiado || "",
+                 tratamiento: doc.tratamiento || "el Dr./la Dra." },
   clinica: {
     razon_social: cfg.razon_social, cif: cfg.cif,
     registro_sanitario: cfg.registro_sanitario, direccion: cfg.direccion,

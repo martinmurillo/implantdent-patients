@@ -97,7 +97,7 @@ export function EditorPlantillas() {
   // forma de comprobar que el pie con CIF y registro sanitario cabe y se lee.
   const datosEjemplo = () => ({
     paciente: EJEMPLO_PACIENTE,
-    profesional: { nombre: "Dr./Dra. Ejemplo", colegiado: "0000" },
+    profesional: { nombre: "Ejemplo Apellido", colegiado: "0000", tratamiento: "la Dra." },
     clinica: {
       razon_social: config?.razon_social || "—",
       cif: config?.cif || "—",

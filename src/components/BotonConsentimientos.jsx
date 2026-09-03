@@ -62,7 +62,10 @@ export function BotonConsentimientos({ paciente }) {
       const [p, b, d, c] = await Promise.all([
         supabase.from("consent_plantillas").select("*").order("titulo"),
         supabase.from("consent_bloques").select("*").eq("activo", true),
-        supabase.from("doctors").select("id, name, colegiado").order("name"),
+        // Los dados de baja no salen en el desplegable, pero siguen en la tabla:
+        // hay consentimientos emitidos que apuntan a ellos.
+        supabase.from("doctors").select("id, name, colegiado, tratamiento")
+          .eq("activo", true).order("name"),
         supabase.from("clinica_config").select("*").single(),
       ]);
       if (p.error || b.error || d.error || c.error) {
@@ -76,9 +79,15 @@ export function BotonConsentimientos({ paciente }) {
     })();
   }, [abierto]);
 
+  // Al marcar un consentimiento entra ya con su profesional habitual, si lo
+  // tiene: implantes siempre los pone Sergio, la implantosoportada Leticia.
+  // Sigue siendo un desplegable, así que se puede cambiar.
   const alternar = (id) => setElegidos(prev => {
     const n = { ...prev };
-    if (id in n) delete n[id]; else n[id] = "";
+    if (id in n) { delete n[id]; return n; }
+    const p = plantillas.find(x => x.id === id);
+    const porDefecto = p?.profesional_por_defecto;
+    n[id] = doctores.some(d => d.id === porDefecto) ? porDefecto : "";
     return n;
   });
   const ponerDoctor = (id, docId) => setElegidos(prev => ({ ...prev, [id]: docId }));
@@ -108,7 +117,11 @@ export function BotonConsentimientos({ paciente }) {
             documento: paciente.dni || "",
             telefono: paciente.phone || "",
           },
-          profesional: { nombre: doctor.name, colegiado: doctor.colegiado || "" },
+          profesional: {
+            nombre: doctor.name,
+            colegiado: doctor.colegiado || "",
+            tratamiento: doctor.tratamiento || "el Dr./la Dra.",
+          },
           clinica: {
             razon_social: config.razon_social,
             cif: config.cif,
