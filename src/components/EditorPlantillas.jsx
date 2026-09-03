@@ -42,6 +42,8 @@ export function EditorPlantillas() {
   const [sucio, setSucio] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [aviso, setAviso] = useState(null);
+  // URL de la última vista previa. No se abre sola: ver vistaPrevia().
+  const [previa, setPrevia] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -58,6 +60,7 @@ export function EditorPlantillas() {
 
   function abrir(p) {
     setActiva(p); setSucio(false); setAviso(null);
+    if (previa) { URL.revokeObjectURL(previa); setPrevia(null); }
     const propio = p.composicion.find(i => "nodos" in i);
     setNodos(propio && "nodos" in propio ? structuredClone(propio.nodos) : []);
   }
@@ -102,8 +105,13 @@ export function EditorPlantillas() {
     fecha: fechaLarga(),
   });
 
+  // El PDF no se abre desde aquí: cuando termina de renderizarse, el navegador
+  // ya no ve un gesto del usuario detrás y bloquea window.open, que devuelve
+  // null sin decir nada. Se deja el enlace y lo abre quien pulsa.
   async function vistaPrevia() {
     if (!activa) return;
+    if (previa) URL.revokeObjectURL(previa);
+    setPrevia(null);
     const datos = datosEjemplo();
     const composicion = activa.composicion.map(i => ("nodos" in i ? { nodos } : i));
     const resueltos = componerDocumento(composicion, bloques, datos, "paciente");
@@ -111,7 +119,7 @@ export function EditorPlantillas() {
       <DocumentoPDF titulo={activa.titulo} nodos={resueltos} datos={datos}
         logoUrl={config?.logo_url}/>
     ).toBlob();
-    window.open(URL.createObjectURL(blob), "_blank");
+    setPrevia(URL.createObjectURL(blob));
   }
 
   async function guardar(activar) {
@@ -239,7 +247,14 @@ export function EditorPlantillas() {
           )}
 
           <div style={{display:"flex", gap:8, flexWrap:"wrap", marginTop:14}}>
-            <button onClick={vistaPrevia} style={est.gris}>Ver PDF de ejemplo</button>
+            <button onClick={vistaPrevia} style={est.gris}>Generar PDF de ejemplo</button>
+            {previa && (
+              <a href={previa} target="_blank" rel="noreferrer"
+                style={{...est.gris, textDecoration:"none", borderColor:"#c9a84c",
+                  color:"#a07830", fontWeight:700}}>
+                Abrir el PDF ↗
+              </a>
+            )}
             <button onClick={()=>guardar(false)} disabled={!sucio || guardando}
               style={{...est.gris, opacity:(!sucio || guardando) ? 0.5 : 1}}>
               Guardar cambios
