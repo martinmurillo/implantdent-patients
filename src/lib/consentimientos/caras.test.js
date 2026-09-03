@@ -1,65 +1,98 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { elegirEscala, contarPaginasPdf, ESCALAS } from "./caras.js";
+import { mejorEscala, carasObjetivo, contarPaginasPdf } from "./caras.js";
 
-// medir simulado: se le da qué páginas salen a cada escala
-const medidor = (porEscala) => {
-  const vistas = [];
-  const fn = async (e) => { vistas.push(e); return porEscala[e]; };
-  fn.vistas = vistas;
-  return fn;
+// Medidor simulado: el texto ocupa `alto` a escala 1 y crece proporcional.
+// Es el comportamiento real —más cuerpo, más páginas— sin maquetar nada.
+const medidor = (alto, capacidad = 1) => {
+  const fn = async (e) => Math.max(1, Math.ceil((alto * e) / capacidad - 1e-9));
+  fn.cuenta = 0;
+  return async (e) => { fn.cuenta++; return fn(e); };
 };
 
-describe("elegir escala para que las caras salgan pares", () => {
-  test("si ya es par no toca nada ni maqueta de más", async () => {
-    const m = medidor({ 1: 2 });
-    const r = await elegirEscala(m);
-    assert.equal(r.escala, 1);
+describe("a cuántas caras aspirar", () => {
+  test("par se mantiene", () => {
+    assert.equal(carasObjetivo(2), 2);
+    assert.equal(carasObjetivo(4), 4);
+  });
+
+  test("impar baja a la par de abajo", () => {
+    assert.equal(carasObjetivo(3), 2);
+    assert.equal(carasObjetivo(5), 4);
+  });
+
+  test("una sola cara sube a dos", () => {
+    // Con una sola, la primera página del siguiente consentimiento acabaría
+    // impresa en su reverso.
+    assert.equal(carasObjetivo(1), 2);
+  });
+});
+
+describe("escala más grande que sigue cabiendo", () => {
+  test("tres caras: aprieta hasta dos", async () => {
+    // ocupa 2,2 páginas: cabe en dos apretando poco, dentro de lo legible
+    const r = await mejorEscala(medidor(2.2));
     assert.equal(r.paginas, 2);
-    assert.equal(r.ajustado, false);
-    // una sola medición: el caso normal no puede costar cinco maquetados
-    assert.deepEqual(m.vistas, [1]);
+    assert.equal(r.objetivo, 2);
+    assert.ok(r.escala < 1, `esperaba encoger, escala ${r.escala}`);
+    assert.ok(r.escala >= 0.88, `no debería bajar de lo legible: ${r.escala}`);
   });
 
-  test("cuatro caras también valen: no fuerza a dos", async () => {
-    const m = medidor({ 1: 4 });
-    const r = await elegirEscala(m);
-    assert.equal(r.escala, 1);
-    assert.equal(r.paginas, 4);
-    assert.deepEqual(m.vistas, [1]);
-  });
-
-  test("tres caras: aprieta hasta que caben en dos", async () => {
-    // el caso que se veía: dos caras y un 25% de una tercera
-    const m = medidor({ 1: 3, 0.94: 3, 0.88: 2 });
-    const r = await elegirEscala(m);
-    assert.equal(r.escala, 0.88);
+  test("ya cabe en dos y sobra: agranda la letra", async () => {
+    // ocupa 1,2 páginas: hay sitio de sobra hasta llenar las dos
+    const r = await mejorEscala(medidor(1.2));
     assert.equal(r.paginas, 2);
-    assert.equal(r.ajustado, true);
-    assert.deepEqual(m.vistas, [1, 0.94, 0.88]);
+    assert.ok(r.escala > 1, `esperaba agrandar, escala ${r.escala}`);
   });
 
-  test("cinco caras bajan a cuatro, no a dos", async () => {
-    const m = medidor({ 1: 5, 0.94: 4 });
-    const r = await elegirEscala(m);
-    assert.equal(r.paginas, 4);
-    assert.equal(r.escala, 0.94);
+  test("una sola cara se estira hasta llenar las dos", async () => {
+    const r = await mejorEscala(medidor(0.8));
+    assert.equal(r.objetivo, 2);
+    assert.ok(r.escala > 1, `esperaba agrandar, escala ${r.escala}`);
   });
 
-  test("si no hay forma de llegar a par, se queda como estaba", async () => {
-    // Encoger sin ganar una hoja es empeorar el documento a cambio de nada.
-    const m = medidor({ 1: 3, 0.94: 3, 0.88: 3, 0.82: 3, 0.78: 3 });
-    const r = await elegirEscala(m);
+  test("no se pasa nunca del objetivo", async () => {
+    for (const alto of [0.9, 1.2, 1.8, 2.4, 3.1, 4.6]) {
+      const r = await mejorEscala(medidor(alto));
+      assert.ok(r.paginas <= r.objetivo,
+        `alto ${alto}: ${r.paginas} páginas, objetivo ${r.objetivo}`);
+    }
+  });
+
+  test("respeta los límites de escala", async () => {
+    const vistas = [];
+    const medir = async (e) => { vistas.push(e); return Math.ceil(2.4 * e); };
+    await mejorEscala(medir, { min: 0.8, max: 1.2 });
+    assert.ok(Math.min(...vistas) >= 0.8, `bajó a ${Math.min(...vistas)}`);
+    assert.ok(Math.max(...vistas) <= 1.2, `subió a ${Math.max(...vistas)}`);
+  });
+
+  test("si apretar deja la letra ilegible, cara en blanco y letra normal", async () => {
+    // 2,9 páginas: para meterlo en dos habría que bajar a ~0,69, ilegible.
+    const r = await mejorEscala(medidor(2.9));
     assert.equal(r.escala, 1);
-    assert.equal(r.paginas, 3);
-    assert.equal(r.ajustado, false);
+    assert.equal(r.relleno, true);
+    assert.equal(r.objetivo % 2, 0, "el total con la cara en blanco tiene que ser par");
   });
 
-  test("no baja de la escala mínima aunque siga impar", async () => {
-    const m = medidor({ 1: 7, 0.94: 7, 0.88: 7, 0.82: 7, 0.78: 7 });
-    await elegirEscala(m);
-    assert.equal(Math.min(...m.vistas), 0.78);
-    assert.equal(m.vistas.length, ESCALAS.length);
+  test("si apretar poco basta, no mete cara en blanco", async () => {
+    const r = await mejorEscala(medidor(2.1));
+    assert.equal(r.relleno, false);
+    assert.equal(r.paginas, 2);
+  });
+
+  test("si ni al mínimo cabe, letra normal y cara en blanco", async () => {
+    const r = await mejorEscala(medidor(2.95), { min: 0.9 });
+    assert.equal(r.escala, 1);
+    assert.equal(r.relleno, true);
+    assert.equal(r.objetivo, 4, "3 páginas + 1 en blanco");
+  });
+
+  test("apretar solo un poco sí sale a cuenta: 2,4 páginas no llegan a legible", async () => {
+    // Para meter 2,4 en dos caras haría falta 0,83, o sea 7,9pt. No compensa.
+    const r = await mejorEscala(medidor(2.4));
+    assert.equal(r.escala, 1);
+    assert.equal(r.relleno, true);
   });
 });
 

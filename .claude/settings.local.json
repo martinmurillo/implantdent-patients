@@ -122,7 +122,8 @@
       "Bash(\"/c/Program Files/Google/Chrome/Application/chrome.exe\" --headless=new --disable-gpu --no-sandbox --virtual-time-budget=45000 --dump-dom \"http://127.0.0.1:5199/lee-pdf.html\")",
       "Bash(curl -sS -o /dev/null -w \"cdnjs: %{http_code}\\\\n\" \"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js\")",
       "Bash(rm -f public/_muestra.pdf lee-pdf.html src/lee-pdf.jsx)",
-      "Bash(npm uninstall *)"
+      "Bash(npm uninstall *)",
+      "Bash(awk '{print \"  existe en disco:\", $9}')"
     ]
   }
 }

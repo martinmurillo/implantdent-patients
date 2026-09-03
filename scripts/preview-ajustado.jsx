@@ -7,7 +7,7 @@ import { resolve } from "node:path";
 import { readFileSync } from "node:fs";
 import { DocumentoPDF } from "../src/lib/consentimientos/DocumentoPDF";
 import { componerDocumento, fechaLarga } from "../src/lib/consentimientos/merge";
-import { elegirEscala, contarPaginasPdf } from "../src/lib/consentimientos/caras";
+import { mejorEscala, contarPaginasPdf } from "../src/lib/consentimientos/caras";
 
 const raiz = process.cwd();
 Font.register({ family: "Tinos", fonts: [
@@ -32,11 +32,12 @@ const datos = {
 
 const p = pl.find(x => x.codigo === (process.argv[4] || "ENDODONCIA")) || pl[0];
 const nodos = componerDocumento(p.composicion, bloques, datos, "paciente");
-const el = (e) => createElement(DocumentoPDF,
-  { titulo: p.titulo, nodos, datos, logoUrl: logo, escala: e });
-
-const { escala, paginas } = await elegirEscala(async (e) =>
-  contarPaginasPdf(new Uint8Array(await (await pdf(el(e)).toBlob()).arrayBuffer())));
-
-await renderToFile(el(escala), process.argv[3]);
-console.log(`${p.codigo}: ${paginas} caras a escala ${escala} (letra ${(9.5 * escala).toFixed(1)}pt) -> ${process.argv[3]}`);
+// Usa la escala y el relleno ya guardados en la plantilla, que es lo que hace
+// el modal: aqui no se vuelve a medir.
+const escala = Number(p.escala) || 1;
+const relleno = !!p.relleno;
+const el = createElement(DocumentoPDF,
+  { titulo: p.titulo, nodos, datos, logoUrl: logo, escala, relleno });
+const paginas = contarPaginasPdf(new Uint8Array(await (await pdf(el).toBlob()).arrayBuffer()));
+await renderToFile(el, process.argv[3]);
+console.log(`${p.codigo}: ${paginas} caras${relleno ? " (la ultima en blanco)" : ""} a ${(9.5 * escala).toFixed(1)}pt -> ${process.argv[3]}`);

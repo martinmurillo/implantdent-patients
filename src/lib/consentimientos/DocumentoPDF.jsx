@@ -198,7 +198,28 @@ function PaginaConsentimiento({ titulo, nodos, datos, logoUrl, escala = 1 }) {
   );
 }
 
-export function DocumentoPDF({ titulo, nodos, datos, logoUrl, escala = 1 }) {
+// Cara en blanco de relleno, para que el consentimiento ocupe un número par y
+// el siguiente no acabe impreso en su reverso. Va rotulada, como en cualquier
+// documento legal: una página muda invita a pensar que falta algo.
+function PaginaEnBlanco({ datos, escala = 1 }) {
+  const s = estilos(escala);
+  return (
+    <Page size="A4" style={s.page}>
+      <Text style={{ ...s.parrafo, textAlign: 'center', marginTop: 240, color: '#666' }}>
+        Esta página se ha dejado en blanco intencionadamente.
+      </Text>
+      <View style={s.pie} fixed>
+        <Text>
+          {datos.clinica.razon_social} · CIF {oPuntos(datos.clinica.cif, 14)} ·
+          {' '}Reg. sanitario {oPuntos(datos.clinica.registro_sanitario, 14)}
+        </Text>
+        <Text render={() => 'Rúbrica ________'} />
+      </View>
+    </Page>
+  );
+}
+
+export function DocumentoPDF({ titulo, nodos, datos, logoUrl, escala = 1, relleno = false }) {
   return (
     <Document
       title={`Consentimiento ${titulo} — ${datos.paciente.nombre}`}
@@ -206,6 +227,7 @@ export function DocumentoPDF({ titulo, nodos, datos, logoUrl, escala = 1 }) {
     >
       <PaginaConsentimiento titulo={titulo} nodos={nodos} datos={datos}
         logoUrl={logoUrl} escala={escala} />
+      {relleno && <PaginaEnBlanco datos={datos} escala={escala} />}
     </Document>
   );
 }
@@ -220,10 +242,11 @@ export function DocumentoConjunto({ docs, logoUrl }) {
       title={`Consentimientos — ${primero.datos.paciente.nombre}`}
       author={primero.datos.clinica.razon_social}
     >
-      {docs.map((d, k) => (
-        <PaginaConsentimiento key={k} titulo={d.titulo} nodos={d.nodos}
-          datos={d.datos} logoUrl={logoUrl} escala={d.escala ?? 1} />
-      ))}
+      {docs.flatMap((d, k) => [
+        <PaginaConsentimiento key={`c${k}`} titulo={d.titulo} nodos={d.nodos}
+          datos={d.datos} logoUrl={logoUrl} escala={d.escala ?? 1} />,
+        ...(d.relleno ? [<PaginaEnBlanco key={`b${k}`} datos={d.datos} escala={d.escala ?? 1} />] : []),
+      ])}
     </Document>
   );
 }

@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
 import { componerDocumento, fechaLarga } from "../lib/consentimientos/merge";
 import { consentimientosDelPresupuesto } from "../lib/consentimientos/sugerencias";
-import { elegirEscala, contarPaginasPdf } from "../lib/consentimientos/caras";
 
 // @react-pdf/renderer pesa 1,2 MB. Este botón está en TODAS las fichas de
 // paciente, así que importarlo arriba metía esos 1,2 MB en el bundle
@@ -187,28 +186,16 @@ export function BotonConsentimientos({ paciente }) {
 
         const nodos = componerDocumento(composicion, bloques, datos, firmante);
 
-        paraImprimir.push({ titulo: plantilla.titulo, nodos, datos });
-      }
-
-      // Cada consentimiento se ajusta a un número par de caras. Hay que
-      // maquetarlo para saber cuántas ocupa, así que se maqueta suelto y, si
-      // sale impar, se aprieta y se vuelve a contar. Lo normal es que salga
-      // par a la primera y cueste un solo maquetado.
-      let n = 0;
-      for (const doc of paraImprimir) {
-        setProgreso(`ajustando ${++n} de ${paraImprimir.length}`);
-        const { escala } = await elegirEscala(async (e) => {
-          const b = await pdf(
-            <DocumentoPDF titulo={doc.titulo} nodos={doc.nodos} datos={doc.datos}
-              logoUrl={config.logo_url} escala={e}/>
-          ).toBlob();
-          return contarPaginasPdf(new Uint8Array(await b.arrayBuffer()));
+        // La escala y la cara de relleno vienen calculadas por plantilla: son
+        // varios maquetados por documento y el contenido solo cambia cuando
+        // alguien edita la plantilla. Ver scripts/ajustar-escalas.jsx.
+        paraImprimir.push({
+          titulo: plantilla.titulo, nodos, datos,
+          escala: Number(plantilla.escala) || 1,
+          relleno: !!plantilla.relleno,
         });
-        doc.escala = escala;
       }
 
-      // Un solo archivo con todos, cada uno empezando en hoja nueva y con su
-      // propia numeración. Se firman por separado, se imprimen de una vez.
       // Un solo render para todos: componer los nodos es instantáneo, lo que
       // cuesta es maquetar el PDF, y hacerlo una vez en lugar de una por
       // consentimiento es la diferencia entre un segundo y diez.
@@ -226,6 +213,7 @@ export function BotonConsentimientos({ paciente }) {
         url: URL.createObjectURL(juntos),
         titulos: paraImprimir.map(d => d.titulo),
         apretados: paraImprimir.filter(d => d.escala < 1).map(d => d.titulo),
+        conRelleno: paraImprimir.filter(d => d.relleno).map(d => d.titulo),
       });
     } catch (e) {
       console.error(e);
@@ -288,8 +276,15 @@ export function BotonConsentimientos({ paciente }) {
                   <div style={{background:"#f7f7f5", color:"#666", borderRadius:8,
                     padding:"9px 12px", fontSize:12, lineHeight:1.45, marginBottom:12}}>
                     Se apretó un poco la letra en <b>{resultado.apretados.join(", ")}</b> para
-                    que cupieran en dos caras en vez de dos y media. En dúplex, tres páginas
-                    gastan las mismas hojas que cuatro y dejan un reverso en blanco.
+                    que cupieran en dos caras en vez de dos y media.
+                  </div>
+                )}
+                {resultado.conRelleno.length > 0 && (
+                  <div style={{background:"#f7f7f5", color:"#666", borderRadius:8,
+                    padding:"9px 12px", fontSize:12, lineHeight:1.45, marginBottom:12}}>
+                    <b>{resultado.conRelleno.join(", ")}</b> lleva una última cara en blanco.
+                    No cabía en dos sin dejar la letra ilegible, y con un número impar de
+                    caras el siguiente consentimiento se imprimiría en su reverso.
                   </div>
                 )}
                 <a href={resultado.url} target="_blank" rel="noreferrer"
