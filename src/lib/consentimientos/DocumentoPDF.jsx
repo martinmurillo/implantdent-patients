@@ -1,6 +1,7 @@
 import {
   Document, Page, Text, View, Image, StyleSheet, Font,
 } from '@react-pdf/renderer';
+import { oPuntos } from './merge';
 
 // Times New Roman es la tipografía de los originales escaneados.
 // Mantenerla evita que el documento nuevo parezca otro documento
@@ -164,9 +165,11 @@ function PaginaConsentimiento({ titulo, nodos, datos, logoUrl }) {
           sus propias hojas aunque vayan varios en el mismo archivo, que es
           lo que tiene sentido en un documento que se firma por separado. */}
       <View style={s.pie} fixed>
+        {/* Lo que no esté cargado sale como línea de puntos, igual que en el
+            cuerpo: se escribe a mano sobre el papel. */}
         <Text>
-          {datos.clinica.razon_social} · CIF {datos.clinica.cif} · Reg. sanitario{' '}
-          {datos.clinica.registro_sanitario}
+          {datos.clinica.razon_social} · CIF {oPuntos(datos.clinica.cif, 14)} ·
+          {' '}Reg. sanitario {oPuntos(datos.clinica.registro_sanitario, 14)}
         </Text>
         <Text
           render={({ subPageNumber, subPageTotalPages }) =>

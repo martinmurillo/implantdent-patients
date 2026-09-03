@@ -77,6 +77,15 @@ export function requiereEscucharAlMenor(edad) {
 
 const RELLENO_MANUAL = '.'.repeat(28);
 
+// Un dato que falta se enseña como línea de puntos, no como hueco. Se exporta
+// porque el pie del PDF no pasa por la fusión —está escrito en el componente—
+// y tiene que seguir la misma regla: si el CIF no está, se escribe a mano.
+export function oPuntos(valor, largo = 28) {
+  return valor === undefined || valor === null || String(valor).trim() === ''
+    ? '.'.repeat(largo)
+    : String(valor);
+}
+
 export function aplicarFusion(texto, datos) {
   return texto.replace(/\{\{([a-z_.]+)\}\}/g, (_, ruta) => {
     const valor = ruta.split('.').reduce((acc, k) => acc?.[k], datos);
