@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
 import { componerDocumento, fechaLarga } from "../lib/consentimientos/merge";
+import { consentimientosDelPresupuesto } from "../lib/consentimientos/sugerencias";
 
 // @react-pdf/renderer pesa 1,2 MB. Este botón está en TODAS las fichas de
 // paciente, así que importarlo arriba metía esos 1,2 MB en el bundle
@@ -15,6 +16,12 @@ const cargarPdf = () => Promise.all([
 // Botón de la ficha del paciente: salen los consentimientos, se marcan los que
 // hagan falta, y cada uno lleva su propio profesional. Sale un archivo con
 // todos los marcados, cada uno en hoja nueva, listo para imprimir y firmar.
+//
+// No se guarda nada: esta app es un anexo al sistema de la clínica y el
+// consentimiento se imprime una vez, se firma en papel y se archiva allí. Se
+// quitó el registro en consent_documentos y la subida al bucket, que eran dos
+// viajes al servidor por cada consentimiento -veinte con diez marcados- para
+// guardar algo que nadie iba a consultar.
 //
 // El `paciente` que llega es la fila de patients tal cual, con los nombres de
 // esta base (name, dni, phone). El modelo de fusión usa otros (nombre,
@@ -72,10 +79,26 @@ export function BotonConsentimientos({ paciente }) {
         setError("No se han podido cargar los consentimientos. Reintentá.");
         return;
       }
-      setPlantillas(p.data || []);
+      const todas = p.data || [];
+      const docs = d.data || [];
+      setPlantillas(todas);
       setBloques(new Map((b.data || []).map(x => [x.codigo, x])));
-      setDoctores(d.data || []);
+      setDoctores(docs);
       setConfig(c.data);
+
+      // Se marcan solos los que pide el presupuesto, con su profesional
+      // habitual si lo tienen. Los demás quedan visibles y sin marcar.
+      const codigos = consentimientosDelPresupuesto(
+        Array.isArray(paciente.treatments) ? paciente.treatments
+          : (paciente.treatments?.items || []));
+      const marcados = {};
+      for (const cod of codigos) {
+        const pl = todas.find(x => x.codigo === cod);
+        if (!pl) continue;
+        const pd = pl.profesional_por_defecto;
+        marcados[pl.id] = docs.some(x => x.id === pd) ? pd : "";
+      }
+      setElegidos(marcados);
     })();
   }, [abierto]);
 
@@ -94,6 +117,18 @@ export function BotonConsentimientos({ paciente }) {
 
   const ids = Object.keys(elegidos);
   const faltaDoctor = ids.some(id => !elegidos[id]);
+
+  // Los del presupuesto arriba, el resto debajo con su separador.
+  const delPresupuesto = new Set(
+    consentimientosDelPresupuesto(
+      Array.isArray(paciente.treatments) ? paciente.treatments
+        : (paciente.treatments?.items || [])));
+  const ordenadas = [
+    ...plantillas.filter(p => delPresupuesto.has(p.codigo))
+      .map(p => ({ p, delPresupuesto: true, primeroDelResto: false })),
+    ...plantillas.filter(p => !delPresupuesto.has(p.codigo))
+      .map((p, k) => ({ p, delPresupuesto: false, primeroDelResto: k === 0 })),
+  ];
 
   async function generar() {
     if (!config || ids.length === 0 || faltaDoctor) return;
@@ -149,43 +184,13 @@ export function BotonConsentimientos({ paciente }) {
             logoUrl={config.logo_url}/>
         ).toBlob();
 
-        // Copia congelada: se guarda el árbol YA resuelto, no una referencia a
-        // la plantilla. Si mañana se edita la plantilla, este documento sigue
-        // diciendo lo que dijo hoy.
-        const { data: doc, error: errDoc } = await supabase
-          .from("consent_documentos")
-          .insert({
-            paciente_id: paciente.id,
-            plantilla_id: plantilla.id,
-            plantilla_codigo: plantilla.codigo,
-            plantilla_version: plantilla.version,
-            contenido_congelado: nodos,
-            datos_fusion: datos,
-            profesional_id: doctor.id,
-            profesional_nombre: doctor.name,
-            profesional_colegiado: doctor.colegiado || "",
-            firmante_tipo: firmante,
-            emitido_por: (await supabase.auth.getUser()).data.user?.id,
-          })
-          .select("id")
-          .single();
-        if (errDoc) throw errDoc;
-
-        const ruta = `${paciente.id}/${doc.id}.pdf`;
-        await supabase.storage.from("consentimientos").upload(ruta, blob, {
-          contentType: "application/pdf",
-        });
-        await supabase.from("consent_documentos").update({ pdf_path: ruta }).eq("id", doc.id);
-
-        paraImprimir.push({ titulo: plantilla.titulo, nodos, datos, blob });
+        paraImprimir.push({ titulo: plantilla.titulo, nodos, datos });
       }
 
       // Un solo archivo con todos, cada uno empezando en hoja nueva y con su
       // propia numeración. Se firman por separado, se imprimen de una vez.
-      // Con uno solo se reaprovecha el que ya se generó para archivarlo, que
-      // es idéntico: no hay por qué renderizarlo dos veces.
       const juntos = paraImprimir.length === 1
-        ? paraImprimir[0].blob
+        ? await pdf(<DocumentoPDF {...paraImprimir[0]} logoUrl={config.logo_url}/>).toBlob()
         : await pdf(<DocumentoConjunto docs={paraImprimir} logoUrl={config.logo_url}/>).toBlob();
 
       // No se abre aquí. Generar el PDF lleva su tiempo —con diez, varios
@@ -273,17 +278,29 @@ export function BotonConsentimientos({ paciente }) {
             ) : (
               <div style={{border:"1px solid #dde4ef", borderRadius:8, marginBottom:14,
                 maxHeight:340, overflowY:"auto"}}>
-                {plantillas.map((p, i) => {
+                {ordenadas.map(({ p, delPresupuesto, primeroDelResto }, i) => {
                   const marcado = p.id in elegidos;
                   return (
-                    <div key={p.id} style={{display:"flex", alignItems:"center", gap:8,
-                      padding:"6px 10px", borderTop: i ? "1px solid #f0f2f7" : "none",
+                    <div key={p.id}>
+                    {primeroDelResto && (
+                      <div style={{padding:"6px 10px", fontSize:11, letterSpacing:1,
+                        color:"#888", fontWeight:700, textTransform:"uppercase",
+                        background:"#f7f7f5", borderTop:"1px solid #dde4ef",
+                        borderBottom:"1px solid #f0f2f7"}}>
+                        Los demás
+                      </div>
+                    )}
+                    <div style={{display:"flex", alignItems:"center", gap:8,
+                      padding:"6px 10px", borderTop: (i && !primeroDelResto) ? "1px solid #f0f2f7" : "none",
                       background: marcado ? "#f7f3e6" : "transparent", flexWrap:"wrap"}}>
                       <label style={{display:"flex", alignItems:"center", gap:8, flex:1,
                         minWidth:180, fontSize:13, cursor:"pointer"}}>
                         <input type="checkbox" checked={marcado} onChange={()=>alternar(p.id)}/>
                         <span>
                           {p.titulo}
+                          {delPresupuesto && (
+                            <span style={{color:"#1c7a3e", fontSize:11}}> · en el presupuesto</span>
+                          )}
                           {!p.activa && (
                             <span style={{color:"#b3600f", fontSize:11}}> · sin revisar</span>
                           )}
@@ -300,6 +317,7 @@ export function BotonConsentimientos({ paciente }) {
                           ))}
                         </select>
                       )}
+                    </div>
                     </div>
                   );
                 })}
