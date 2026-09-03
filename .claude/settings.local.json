@@ -123,7 +123,8 @@
       "Bash(curl -sS -o /dev/null -w \"cdnjs: %{http_code}\\\\n\" \"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js\")",
       "Bash(rm -f public/_muestra.pdf lee-pdf.html src/lee-pdf.jsx)",
       "Bash(npm uninstall *)",
-      "Bash(awk '{print \"  existe en disco:\", $9}')"
+      "Bash(awk '{print \"  existe en disco:\", $9}')",
+      "Bash(grep -vE \"^$|^C:\")"
     ]
   }
 }

@@ -21,7 +21,7 @@ Font.register({ family: "Tinos", fonts: [
   { src: resolve(raiz, "public/fonts/Tinos-Italic.ttf"), fontStyle: "italic" },
 ]});
 
-const { pl, bl, cfg, doc } = JSON.parse(readFileSync(process.argv[2], "utf8"));
+const { pl, bl, cfg } = JSON.parse(readFileSync(process.argv[2], "utf8"));
 const bloques = new Map(bl.map(b => [b.codigo, b]));
 const logo = "data:image/png;base64," +
   readFileSync(resolve(raiz, "public/logo.png")).toString("base64");

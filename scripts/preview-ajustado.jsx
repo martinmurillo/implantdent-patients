@@ -7,7 +7,7 @@ import { resolve } from "node:path";
 import { readFileSync } from "node:fs";
 import { DocumentoPDF } from "../src/lib/consentimientos/DocumentoPDF";
 import { componerDocumento, fechaLarga } from "../src/lib/consentimientos/merge";
-import { mejorEscala, contarPaginasPdf } from "../src/lib/consentimientos/caras";
+import { contarPaginasPdf } from "../src/lib/consentimientos/caras";
 
 const raiz = process.cwd();
 Font.register({ family: "Tinos", fonts: [
@@ -16,14 +16,14 @@ Font.register({ family: "Tinos", fonts: [
   { src: resolve(raiz, "public/fonts/Tinos-Italic.ttf"), fontStyle: "italic" },
 ]});
 
-const { pl, bl, cfg, doc } = JSON.parse(readFileSync(process.argv[2], "utf8"));
+const { pl, bl, cfg, doc: profesional } = JSON.parse(readFileSync(process.argv[2], "utf8"));
 const bloques = new Map(bl.map(b => [b.codigo, b]));
 const logo = "data:image/png;base64," +
   readFileSync(resolve(raiz, "public/logo.png")).toString("base64");
 const datos = {
   paciente: { nombre: "Nombre Apellido Apellido", documento: "00000000X", telefono: "600000000" },
-  profesional: { nombre: doc.name, colegiado: doc.colegiado || "",
-                 tratamiento: doc.tratamiento || "el Dr./la Dra." },
+  profesional: { nombre: profesional.name, colegiado: profesional.colegiado || "",
+                 tratamiento: profesional.tratamiento || "el Dr./la Dra." },
   clinica: { razon_social: cfg.razon_social, cif: cfg.cif,
              registro_sanitario: cfg.registro_sanitario, direccion: cfg.direccion,
              email_dpd: cfg.email_dpd },
