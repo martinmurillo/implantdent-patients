@@ -1,8 +1,16 @@
 import { useEffect, useState } from "react";
-import { pdf } from "@react-pdf/renderer";
 import { supabase } from "../supabase";
-import { DocumentoPDF, DocumentoConjunto } from "../lib/consentimientos/DocumentoPDF";
 import { componerDocumento, fechaLarga } from "../lib/consentimientos/merge";
+
+// @react-pdf/renderer pesa 1,2 MB. Este botón está en TODAS las fichas de
+// paciente, así que importarlo arriba metía esos 1,2 MB en el bundle
+// principal y los descargaba cualquiera que abriera la app, fuera a generar
+// un consentimiento o no. Se carga dentro de generar(), la primera vez que
+// alguien lo necesita de verdad.
+const cargarPdf = () => Promise.all([
+  import("@react-pdf/renderer"),
+  import("../lib/consentimientos/DocumentoPDF"),
+]);
 
 // Botón de la ficha del paciente: salen los consentimientos, se marcan los que
 // hagan falta, y cada uno lleva su propio profesional. Sale un archivo con
@@ -83,6 +91,8 @@ export function BotonConsentimientos({ paciente }) {
     setGenerando(true);
     setError(null);
     try {
+      setProgreso("preparando");
+      const [{ pdf }, { DocumentoPDF, DocumentoConjunto }] = await cargarPdf();
       // Se juntan para imprimirlos de una sola vez.
       const paraImprimir = [];
       let hechos = 0;

@@ -1,8 +1,13 @@
 import { useEffect, useState } from "react";
-import { pdf } from "@react-pdf/renderer";
 import { supabase } from "../supabase";
-import { DocumentoPDF } from "../lib/consentimientos/DocumentoPDF";
 import { componerDocumento, fechaLarga } from "../lib/consentimientos/merge";
+
+// Igual que en BotonConsentimientos: el renderizador de PDF pesa 1,2 MB y
+// solo hace falta al pedir la vista previa, así que se carga entonces.
+const cargarPdf = () => Promise.all([
+  import("@react-pdf/renderer"),
+  import("../lib/consentimientos/DocumentoPDF"),
+]);
 
 // Editor de plantillas.
 //
@@ -112,6 +117,7 @@ export function EditorPlantillas() {
     if (!activa) return;
     if (previa) URL.revokeObjectURL(previa);
     setPrevia(null);
+    const [{ pdf }, { DocumentoPDF }] = await cargarPdf();
     const datos = datosEjemplo();
     const composicion = activa.composicion.map(i => ("nodos" in i ? { nodos } : i));
     const resueltos = componerDocumento(composicion, bloques, datos, "paciente");
