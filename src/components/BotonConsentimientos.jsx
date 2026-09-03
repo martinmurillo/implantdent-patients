@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
 import { componerDocumento, fechaLarga } from "../lib/consentimientos/merge";
 import { consentimientosDelPresupuesto } from "../lib/consentimientos/sugerencias";
+import { elegirEscala, contarPaginasPdf } from "../lib/consentimientos/caras";
 
 // @react-pdf/renderer pesa 1,2 MB. Este botón está en TODAS las fichas de
 // paciente, así que importarlo arriba metía esos 1,2 MB en el bundle
@@ -189,6 +190,23 @@ export function BotonConsentimientos({ paciente }) {
         paraImprimir.push({ titulo: plantilla.titulo, nodos, datos });
       }
 
+      // Cada consentimiento se ajusta a un número par de caras. Hay que
+      // maquetarlo para saber cuántas ocupa, así que se maqueta suelto y, si
+      // sale impar, se aprieta y se vuelve a contar. Lo normal es que salga
+      // par a la primera y cueste un solo maquetado.
+      let n = 0;
+      for (const doc of paraImprimir) {
+        setProgreso(`ajustando ${++n} de ${paraImprimir.length}`);
+        const { escala } = await elegirEscala(async (e) => {
+          const b = await pdf(
+            <DocumentoPDF titulo={doc.titulo} nodos={doc.nodos} datos={doc.datos}
+              logoUrl={config.logo_url} escala={e}/>
+          ).toBlob();
+          return contarPaginasPdf(new Uint8Array(await b.arrayBuffer()));
+        });
+        doc.escala = escala;
+      }
+
       // Un solo archivo con todos, cada uno empezando en hoja nueva y con su
       // propia numeración. Se firman por separado, se imprimen de una vez.
       // Un solo render para todos: componer los nodos es instantáneo, lo que
@@ -207,6 +225,7 @@ export function BotonConsentimientos({ paciente }) {
       setResultado({
         url: URL.createObjectURL(juntos),
         titulos: paraImprimir.map(d => d.titulo),
+        apretados: paraImprimir.filter(d => d.escala < 1).map(d => d.titulo),
       });
     } catch (e) {
       console.error(e);
@@ -265,6 +284,14 @@ export function BotonConsentimientos({ paciente }) {
                     {resultado.titulos.join(" · ")}
                   </div>
                 </div>
+                {resultado.apretados.length > 0 && (
+                  <div style={{background:"#f7f7f5", color:"#666", borderRadius:8,
+                    padding:"9px 12px", fontSize:12, lineHeight:1.45, marginBottom:12}}>
+                    Se apretó un poco la letra en <b>{resultado.apretados.join(", ")}</b> para
+                    que cupieran en dos caras en vez de dos y media. En dúplex, tres páginas
+                    gastan las mismas hojas que cuatro y dejan un reverso en blanco.
+                  </div>
+                )}
                 <a href={resultado.url} target="_blank" rel="noreferrer"
                   style={{...est.oro, display:"block", textAlign:"center",
                     textDecoration:"none", marginBottom:10}}>
