@@ -21,70 +21,86 @@ if (typeof window !== 'undefined') {
   });
 }
 
-const s = StyleSheet.create({
+const hoja = (e) => StyleSheet.create({
   page: {
     fontFamily: 'Tinos',
-    fontSize: 9.5,
+    fontSize: 9.5 * e,
     lineHeight: 1.45,
     paddingTop: 28,
     paddingBottom: 46,
     paddingHorizontal: 42,
     color: '#000',
   },
-  logo: { width: 118, marginBottom: 10, alignSelf: 'flex-start' },
+  logo: { width: 118 * e, marginBottom: 10 * e, alignSelf: 'flex-start' },
   tituloDoc: {
-    fontSize: 12,
+    fontSize: 12 * e,
     fontWeight: 'bold',
     textAlign: 'center',
-    marginBottom: 14,
+    marginBottom: 14 * e,
     textTransform: 'uppercase',
   },
-  h2: { fontSize: 10, fontWeight: 'bold', marginTop: 10, marginBottom: 4 },
-  parrafo: { marginBottom: 6, textAlign: 'justify' },
-  lista: { marginBottom: 6, paddingLeft: 12 },
-  itemFila: { flexDirection: 'row', marginBottom: 2.5 },
-  vineta: { width: 10 },
-  itemTexto: { flex: 1, textAlign: 'justify' },
+  h2: { fontSize: 10 * e, fontWeight: 'bold', marginTop: 10 * e, marginBottom: 4 * e },
+  parrafo: { marginBottom: 6 * e, textAlign: 'justify' },
+  lista: { marginBottom: 6 * e, paddingLeft: 12 * e },
+  itemFila: { flexDirection: 'row', marginBottom: 2.5 * e },
+  vineta: { width: 10 * e },
+  itemTexto: { flex: 1 * e, textAlign: 'justify' },
   recuadro: {
-    borderWidth: 0.7,
+    borderWidth: 0.7 * e,
     borderColor: '#000',
-    padding: 7,
-    marginBottom: 8,
+    padding: 7 * e,
+    marginBottom: 8 * e,
   },
-  campoEtiqueta: { marginBottom: 2 },
+  campoEtiqueta: { marginBottom: 2 * e },
   campoLinea: {
-    borderBottomWidth: 0.7,
+    borderBottomWidth: 0.7 * e,
     borderBottomColor: '#000',
-    height: 15,
-    marginBottom: 3,
+    height: 15 * e,
+    marginBottom: 3 * e,
   },
   // El bloque de firmas nunca debe partirse entre páginas.
-  firmas: { flexDirection: 'row', marginTop: 34, gap: 18 },
-  firmaCol: { flex: 1, alignItems: 'center' },
+  firmas: { flexDirection: 'row', marginTop: 34 * e, gap: 18 * e },
+  firmaCol: { flex: 1 * e, alignItems: 'center' },
   firmaLinea: {
-    borderTopWidth: 0.7,
+    borderTopWidth: 0.7 * e,
     borderTopColor: '#000',
     width: '100%',
-    marginBottom: 4,
+    marginBottom: 4 * e,
   },
-  firmaEtiqueta: { fontSize: 8.5, textAlign: 'center' },
+  firmaEtiqueta: { fontSize: 8.5 * e, textAlign: 'center' },
   pie: {
     position: 'absolute',
     bottom: 20,
     left: 42,
     right: 42,
-    fontSize: 7,
+    fontSize: 7 * e,
     color: '#333',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    borderTopWidth: 0.5,
+    borderTopWidth: 0.5 * e,
     borderTopColor: '#999',
     paddingTop: 4,
   },
-  rubrica: { fontSize: 7, color: '#333' },
+  rubrica: { fontSize: 7 * e, color: '#333' },
 });
 
-function RenderNodo({ nodo }) {
+// Los tamaños se multiplican por una escala. Sirve para apretar un
+// consentimiento que se pasa por poco de un número par de caras: en dúplex,
+// tres páginas gastan las mismas dos hojas que cuatro pero dejan un reverso en
+// blanco. Ver ajustarACaras() en caras.js.
+//
+// Los márgenes de página no se escalan: son requisito de impresión (A4 con
+// 42 pt laterales), no una cuestión de que quepa más o menos texto.
+const cacheHojas = new Map();
+const estilos = (e) => {
+  const k = e.toFixed(3);
+  if (!cacheHojas.has(k)) cacheHojas.set(k, hoja(e));
+  return cacheHojas.get(k);
+};
+
+
+
+function RenderNodo({ nodo, s }) {
   switch (nodo.tipo) {
     case 'titulo':
       return <Text style={nodo.nivel === 1 ? s.tituloDoc : s.h2}>{nodo.texto}</Text>;
@@ -107,7 +123,7 @@ function RenderNodo({ nodo }) {
     case 'recuadro':
       return (
         <View style={s.recuadro} wrap={false}>
-          {nodo.nodos.map((n, k) => <RenderNodo nodo={n} key={k} />)}
+          {nodo.nodos.map((n, k) => <RenderNodo nodo={n} s={s} key={k} />)}
         </View>
       );
 
@@ -124,7 +140,7 @@ function RenderNodo({ nodo }) {
     case 'bloque_representante':
       return (
         <View>
-          {nodo.nodos.map((n, k) => <RenderNodo nodo={n} key={k} />)}
+          {nodo.nodos.map((n, k) => <RenderNodo nodo={n} s={s} key={k} />)}
         </View>
       );
 
@@ -151,13 +167,14 @@ function RenderNodo({ nodo }) {
 // Una hoja de consentimiento. Va aparte del Document para poder meter varios
 // en un solo PDF: el navegador bloquea el segundo window.open de un bucle, así
 // que si se piden tres consentimientos se imprime un archivo con los tres.
-function PaginaConsentimiento({ titulo, nodos, datos, logoUrl }) {
+function PaginaConsentimiento({ titulo, nodos, datos, logoUrl, escala = 1 }) {
+  const s = estilos(escala);
   return (
     <Page size="A4" style={s.page}>
       {logoUrl && <Image src={logoUrl} style={s.logo} />}
       <Text style={s.tituloDoc}>{titulo}</Text>
 
-      {nodos.map((n, k) => <RenderNodo nodo={n} key={k} />)}
+      {nodos.map((n, k) => <RenderNodo nodo={n} s={s} key={k} />)}
 
       {/* Rúbrica al pie de cada página: práctica estándar para que
           no se pueda cuestionar la sustitución de una hoja suelta.
@@ -181,13 +198,14 @@ function PaginaConsentimiento({ titulo, nodos, datos, logoUrl }) {
   );
 }
 
-export function DocumentoPDF({ titulo, nodos, datos, logoUrl }) {
+export function DocumentoPDF({ titulo, nodos, datos, logoUrl, escala = 1 }) {
   return (
     <Document
       title={`Consentimiento ${titulo} — ${datos.paciente.nombre}`}
       author={datos.clinica.razon_social}
     >
-      <PaginaConsentimiento titulo={titulo} nodos={nodos} datos={datos} logoUrl={logoUrl} />
+      <PaginaConsentimiento titulo={titulo} nodos={nodos} datos={datos}
+        logoUrl={logoUrl} escala={escala} />
     </Document>
   );
 }
@@ -204,7 +222,7 @@ export function DocumentoConjunto({ docs, logoUrl }) {
     >
       {docs.map((d, k) => (
         <PaginaConsentimiento key={k} titulo={d.titulo} nodos={d.nodos}
-          datos={d.datos} logoUrl={logoUrl} />
+          datos={d.datos} logoUrl={logoUrl} escala={d.escala ?? 1} />
       ))}
     </Document>
   );
