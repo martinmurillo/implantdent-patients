@@ -11,6 +11,7 @@ import { htmlPlanImpreso } from "./planPrint";
 import { htmlFichaCobro, htmlHojaFichas } from "./fichaCobro";
 import { DIRECCION_TEXTO, ETIQUETAS_LINEA, PAGO } from "./legalPlan";
 import { mensajePropuesta } from "./mensajePropuesta";
+import { escalaY } from "./chartScale";
 import { BotonConsentimientos } from "./components/BotonConsentimientos";
 import { EditorPlantillas } from "./components/EditorPlantillas";
 import { PLAZOS as FRAG_PLAZOS, financiable, motivoNoFinanciable,
@@ -1486,8 +1487,8 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
       return {
         billing:  [
           { label:"Pagos cobrados",        data: d.paid,         color:"#2ecc71", pts: p.paid },
-          { label:"Presupuestado c/pagos", data: d.budgeted,     color:"#c9a84c", pts: p.budgeted },
-          { label:"Total presupuestado",   data: d.totalBudgeted, color:"#3498db", pts: p.totalBudgeted },
+          { label:"Presupuestado c/pagos", data: d.budgeted,     color:"#c9a84c", pts: p.budgeted,      eje:"der" },
+          { label:"Total presupuestado",   data: d.totalBudgeted, color:"#3498db", pts: p.totalBudgeted, eje:"der" },
         ],
         ortho:    [
           { label:"Realizadas",       data: d.orthoRealized,   color:"#9b59b6", pts: p.orthoRealized },
@@ -1545,25 +1546,34 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
   const fmtInt = (v) => String(Math.round(v));
 
   const makeSVG = (seriesData, formatVal, W=900, H=220, statsRowsData=[], targetLine=null) => {
-    const PL=120, PR=20, PT=40, PB=36;
+    // Mismo doble eje y misma escala que el gráfico de pantalla, para que el
+    // informe impreso no enseñe una forma distinta de los mismos datos.
+    const izq = seriesData.filter(s => s.eje !== "der");
+    const der = seriesData.filter(s => s.eje === "der");
+    const hayDer = der.length > 0 && izq.length > 0;
+    const PL=120, PR=hayDer?66:20, PT=40, PB=36;
     const LBL_H=16, VAL_H=22;
     const SVG_H = H + (seriesData.length + statsRowsData.length)*(LBL_H+VAL_H) + 16;
     const CW = W - PL - PR, CH = H - PT - PB;
-    const allVals = seriesData.flatMap(s => s.data);
-    const maxVal  = Math.max(...allVals, targetLine?.value ?? 1, 1);
-    const yMax    = maxVal <= 5 ? maxVal + 1 : Math.ceil(maxVal * 1.15);
-    const gridVals = [0,1,2,3,4].map(i => Math.round(yMax * i / 4));
+    const eIzq = escalaY(hayDer ? izq : seriesData, targetLine?.value ?? null);
+    const eDer = hayDer ? escalaY(der) : eIzq;
+    const { yMin, grid: gridVals } = eIzq;   // las posiciones van por enEje()
     const xPos = i => (PL + (i/11) * CW).toFixed(1);
-    const yPos = v => (PT + CH - (v/yMax) * CH).toFixed(1);
+    const enEje = (e, v) => (PT + CH - ((v-e.yMin)/(e.yMax-e.yMin)) * CH).toFixed(1);
+    const yPos = v => enEje(eIzq, v);
+    const yDe  = s => (v) => enEje(s.eje === "der" ? eDer : eIzq, v);
     const lastNZ = data => { for (let i=data.length-1;i>=0;i--) if(data[i]) return i; return -1; };
-    const pathD = data => { const e=lastNZ(data); if(e<0) return ''; return data.slice(0,e+1).map((v,i)=>`${i===0?'M':'L'}${xPos(i)},${yPos(v)}`).join(' '); };
+    const pathD = (data, serie) => { const y = serie ? yDe(serie) : yPos; const e=lastNZ(data); if(e<0) return ''; return data.slice(0,e+1).map((v,i)=>`${i===0?'M':'L'}${xPos(i)},${y(v)}`).join(' '); };
 
     const grid = gridVals.map(v =>
       `<line x1="${PL}" y1="${yPos(v)}" x2="${W-PR}" y2="${yPos(v)}" stroke="#e2e5ed" stroke-width="1" stroke-dasharray="4,3"/>` +
       `<text x="${PL-6}" y="${(parseFloat(yPos(v))+4).toFixed(1)}" text-anchor="end" font-size="10" fill="#888">${formatVal(v)}</text>`
     ).join('');
 
-    const xAxis = `<line x1="${PL}" y1="${yPos(0)}" x2="${W-PR}" y2="${yPos(0)}" stroke="#ddd" stroke-width="1"/>`;
+    const xAxis = `<line x1="${PL}" y1="${yPos(yMin)}" x2="${W-PR}" y2="${yPos(yMin)}" stroke="#ddd" stroke-width="1"/>` +
+      (hayDer ? eDer.grid.map(v =>
+        `<text x="${W-PR+4}" y="${(parseFloat(enEje(eDer,v))+4).toFixed(1)}" text-anchor="start" font-size="10" fill="${der[0].color}">${formatVal(v)}</text>`
+      ).join('') : '');
 
     const target = targetLine
       ? `<line x1="${PL}" y1="${yPos(targetLine.value)}" x2="${W-PR}" y2="${yPos(targetLine.value)}" stroke="${targetLine.color||'#e74c3c'}" stroke-width="2" stroke-dasharray="8,5"/>` +
@@ -1575,13 +1585,13 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
     ).join('');
 
     const paths = seriesData.map(s =>
-      `<path d="${pathD(s.data)}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`
+      `<path d="${pathD(s.data, s)}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`
     ).join('');
 
     const dots = seriesData.map(s => {
       const e = lastNZ(s.data);
       return s.data.map((v,i) =>
-        i > e ? '' : `<circle cx="${xPos(i)}" cy="${yPos(v)}" r="4" fill="${s.color}" stroke="#fff" stroke-width="1.5"/>`
+        i > e ? '' : `<circle cx="${xPos(i)}" cy="${yDe(s)(v)}" r="4" fill="${s.color}" stroke="#fff" stroke-width="1.5"/>`
       ).join('');
     }).join('');
 
@@ -1614,19 +1624,26 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
   };
 
   const LineChart = ({ title, series, formatVal, statsRows = [], targetLine = null }) => {
-    const W=900, H=220, PL=120, PR=20, PT=40, PB=36;
+    // Doble eje: las series marcadas eje:"der" se miden aparte. Cobrado y
+    // presupuestado se mueven en órdenes distintos y compartir eje dejaba la
+    // línea de cobrado casi recta. Ver chartScale.js.
+    const izq = series.filter(s => s.eje !== "der");
+    const der = series.filter(s => s.eje === "der");
+    const hayDer = der.length > 0 && izq.length > 0;
+    const W=900, H=220, PL=120, PR=hayDer?66:20, PT=40, PB=36;
     const CW=W-PL-PR, CH=H-PT-PB;
     // Cada serie ocupa 2 filas: una de label centrado + una de valores
     const LBL_H = 16, VAL_H = 22;
     const SVG_H = H + (series.length + statsRows.length)*(LBL_H+VAL_H) + 16;
-    const allVals = series.flatMap(s=>s.data);
-    const maxVal  = Math.max(...allVals, targetLine?.value ?? 1, 1);
-    const yMax    = maxVal<=5 ? maxVal+1 : Math.ceil(maxVal*1.15);
-    const gridVals= [0,1,2,3,4].map(i=>Math.round(yMax*i/4));
+    const eIzq = escalaY(hayDer ? izq : series, targetLine?.value ?? null);
+    const eDer = hayDer ? escalaY(der) : eIzq;
+    const { yMin, grid:gridVals } = eIzq;   // las posiciones van por enEje()
     const xPos = i => PL+(i/11)*CW;
-    const yPos = v => PT+CH-(v/yMax)*CH;
+    const enEje = (e, v) => PT+CH-((v-e.yMin)/(e.yMax-e.yMin))*CH;
+    const yPos = v => enEje(eIzq, v);
+    const yDe  = s => (v) => enEje(s.eje === "der" ? eDer : eIzq, v);
     const lastNZ = data => { for (let i=data.length-1;i>=0;i--) if(data[i]) return i; return -1; };
-    const pathD = data => { const e=lastNZ(data); if(e<0) return ''; return data.slice(0,e+1).map((v,i)=>`${i===0?'M':'L'}${xPos(i).toFixed(1)},${yPos(v).toFixed(1)}`).join(' '); };
+    const pathD = (data, serie) => { const y = serie ? yDe(serie) : yPos; const e=lastNZ(data); if(e<0) return ''; return data.slice(0,e+1).map((v,i)=>`${i===0?'M':'L'}${xPos(i).toFixed(1)},${y(v).toFixed(1)}`).join(' '); };
 
     return (
       <div style={{marginBottom:24}}>
@@ -1639,7 +1656,11 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
                 <text x={PL-6} y={yPos(v)+4} textAnchor="end" fontSize={10} fill="#888">{formatVal(v)}</text>
               </g>
             ))}
-            <line x1={PL} y1={yPos(0)} x2={W-PR} y2={yPos(0)} stroke="#ddd" strokeWidth={1}/>
+            {hayDer && eDer.grid.map(v=>(
+              <text key={`d${v}`} x={W-PR+4} y={enEje(eDer,v)+4} textAnchor="start"
+                fontSize={10} fill={der[0].color}>{formatVal(v)}</text>
+            ))}
+            <line x1={PL} y1={yPos(yMin)} x2={W-PR} y2={yPos(yMin)} stroke="#ddd" strokeWidth={1}/>
             {targetLine && (
               <g>
                 <line x1={PL} y1={yPos(targetLine.value)} x2={W-PR} y2={yPos(targetLine.value)}
@@ -1654,7 +1675,7 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
               <text key={i} x={xPos(i)} y={H-6} textAnchor="middle" fontSize={10} fill="#777">{m}</text>
             ))}
             {series.map((s,si)=>(
-              <path key={si} d={pathD(s.data)} fill="none" stroke={s.color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round"/>
+              <path key={si} d={pathD(s.data, s)} fill="none" stroke={s.color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round"/>
             ))}
             {series.map((s,si)=>{
               const e=lastNZ(s.data);
@@ -1662,7 +1683,7 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
               <g key={si}>
                 {s.data.map((v,mi)=>{
                   if(mi>e) return null;
-                  const cx=xPos(mi), cy=yPos(v);
+                  const cx=xPos(mi), cy=yDe(s)(v);
                   const ptList=s.pts?.[mi]||[];
                   return (
                     <g key={mi}>
@@ -1881,7 +1902,13 @@ ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Marti
     implantes:     cd.implantes.reduce((a,b)=>a+b,0),
     ortodoncia:    cd.ortodoncia.reduce((a,b)=>a+b,0),
   };
-  const clinicBillingSeries  = [{ label:"Cobrado",data:cd.cobrado,color:"#2ecc71" },{ label:"Presupuestado",data:cd.presupuestado,color:"#c9a84c" }];
+  // Cobrado y presupuestado se mueven en escalas muy distintas —64k a 112k
+  // frente a 190k a 481k—, así que compartir eje dejaba la línea de cobrado
+  // casi recta: su vaivén era el 8% del alto. Cada una en su eje.
+  const clinicBillingSeries  = [
+    { label:"Cobrado",       data:cd.cobrado,       color:"#2ecc71" },
+    { label:"Presupuestado", data:cd.presupuestado, color:"#c9a84c", eje:"der" },
+  ];
   const clinicBillingStats   = [];
   const clinicImplantsSeries = [{ label:"Implantes",data:cd.implantes,color:"#3498db" }];
   const clinicOrthoSeries    = [{ label:"Ortodoncia",data:cd.ortodoncia,color:"#9b59b6" }];

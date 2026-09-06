@@ -124,7 +124,10 @@
       "Bash(rm -f public/_muestra.pdf lee-pdf.html src/lee-pdf.jsx)",
       "Bash(npm uninstall *)",
       "Bash(awk '{print \"  existe en disco:\", $9}')",
-      "Bash(grep -vE \"^$|^C:\")"
+      "Bash(grep -vE \"^$|^C:\")",
+      "Bash(cp \"C:/Users/marti/AppData/Local/Temp/blanco.mjs\" ./b2.mjs)",
+      "Bash(sed -i 's|/D\\\\\\\\.\\\\\\\\/D\\\\[^\"\\\\]{0,150}diagnosticado:/|/declaro que[^\"]{0,120}/|' b2.mjs)",
+      "Bash(awk '$1 > 1540 && $1 < 1720')"
     ]
   }
 }
