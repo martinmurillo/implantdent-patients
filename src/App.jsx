@@ -1572,7 +1572,7 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
 
     const xAxis = `<line x1="${PL}" y1="${yPos(yMin)}" x2="${W-PR}" y2="${yPos(yMin)}" stroke="#ddd" stroke-width="1"/>` +
       (hayDer ? eDer.grid.map(v =>
-        `<text x="${W-PR+4}" y="${(parseFloat(enEje(eDer,v))+4).toFixed(1)}" text-anchor="start" font-size="10" fill="${der[0].color}">${formatVal(v)}</text>`
+        `<text x="${W-PR+4}" y="${(parseFloat(enEje(eDer,v))+4).toFixed(1)}" text-anchor="start" font-size="10" fill="${der[0].color}">${(der[0].fmt||formatVal)(v)}</text>`
       ).join('') : '');
 
     const target = targetLine
@@ -1603,7 +1603,7 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
       const rect  = `<rect x="${PL}" y="${baseY+2}" width="${CW}" height="${LBL_H}" fill="${s.color}18"/>`;
       const lbl   = `<text x="${(PL+CW/2).toFixed(1)}" y="${lblY-2}" text-anchor="middle" font-size="13" fill="${s.color}" font-weight="700">${s.label}</text>`;
       const vals  = s.data.map((v, mi) =>
-        `<text x="${xPos(mi)}" y="${valY}" text-anchor="middle" font-size="16" fill="${v>0?s.color:'#ccc'}" font-weight="${v>0?'700':'400'}">${v>0?formatVal(v):'—'}</text>`
+        `<text x="${xPos(mi)}" y="${valY}" text-anchor="middle" font-size="16" fill="${v>0?s.color:'#ccc'}" font-weight="${v>0?'700':'400'}">${v>0?(s.fmt||formatVal)(v):'—'}</text>`
       ).join('');
       return rect + lbl + vals;
     }).join('');
@@ -1658,7 +1658,7 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
             ))}
             {hayDer && eDer.grid.map(v=>(
               <text key={`d${v}`} x={W-PR+4} y={enEje(eDer,v)+4} textAnchor="start"
-                fontSize={10} fill={der[0].color}>{formatVal(v)}</text>
+                fontSize={10} fill={der[0].color}>{(der[0].fmt||formatVal)(v)}</text>
             ))}
             <line x1={PL} y1={yPos(yMin)} x2={W-PR} y2={yPos(yMin)} stroke="#ddd" strokeWidth={1}/>
             {targetLine && (
@@ -1712,7 +1712,7 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
                   {s.data.map((v,mi)=>(
                     <text key={mi} x={xPos(mi)} y={valY}
                       textAnchor="middle" fontSize={16} fill={v>0 ? s.color : "#ccc"} fontWeight={v>0?"700":"400"}>
-                      {v>0 ? formatVal(v) : "—"}
+                      {v>0 ? (s.fmt||formatVal)(v) : "—"}
                     </text>
                   ))}
                 </g>
@@ -1881,7 +1881,7 @@ h1{font-size:15px;margin:0 0 2px;color:#2c3250;}
   </div>
 </div>
 
-${rowSVG('Cobrado vs Presupuestado', svgMartin1, 'Cobrado vs Presupuestado CLÍNICA (Incluye producción Martin)', svgClinic1, true)}
+${rowSVG('Cobrado vs Presupuestado', svgMartin1, 'Cobrado y % de cierre CLÍNICA (Incluye producción Martin)', svgClinic1, true)}
 ${rowSVG('Ortodoncia', svgMartin2, 'Ortodoncia CLÍNICA (Incluye producción Martin)', svgClinic2)}
 ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Martin)', svgClinic3)}
 </body></html>`;
@@ -1902,12 +1902,17 @@ ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Marti
     implantes:     cd.implantes.reduce((a,b)=>a+b,0),
     ortodoncia:    cd.ortodoncia.reduce((a,b)=>a+b,0),
   };
-  // Cobrado y presupuestado se mueven en escalas muy distintas —64k a 112k
-  // frente a 190k a 481k—, así que compartir eje dejaba la línea de cobrado
-  // casi recta: su vaivén era el 8% del alto. Cada una en su eje.
+  // Cobrado contra presupuestado no era comparable: presupuestado incluye todo
+  // lo presentado, aceptado o no —solo se cobra alrededor del 22%—, y además
+  // lo que se cobra en un mes viene de presupuestos de meses anteriores. La
+  // segunda línea es ahora el porcentaje que se acaba cobrando, que sí se lee
+  // mes a mes y dice si el cierre de presupuestos mejora o empeora.
+  const conversion = cd.cobrado.map((c,i) =>
+    cd.presupuestado[i] ? Math.round((c / cd.presupuestado[i]) * 1000) / 10 : 0);
   const clinicBillingSeries  = [
-    { label:"Cobrado",       data:cd.cobrado,       color:"#2ecc71" },
-    { label:"Presupuestado", data:cd.presupuestado, color:"#c9a84c", eje:"der" },
+    { label:"Cobrado",     data:cd.cobrado, color:"#2ecc71" },
+    { label:"% que se cobra de lo presupuestado", data:conversion, color:"#c9a84c",
+      eje:"der", fmt:(v)=>`${Math.round(v)}%` },
   ];
   const clinicBillingStats   = [];
   const clinicImplantsSeries = [{ label:"Implantes",data:cd.implantes,color:"#3498db" }];
@@ -2136,7 +2141,7 @@ ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Marti
       {[
         {
           titleM:"Cobrado vs Presupuestado", seriesM:allSeries.billing,  fmtM:fmtEurK, statsM:billStatsRows,
-          titleC:"Cobrado vs Presupuestado CLÍNICA (Incluye producción Martin)", seriesC:clinicBillingSeries, fmtC:fmtEurK, targetC:{value:90000,color:"#e74c3c",label:"Objetivo 90k"}, statsC:clinicBillingStats,
+          titleC:"Cobrado y % de cierre CLÍNICA (Incluye producción Martin)", seriesC:clinicBillingSeries, fmtC:fmtEurK, targetC:{value:90000,color:"#e74c3c",label:"Objetivo 90k"}, statsC:clinicBillingStats,
         },
         {
           titleM:"Ortodoncia", seriesM:allSeries.ortho,    fmtM:fmtInt, statsM:orthoStatsRows,
