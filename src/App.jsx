@@ -2378,22 +2378,55 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
       const hc   = pat?.hc || "—";
       const name = pat?.name || "Eliminado";
       const note = pay.note ? ` (${pay.note})` : "";
-      return `<tr><td>${hc}</td><td>${name}</td><td>${fmtDate(pay.date)}</td><td style="text-align:right">${fmtEur(pay.amount)}${note}</td></tr>`;
+      return `<tr><td class="hc">${hc}</td><td>${name}</td><td>${fmtDate(pay.date)}</td><td style="text-align:right">${fmtEur(pay.amount)}${note}</td></tr>`;
     }).join("");
 
-    const implantRows = implantItems.filter(i=>i.realized_date).map(item => {
-      const pat  = findPatient(item.patient_id);
-      const hc   = item.hc || pat?.hc || "—";
-      const name = item.patient_name || pat?.name || "—";
-      return `<tr><td>${hc}</td><td>${name}</td><td>${item.treatment_name}</td><td>${fmtDate(item.realized_date)}</td></tr>`;
-    }).join("");
+    // Los ítems sintéticos traen paciente y HC encima; los de treatment_items
+    // solo el patient_id, así que la historia clínica sale del paciente.
+    const datosItem = (item) => {
+      const pat = findPatient(item.patient_id);
+      return {
+        hc:   item.hc || pat?.hc || "—",
+        name: item.patient_name || pat?.name || "—",
+        tx:   item.treatment_name || "—",
+        fecha: item.realized_date ? fmtDate(item.realized_date) : "",
+        notas: item.notes || "—",
+      };
+    };
+    // Las listas se cotejan a mano contra el Excel de la clínica, así que van
+    // ordenadas por historia clínica y no por paciente.
+    const ordenHC = (a, b) => {
+      const na = parseInt(a.hc, 10), nb = parseInt(b.hc, 10);
+      if (!isNaN(na) && !isNaN(nb)) return na - nb;
+      if (!isNaN(na)) return -1;
+      if (!isNaN(nb)) return 1;
+      return String(a.hc).localeCompare(String(b.hc));
+    };
+    const nImplantes = (item) => {
+      const m = (item.treatment_name || "").match(/(\d+)\s*implante/i);
+      return m ? parseInt(m[1]) : 1;
+    };
 
-    const orthoRows = orthoItems.filter(i=>i.realized_date).map(item => {
-      const pat  = findPatient(item.patient_id);
-      const hc   = item.hc || pat?.hc || "—";
-      const name = item.patient_name || pat?.name || "—";
-      return `<tr><td>${hc}</td><td>${name}</td><td>${item.treatment_name}</td><td>${fmtDate(item.realized_date)}</td><td>${item.notes||"—"}</td></tr>`;
-    }).join("");
+    const implantRows = implantItems.filter(i=>i.realized_date).map(datosItem).sort(ordenHC).map(d =>
+      `<tr><td class="hc">${d.hc}</td><td>${d.name}</td><td>${d.tx}</td><td>${d.fecha}</td></tr>`
+    ).join("");
+
+    const orthoRows = orthoItems.filter(i=>i.realized_date).map(datosItem).sort(ordenHC).map(d =>
+      `<tr><td class="hc">${d.hc}</td><td>${d.name}</td><td>${d.tx}</td><td>${d.fecha}</td><td>${d.notas}</td></tr>`
+    ).join("");
+
+    const pendImplant = implantItems.filter(i=>!i.realized_date)
+      .map(i => ({ ...datosItem(i), qty: nImplantes(i) })).sort(ordenHC);
+    const pendOrtho   = orthoItems.filter(i=>!i.realized_date).map(datosItem).sort(ordenHC);
+    const pendImplantTotal = pendImplant.reduce((a,d)=>a+d.qty, 0);
+
+    const pendImplantRows = pendImplant.map(d =>
+      `<tr><td class="chk"></td><td class="hc">${d.hc}</td><td>${d.name}</td><td>${d.tx}</td><td style="text-align:center">${d.qty}</td></tr>`
+    ).join("");
+
+    const pendOrthoRows = pendOrtho.map(d =>
+      `<tr><td class="chk"></td><td class="hc">${d.hc}</td><td>${d.name}</td><td>${d.tx}</td></tr>`
+    ).join("");
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>Estadísticas ${periodo}</title>
@@ -2411,6 +2444,13 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
   td { padding: 7px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
   tr:last-child td { border-bottom: none; }
   .none { color: #aaa; font-style: italic; padding: 12px 0; }
+  .hc { font-weight: 700; white-space: nowrap; }
+  th.chk, td.chk { width: 26px; }
+  td.chk::before { content: ""; display: inline-block; width: 13px; height: 13px;
+    border: 1.5px solid #888; border-radius: 2px; vertical-align: middle; }
+  .hint { color: #666; font-size: 11px; margin: -4px 0 8px; }
+  tr, h2 { page-break-inside: avoid; }
+  h2 { page-break-after: avoid; }
   @media print { body { padding: 16px; } }
 </style></head><body>
 <h1>IMPLANTDENT — Estadísticas</h1>
@@ -2423,11 +2463,11 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
   </div>
   <div class="stat" style="border-color:#3498db">
     <div class="val" style="color:#3498db">${implantTotal}</div>
-    <div class="lbl">Implantes realizados (${implantItems.length} en lista)</div>
+    <div class="lbl">Implantes realizados · ${pendImplantTotal} pendiente(s)</div>
   </div>
   <div class="stat" style="border-color:#9b59b6">
     <div class="val" style="color:#9b59b6">${orthoTotal}</div>
-    <div class="lbl">Ortodoncia realizada (${orthoItems.length} en lista)</div>
+    <div class="lbl">Ortodoncia realizada · ${pendOrtho.length} pendiente(s)</div>
   </div>
 </div>
 
@@ -2445,6 +2485,18 @@ ${implantItems.filter(i=>i.realized_date).length === 0
 ${orthoItems.filter(i=>i.realized_date).length === 0
   ? '<div class="none">Sin ortodoncia realizada</div>'
   : `<table><thead><tr><th>HC</th><th>Paciente</th><th>Tratamiento</th><th>Fecha inicio</th><th>Notas</th></tr></thead><tbody>${orthoRows}</tbody></table>`}
+
+<h2>Implantes pendientes (${pendImplantTotal})</h2>
+<div class="hint">Ordenado por historia clínica — marcá la casilla al cotejar con el Excel de la clínica.</div>
+${pendImplant.length === 0
+  ? '<div class="none">Sin implantes pendientes</div>'
+  : `<table><thead><tr><th class="chk"></th><th>HC</th><th>Paciente</th><th>Tratamiento</th><th style="text-align:center">Nº</th></tr></thead><tbody>${pendImplantRows}</tbody></table>`}
+
+<h2>Ortodoncia pendiente (${pendOrtho.length})</h2>
+<div class="hint">Ordenado por historia clínica — marcá la casilla al cotejar con el Excel de la clínica.</div>
+${pendOrtho.length === 0
+  ? '<div class="none">Sin ortodoncia pendiente</div>'
+  : `<table><thead><tr><th class="chk"></th><th>HC</th><th>Paciente</th><th>Tratamiento</th></tr></thead><tbody>${pendOrthoRows}</tbody></table>`}
 
 </body></html>`;
 
