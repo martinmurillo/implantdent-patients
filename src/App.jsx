@@ -11,7 +11,7 @@ import { htmlPlanImpreso } from "./planPrint";
 import { htmlFichaCobro, htmlHojaFichas } from "./fichaCobro";
 import { DIRECCION_TEXTO, ETIQUETAS_LINEA, PAGO } from "./legalPlan";
 import { mensajePropuesta } from "./mensajePropuesta";
-import { escalaY, escalaBarra } from "./chartScale";
+import { escalaY } from "./chartScale";
 import { BotonConsentimientos } from "./components/BotonConsentimientos";
 import { EditorPlantillas } from "./components/EditorPlantillas";
 import { PLAZOS as FRAG_PLAZOS, financiable, motivoNoFinanciable,
@@ -1545,31 +1545,23 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
   };
   const fmtInt = (v) => String(Math.round(v));
 
-  // Las series marcadas tipo:"barra" se dibujan como contexto de fondo: el
-  // volumen se lee de un vistazo y el importe exacto está en la fila de valores
-  // de abajo. Su escala es aparte, ver escalaBarra() en chartScale.js.
-  const anchoBarra = (CW) => Math.min(30, (CW / 11) * 0.55);
-
   const makeSVG = (seriesData, formatVal, W=900, H=220, statsRowsData=[], targetLine=null) => {
     // Mismo doble eje y misma escala que el gráfico de pantalla, para que el
     // informe impreso no enseñe una forma distinta de los mismos datos.
-    const barras = seriesData.filter(s => s.tipo === "barra");
-    const lineas = seriesData.filter(s => s.tipo !== "barra");
-    const izq = lineas.filter(s => s.eje !== "der");
-    const der = lineas.filter(s => s.eje === "der");
+    const izq = seriesData.filter(s => s.eje !== "der");
+    const der = seriesData.filter(s => s.eje === "der");
     const hayDer = der.length > 0 && izq.length > 0;
     const PL=120, PR=hayDer?66:20, PT=40, PB=36;
     const LBL_H=16, VAL_H=22;
     const SVG_H = H + (seriesData.length + statsRowsData.length)*(LBL_H+VAL_H) + 16;
     const CW = W - PL - PR, CH = H - PT - PB;
-    const eIzq = escalaY(hayDer ? izq : lineas, targetLine?.value ?? null);
+    const eIzq = escalaY(hayDer ? izq : seriesData, targetLine?.value ?? null);
     const eDer = hayDer ? escalaY(der) : eIzq;
-    const eBar = escalaBarra(barras);
     const { yMin, grid: gridVals } = eIzq;   // las posiciones van por enEje()
     const xPos = i => (PL + (i/11) * CW).toFixed(1);
     const enEje = (e, v) => (PT + CH - ((v-e.yMin)/(e.yMax-e.yMin)) * CH).toFixed(1);
     const yPos = v => enEje(eIzq, v);
-    const yDe  = s => (v) => enEje(s.tipo === "barra" ? eBar : s.eje === "der" ? eDer : eIzq, v);
+    const yDe  = s => (v) => enEje(s.eje === "der" ? eDer : eIzq, v);
     const lastNZ = data => { for (let i=data.length-1;i>=0;i--) if(data[i]) return i; return -1; };
     const pathD = (data, serie) => { const y = serie ? yDe(serie) : yPos; const e=lastNZ(data); if(e<0) return ''; return data.slice(0,e+1).map((v,i)=>`${i===0?'M':'L'}${xPos(i)},${y(v)}`).join(' '); };
 
@@ -1577,15 +1569,6 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
       `<line x1="${PL}" y1="${yPos(v)}" x2="${W-PR}" y2="${yPos(v)}" stroke="#e2e5ed" stroke-width="1" stroke-dasharray="4,3"/>` +
       `<text x="${PL-6}" y="${(parseFloat(yPos(v))+4).toFixed(1)}" text-anchor="end" font-size="10" fill="#888">${formatVal(v)}</text>`
     ).join('');
-
-    const bars = barras.map(s => {
-      const e = lastNZ(s.data), bw = anchoBarra(CW), suelo = PT + CH;
-      return s.data.map((v,i) => {
-        if (i > e || !v) return '';
-        const y = parseFloat(yDe(s)(v));
-        return `<rect x="${(parseFloat(xPos(i))-bw/2).toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${(suelo-y).toFixed(1)}" rx="2" fill="${s.color}" fill-opacity="0.22"/>`;
-      }).join('');
-    }).join('');
 
     const xAxis = `<line x1="${PL}" y1="${yPos(yMin)}" x2="${W-PR}" y2="${yPos(yMin)}" stroke="#ddd" stroke-width="1"/>` +
       (hayDer ? eDer.grid.map(v =>
@@ -1601,11 +1584,11 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
       `<text x="${xPos(i)}" y="${H-6}" text-anchor="middle" font-size="10" fill="#777">${m}</text>`
     ).join('');
 
-    const paths = lineas.map(s =>
+    const paths = seriesData.map(s =>
       `<path d="${pathD(s.data, s)}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`
     ).join('');
 
-    const dots = lineas.map(s => {
+    const dots = seriesData.map(s => {
       const e = lastNZ(s.data);
       return s.data.map((v,i) =>
         i > e ? '' : `<circle cx="${xPos(i)}" cy="${yDe(s)(v)}" r="4" fill="${s.color}" stroke="#fff" stroke-width="1.5"/>`
@@ -1637,31 +1620,28 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
       return rect + lbl + vals;
     }).join('');
 
-    return `<svg viewBox="0 0 ${W} ${SVG_H}" style="width:100%;display:block" xmlns="http://www.w3.org/2000/svg">${grid}${bars}${xAxis}${target}${xLabels}${paths}${dots}${valueRows}${statsRowsSVG}</svg>`;
+    return `<svg viewBox="0 0 ${W} ${SVG_H}" style="width:100%;display:block" xmlns="http://www.w3.org/2000/svg">${grid}${xAxis}${target}${xLabels}${paths}${dots}${valueRows}${statsRowsSVG}</svg>`;
   };
 
   const LineChart = ({ title, series, formatVal, statsRows = [], targetLine = null }) => {
     // Doble eje: las series marcadas eje:"der" se miden aparte. Cobrado y
     // presupuestado se mueven en órdenes distintos y compartir eje dejaba la
-    // línea de cobrado casi recta. Ver chartScale.js y escalaBarra().
-    const barras = series.filter(s => s.tipo === "barra");
-    const lineas = series.filter(s => s.tipo !== "barra");
-    const izq = lineas.filter(s => s.eje !== "der");
-    const der = lineas.filter(s => s.eje === "der");
+    // línea de cobrado casi recta. Ver chartScale.js.
+    const izq = series.filter(s => s.eje !== "der");
+    const der = series.filter(s => s.eje === "der");
     const hayDer = der.length > 0 && izq.length > 0;
     const W=900, H=220, PL=120, PR=hayDer?66:20, PT=40, PB=36;
     const CW=W-PL-PR, CH=H-PT-PB;
     // Cada serie ocupa 2 filas: una de label centrado + una de valores
     const LBL_H = 16, VAL_H = 22;
     const SVG_H = H + (series.length + statsRows.length)*(LBL_H+VAL_H) + 16;
-    const eIzq = escalaY(hayDer ? izq : lineas, targetLine?.value ?? null);
+    const eIzq = escalaY(hayDer ? izq : series, targetLine?.value ?? null);
     const eDer = hayDer ? escalaY(der) : eIzq;
-    const eBar = escalaBarra(barras);
     const { yMin, grid:gridVals } = eIzq;   // las posiciones van por enEje()
     const xPos = i => PL+(i/11)*CW;
     const enEje = (e, v) => PT+CH-((v-e.yMin)/(e.yMax-e.yMin))*CH;
     const yPos = v => enEje(eIzq, v);
-    const yDe  = s => (v) => enEje(s.tipo === "barra" ? eBar : s.eje === "der" ? eDer : eIzq, v);
+    const yDe  = s => (v) => enEje(s.eje === "der" ? eDer : eIzq, v);
     const lastNZ = data => { for (let i=data.length-1;i>=0;i--) if(data[i]) return i; return -1; };
     const pathD = (data, serie) => { const y = serie ? yDe(serie) : yPos; const e=lastNZ(data); if(e<0) return ''; return data.slice(0,e+1).map((v,i)=>`${i===0?'M':'L'}${xPos(i).toFixed(1)},${y(v).toFixed(1)}`).join(' '); };
 
@@ -1676,19 +1656,6 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
                 <text x={PL-6} y={yPos(v)+4} textAnchor="end" fontSize={10} fill="#888">{formatVal(v)}</text>
               </g>
             ))}
-            {barras.map((s,si)=>{
-              const e=lastNZ(s.data), bw=anchoBarra(CW), suelo=PT+CH;
-              return (
-                <g key={`b${si}`}>
-                  {s.data.map((v,mi)=>{
-                    if(mi>e || !v) return null;
-                    const y=yDe(s)(v);
-                    return <rect key={mi} x={xPos(mi)-bw/2} y={y} width={bw} height={suelo-y}
-                      rx={2} fill={s.color} fillOpacity={0.22}/>;
-                  })}
-                </g>
-              );
-            })}
             {hayDer && eDer.grid.map(v=>(
               <text key={`d${v}`} x={W-PR+4} y={enEje(eDer,v)+4} textAnchor="start"
                 fontSize={10} fill={der[0].color}>{(der[0].fmt||formatVal)(v)}</text>
@@ -1707,10 +1674,10 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
             {MONTHS_SHORT.map((m,i)=>(
               <text key={i} x={xPos(i)} y={H-6} textAnchor="middle" fontSize={10} fill="#777">{m}</text>
             ))}
-            {lineas.map((s,si)=>(
+            {series.map((s,si)=>(
               <path key={si} d={pathD(s.data, s)} fill="none" stroke={s.color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round"/>
             ))}
-            {lineas.map((s,si)=>{
+            {series.map((s,si)=>{
               const e=lastNZ(s.data);
               return (
               <g key={si}>
@@ -1936,22 +1903,24 @@ ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Marti
     ortodoncia:    cd.ortodoncia.reduce((a,b)=>a+b,0),
   };
   // Cobrado contra presupuestado no era comparable: presupuestado incluye todo
-  // lo presentado, aceptado o no —solo se cobra alrededor del 22%—, y además
-  // lo que se cobra en un mes viene de presupuestos de meses anteriores. La
-  // segunda línea es ahora el porcentaje que se acaba cobrando, que sí se lee
-  // mes a mes y dice si el cierre de presupuestos mejora o empeora.
+  // lo presentado, aceptado o no (solo se cobra alrededor del 22%), y ademas
+  // lo que se cobra en un mes viene de presupuestos de meses anteriores.
   const conversion = cd.cobrado.map((c,i) =>
     cd.presupuestado[i] ? Math.round((c / cd.presupuestado[i]) * 1000) / 10 : 0);
-  // El bloque de filas de valores se dibuja en orden inverso, así que el array
-  // va del revés para que debajo del gráfico se lea presupuestado, cobrado y
-  // por último el porcentaje de cierre.
+  // Se dibuja una sola linea. Presupuestado como segunda linea aplastaba el
+  // cobrado, y ni el porcentaje de cierre en un segundo eje ni el presupuestado
+  // como barra de fondo se leian de un vistazo: dos trazos que se cruzan piden
+  // pararse a mirar cual es cual. Los dos datos siguen estando, en las filas de
+  // valores de abajo, que es donde de verdad se consultan mes a mes.
   const clinicBillingSeries  = [
-    { label:"% que se cobra de lo presupuestado", data:conversion, color:"#2980b9",
-      eje:"der", fmt:(v)=>`${Math.round(v)}%` },
-    { label:"Cobrado",       data:cd.cobrado,       color:"#2ecc71" },
-    { label:"Presupuestado", data:cd.presupuestado, color:"#c9a84c", tipo:"barra" },
+    { label:"Cobrado", data:cd.cobrado, color:"#2ecc71" },
   ];
-  const clinicBillingStats   = [];
+  const clinicBillingStats   = [
+    { label:"Presupuestado", color:"#c9a84c", isRaw:true,
+      data: cd.presupuestado.map(v => v ? fmtEurK(v) : null) },
+    { label:"% que se cobra de lo presupuestado", color:"#2980b9",
+      data: conversion.map((v,i) => cd.presupuestado[i] ? Math.round(v) : null) },
+  ];
   const clinicImplantsSeries = [{ label:"Implantes",data:cd.implantes,color:"#3498db" }];
   const clinicOrthoSeries    = [{ label:"Ortodoncia",data:cd.ortodoncia,color:"#9b59b6" }];
 

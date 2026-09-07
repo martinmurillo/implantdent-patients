@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { escalaY, escalaBarra, valoresDibujados } from "./chartScale.js";
+import { escalaY, valoresDibujados } from "./chartScale.js";
 
 const serie = (data) => [{ data }];
 
@@ -80,28 +80,5 @@ describe("escala vertical", () => {
       assert.equal(v, Math.round(v), `${v} no es entero`);
       assert.equal(v % 100, 0, `${v} no está redondeado`);
     }
-  });
-});
-
-describe("escala de las barras de fondo", () => {
-  test("arranca siempre en cero: una barra que no nace del cero miente", () => {
-    const r = escalaBarra(serie([180000, 210000, 195000]));
-    assert.equal(r.yMin, 0);
-  });
-
-  test("la barra más alta no llega a tocar el borde", () => {
-    const r = escalaBarra(serie([180000, 210000, 195000]));
-    assert.ok(r.yMax > 210000, "el techo tiene que quedar por encima del máximo");
-    assert.ok(r.yMax < 210000 * 1.2, "pero sin dejar medio gráfico vacío");
-  });
-
-  test("los meses futuros, que vienen a cero, no fijan el techo", () => {
-    assert.equal(escalaBarra(serie([100, 200, 0, 0])).yMax,
-                 escalaBarra(serie([100, 200])).yMax);
-  });
-
-  test("sin datos no hay escala y no se dibuja nada", () => {
-    assert.equal(escalaBarra([]), null);
-    assert.equal(escalaBarra(serie([0, 0, 0])), null);
   });
 });
