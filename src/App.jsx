@@ -1492,13 +1492,14 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
           { label:"Presupuestado c/pagos", data: d.budgeted,     color:"#c9a84c", pts: p.budgeted,      eje:"der" },
           { label:"Total presupuestado",   data: d.totalBudgeted, color:"#3498db", pts: p.totalBudgeted, eje:"der" },
         ],
+        // Solo se dibuja lo realizado. Los pendientes se leen mejor de fila de
+        // valores que de linea: son un stock, no una evolucion, y cruzados con
+        // la linea de realizados obligaban a mirar dos veces cual era cual.
         ortho:    [
           { label:"Realizadas",       data: d.orthoRealized,   color:"#9b59b6", pts: p.orthoRealized },
-          { label:"Pendientes",       data: d.orthoPending,    color:"#e74c3c", pts: p.orthoPending },
         ],
         implants: [
           { label:"Realizados",       data: d.implantRealized, color:"#3498db", pts: p.implantRealized },
-          { label:"Pendientes",       data: d.implantPending,  color:"#e67e22", pts: p.implantPending },
         ],
       };
     }
@@ -1535,8 +1536,14 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
       { label: "Efect. c/Pagos", data: d.paid.map((v, i) => safePct(v, d.budgeted[i])),      color: "#2ecc71" },
       { label: "Pacientes",      data: d.patientsTotal.map((v, i) => v > 0 ? `${d.patientsWithPay[i]}/${v}` : null), color: "#e67e22", isRaw: true },
     ];
-    orthoStatsRows = [{ label: "Efectividad", data: d.orthoRealized.map((v, i)  => safePct(v, v + d.orthoPending[i])),   color: "#9b59b6" }];
-    implStatsRows  = [{ label: "Efectividad", data: d.implantRealized.map((v, i) => safePct(v, v + d.implantPending[i])), color: "#3498db" }];
+    orthoStatsRows = [
+      { label: "Pendientes",  data: d.orthoPending.map(v => v > 0 ? String(v) : null), color: "#e74c3c", isRaw: true },
+      { label: "Efectividad", data: d.orthoRealized.map((v, i)  => safePct(v, v + d.orthoPending[i])),   color: "#9b59b6" },
+    ];
+    implStatsRows  = [
+      { label: "Pendientes",  data: d.implantPending.map(v => v > 0 ? String(v) : null), color: "#e67e22", isRaw: true },
+      { label: "Efectividad", data: d.implantRealized.map((v, i) => safePct(v, v + d.implantPending[i])), color: "#3498db" },
+    ];
   }
 
   const fmtEurK = (v) => {
