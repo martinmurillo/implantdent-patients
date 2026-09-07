@@ -1537,11 +1537,11 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
       { label: "Pacientes",      data: d.patientsTotal.map((v, i) => v > 0 ? `${d.patientsWithPay[i]}/${v}` : null), color: "#e67e22", isRaw: true },
     ];
     orthoStatsRows = [
-      { label: "Pendientes",  data: d.orthoPending.map(v => v > 0 ? String(v) : null), color: "#e74c3c", isRaw: true },
+      { label: "Pendientes",  data: d.orthoPending.map(v => v > 0 ? String(v) : null), color: "#e74c3c", isRaw: true, pts: yearFull.pts.orthoPending },
       { label: "Efectividad", data: d.orthoRealized.map((v, i)  => safePct(v, v + d.orthoPending[i])),   color: "#9b59b6" },
     ];
     implStatsRows  = [
-      { label: "Pendientes",  data: d.implantPending.map(v => v > 0 ? String(v) : null), color: "#e67e22", isRaw: true },
+      { label: "Pendientes",  data: d.implantPending.map(v => v > 0 ? String(v) : null), color: "#e67e22", isRaw: true, pts: yearFull.pts.implantPending },
       { label: "Efectividad", data: d.implantRealized.map((v, i) => safePct(v, v + d.implantPending[i])), color: "#3498db" },
     ];
   }
@@ -1736,14 +1736,28 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
                 <g key={`sr_${sri}`}>
                   <rect x={PL} y={baseY+2} width={CW} height={LBL_H} fill={sr.color+"11"}/>
                   <text x={PL+CW/2} y={lblY-2} textAnchor="middle" fontSize={13} fill={sr.color} fontWeight="700">{sr.label}</text>
-                  {sr.data.map((v, mi) => (
-                    <text key={mi} x={xPos(mi)} y={valY}
-                      textAnchor="middle" fontSize={16}
-                      fill={v != null ? sr.color : "#ccc"}
-                      fontWeight={v != null ? "700" : "400"}>
-                      {v != null ? (sr.isRaw ? v : `${v}%`) : "—"}
-                    </text>
-                  ))}
+                  {sr.data.map((v, mi) => {
+                    // Los pendientes ya no tienen linea, asi que el listado de
+                    // quien esta pendiente se abre desde el numero. Subrayado
+                    // para que se vea que se puede pulsar.
+                    const ptList = sr.pts?.[mi] || [];
+                    const abrir  = ptList.length > 0
+                      ? () => setPointModal({title:`${MONTHS_ES[mi]} — ${sr.label}`, list:ptList})
+                      : undefined;
+                    return (
+                      <g key={mi} onClick={abrir} style={abrir?{cursor:"pointer"}:undefined}>
+                        {abrir && <rect x={xPos(mi)-(CW/11)*0.45} y={valY-VAL_H+6}
+                          width={(CW/11)*0.9} height={VAL_H} fill="transparent"/>}
+                        <text x={xPos(mi)} y={valY}
+                          textAnchor="middle" fontSize={16}
+                          fill={v != null ? sr.color : "#ccc"}
+                          fontWeight={v != null ? "700" : "400"}
+                          textDecoration={abrir ? "underline" : undefined}>
+                          {v != null ? (sr.isRaw ? v : `${v}%`) : "—"}
+                        </text>
+                      </g>
+                    );
+                  })}
                 </g>
               );
             })}
