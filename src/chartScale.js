@@ -29,6 +29,17 @@ export function valoresDibujados(series) {
   return out;
 }
 
+// Las series de barras (el presupuestado como contexto de fondo) no comparten
+// el eje de las líneas: de lo presupuestado solo se cobra alrededor de un
+// quinto, así que en el mismo eje o manda la barra y el cobrado queda pegado
+// al suelo, o manda el cobrado y la barra se sale del gráfico. Van en su propia
+// escala, que siempre arranca en cero —una barra que no nace del cero miente—
+// y deja un 8% de aire para que la más alta no toque el borde.
+export function escalaBarra(barras = []) {
+  const v = valoresDibujados(barras);
+  return v.length ? { yMin: 0, yMax: Math.max(...v) * 1.08 } : null;
+}
+
 export function escalaY(series = [], objetivo = null, { lineas = 4 } = {}) {
   const vals = valoresDibujados(series);
   const conObjetivo = objetivo == null ? vals : [...vals, objetivo];
