@@ -6,7 +6,7 @@ import {
   diasEntre, conciliarCuotas, precioSinDescuento, columnasTablero,
   estadoCobroMeses, vencimientosPorMes, avisosDelDia,
   nombreCortoTratamiento, tratamientosPorMes,
-  claveTratamiento, migraClaveTratamiento,
+  claveTratamiento, migraClaveTratamiento, clavesRealizadas,
 } from "./planCalc.js";
 
 // ─── Fechas ──────────────────────────────────────────────────────────────────
@@ -1125,5 +1125,54 @@ describe("migraClaveTratamiento", () => {
 
   test("una clave sin separador se deja como esta en vez de romperse", () => {
     assert.equal(migraClaveTratamiento("basura"), "basura");
+  });
+});
+
+describe("lo marcado como hecho no vuelve a pendientes", () => {
+  // El caso real que lo destapó: un tratamiento largo, marcado como realizado
+  // en julio, que seguía saliendo en la lista de pendientes.
+  const CESAR = "c-1";
+  const TX = "4 IMPLANTES + BARRA ACKERMAN +SOBREDENTADURA METAL ACRILICA REMOVIBLE + EXOS + PROTESIS PROVISIONAL";
+
+  test("la fila realizada tapa a la fila vieja sin marcar del mismo tratamiento", () => {
+    const items = [
+      { patient_id: CESAR, treatment_name: TX, realized_date: null },
+      { patient_id: CESAR, treatment_name: TX, realized_date: "2026-07-14" },
+    ];
+    const hechas = clavesRealizadas(items);
+    const pendientes = items.filter(i =>
+      !i.realized_date && !hechas.has(claveTratamiento(i.patient_id, i.treatment_name)));
+    assert.deepEqual(pendientes, []);
+  });
+
+  test("tapa aunque el presupuesto lo escriba distinto: era justo lo que fallaba", () => {
+    // La fila guardada se escribió sin el espacio tras el "+" y sin acentos;
+    // el presupuesto se retocó después. Comparando el nombre literal, esta
+    // clave no coincidía y el tratamiento resucitaba como pendiente.
+    const items = [{ patient_id: CESAR, treatment_name: TX, realized_date: "2026-07-14" }];
+    const enPresupuesto = "4 Implantes + Barra Ackerman + Sobredentadura Metal Acrílica Removible + Exos + Prótesis Provisional";
+    const hechas = clavesRealizadas(items);
+    assert.ok(hechas.has(claveTratamiento(CESAR, enPresupuesto)),
+      "el tratamiento del presupuesto tiene que reconocerse como ya realizado");
+  });
+
+  test("lo que de verdad sigue pendiente no se tapa", () => {
+    const items = [
+      { patient_id: CESAR, treatment_name: TX, realized_date: "2026-07-14" },
+      { patient_id: CESAR, treatment_name: "CORONA SOBRE IMPLANTE 36", realized_date: null },
+    ];
+    const hechas = clavesRealizadas(items);
+    assert.equal(hechas.has(claveTratamiento(CESAR, "CORONA SOBRE IMPLANTE 36")), false);
+  });
+
+  test("el mismo tratamiento de otro paciente sigue pendiente", () => {
+    const items = [{ patient_id: CESAR, treatment_name: TX, realized_date: "2026-07-14" }];
+    const hechas = clavesRealizadas(items);
+    assert.equal(hechas.has(claveTratamiento("otro-paciente", TX)), false);
+  });
+
+  test("sin nada marcado no se tapa nada", () => {
+    assert.equal(clavesRealizadas([]).size, 0);
+    assert.equal(clavesRealizadas([{ patient_id: CESAR, treatment_name: TX, realized_date: null }]).size, 0);
   });
 });

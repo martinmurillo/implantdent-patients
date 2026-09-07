@@ -393,6 +393,17 @@ export function claveTratamiento(patientId, nombre) {
   return `${patientId}|${limpio}`;
 }
 
+// Las claves de todo lo que ya tiene fecha de realizado. Sirve para la regla
+// de la que cuelga la lista de pendientes: lo que se marca hecho, hecho queda.
+// El mismo tratamiento acaba teniendo dos filas mas veces de las que parece
+// —una vieja sin marcar y la que se marco— y sin esto se colaba la de sin
+// marcar y el tratamiento seguia pendiente para siempre.
+export function clavesRealizadas(items = []) {
+  return new Set((items || [])
+    .filter(i => i && i.realized_date)
+    .map(i => claveTratamiento(i.patient_id, i.treatment_name)));
+}
+
 // Las exclusiones se guardan en el localStorage de cada navegador y las que ya
 // estaban tienen la clave vieja, sin normalizar. Se reescriben al vuelo para no
 // perder los falsos positivos que ya se habian quitado a mano.

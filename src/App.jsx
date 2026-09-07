@@ -6,7 +6,7 @@ import { calcPlan, cuotaSugerida, totalTratamientos, cuotasDelPlan,
          resumenPlan, coberturaProxima, addMeses, conciliarCuotas,
          precioSinDescuento, columnasTablero, estadoCobroMeses,
          vencimientosPorMes, avisosDelDia,
-         claveTratamiento, migraClaveTratamiento } from "./planCalc";
+         claveTratamiento, migraClaveTratamiento, clavesRealizadas } from "./planCalc";
 import { colocacionInicial, parsePlanPDF, importeFila } from "./pdfPlan";
 import { htmlPlanImpreso } from "./planPrint";
 import { htmlFichaCobro, htmlHojaFichas } from "./fichaCobro";
@@ -2294,8 +2294,7 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
   // no puede volver a aparecer en pendientes por ningún camino. Hacía falta
   // decirlo aquí porque el mismo tratamiento llega a tener dos filas —una vieja
   // sin marcar y la que se marcó— y antes se colaba la de sin marcar.
-  const realizadas = new Set(items.filter(i => i.realized_date)
-    .map(i => claveTratamiento(i.patient_id, i.treatment_name)));
+  const realizadas = clavesRealizadas(items);
   const yaHecho = (patientId, nombre) => realizadas.has(claveTratamiento(patientId, nombre));
 
   // Items de treatment_items: realizados solo en rango, pendientes siempre
