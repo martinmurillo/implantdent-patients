@@ -5,7 +5,8 @@ import { loadPdfJs } from "./pdfjs";
 import { calcPlan, cuotaSugerida, totalTratamientos, cuotasDelPlan,
          resumenPlan, coberturaProxima, addMeses, conciliarCuotas,
          precioSinDescuento, columnasTablero, estadoCobroMeses,
-         vencimientosPorMes, avisosDelDia } from "./planCalc";
+         vencimientosPorMes, avisosDelDia,
+         claveTratamiento, migraClaveTratamiento } from "./planCalc";
 import { colocacionInicial, parsePlanPDF, importeFila } from "./pdfPlan";
 import { htmlPlanImpreso } from "./planPrint";
 import { htmlFichaCobro, htmlHojaFichas } from "./fichaCobro";
@@ -1313,7 +1314,7 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
     const realizedSet = new Set();
     items.forEach(item => {
       if (item.realized_date)
-        realizedSet.add(`${item.patient_id}|${(item.treatment_name||"").toLowerCase().trim()}`);
+        realizedSet.add(claveTratamiento(item.patient_id, item.treatment_name));
     });
 
     patients.forEach(pat => {
@@ -1346,7 +1347,7 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
 
       getTxItems(pat).forEach(tx => {
         const txName = tx.name || "";
-        const key    = `${pat.id}|${txName.toLowerCase().trim()}`;
+        const key    = claveTratamiento(pat.id, txName);
         if (excluded.has(key)) return;
         const entry  = { patientId:pat.id, name:pat.name||"—", hc:pat.hc||"—", detail:txName+(tx.value?` · ${fmtEur(tx.value)}`:""), txName };
 
@@ -1368,7 +1369,7 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
       const ry = parseInt(item.realized_date.slice(0,4));
       const rm = parseInt(item.realized_date.slice(5,7));
       if (ry !== year || rm < 1 || rm > 12) return;
-      const exKey = `${item.patient_id}|${name.toLowerCase().trim()}`;
+      const exKey = claveTratamiento(item.patient_id, name);
       if (excluded.has(exKey)) return;
       const pat   = patients.find(p => p.id === item.patient_id);
       const entry = { patientId:item.patient_id, name:item.patient_name||pat?.name||"—", hc:item.hc||pat?.hc||"—", detail:name+" · "+fmtDate(item.realized_date), txName:name };
@@ -1448,12 +1449,13 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
     return { presupuestado:a("presupuestado"), cobrado:a("cobrado"), implantes:a("implantes"), ortodoncia:a("ortodoncia") };
   };
   const [excluded, setExcluded] = useState(() => {
-    try { return new Set(JSON.parse(localStorage.getItem("progreso_excluded") || "[]")); }
+    try { return new Set(JSON.parse(localStorage.getItem("progreso_excluded") || "[]")
+      .map(migraClaveTratamiento)); }
     catch { return new Set(); }
   });
 
   const excludeItem = (patientId, txName) => {
-    const key = `${patientId}|${(txName||"").toLowerCase().trim()}`;
+    const key = claveTratamiento(patientId, txName);
     setExcluded(prev => {
       const next = new Set(prev);
       next.add(key);
@@ -1461,7 +1463,7 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
       return next;
     });
     setPointModal(prev => prev
-      ? {...prev, list: prev.list.filter(i => `${i.patientId}|${(i.txName||"").toLowerCase().trim()}` !== key)}
+      ? {...prev, list: prev.list.filter(i => claveTratamiento(i.patientId, i.txName) !== key)}
       : null
     );
   };
@@ -2224,11 +2226,12 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
   const [syncing,       setSyncing]     = useState(false);
   const [showProgreso,  setShowProgreso] = useState(false);
   const [excluded, setExcluded] = useState(() => {
-    try { return new Set(JSON.parse(localStorage.getItem("progreso_excluded") || "[]")); }
+    try { return new Set(JSON.parse(localStorage.getItem("progreso_excluded") || "[]")
+      .map(migraClaveTratamiento)); }
     catch { return new Set(); }
   });
   const excludeSyn = (patientId, txName) => {
-    const key = `${patientId}|${(txName||"").toLowerCase().trim()}`;
+    const key = claveTratamiento(patientId, txName);
     setExcluded(prev => {
       const next = new Set(prev); next.add(key);
       try { localStorage.setItem("progreso_excluded", JSON.stringify([...next])); } catch {}
@@ -2236,7 +2239,7 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
     });
   };
   const restoreSyn = (patientId, txName) => {
-    const key = `${patientId}|${(txName||"").toLowerCase().trim()}`;
+    const key = claveTratamiento(patientId, txName);
     setExcluded(prev => {
       const next = new Set(prev); next.delete(key);
       try { localStorage.setItem("progreso_excluded", JSON.stringify([...next])); } catch {}
@@ -2266,26 +2269,37 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
   const isImplant    = (name) => implantRx.test(name) && !implantExcRx.test(name);
   const orthoRx      = /ortodoncia|orthodontic|invisalign|invisaling|invisible\s|ortod|placa expansiva|hass/i;
 
+  // Lo que se marca hecho, hecho queda: un tratamiento con fecha de realizado
+  // no puede volver a aparecer en pendientes por ningún camino. Hacía falta
+  // decirlo aquí porque el mismo tratamiento llega a tener dos filas —una vieja
+  // sin marcar y la que se marcó— y antes se colaba la de sin marcar.
+  const realizadas = new Set(items.filter(i => i.realized_date)
+    .map(i => claveTratamiento(i.patient_id, i.treatment_name)));
+  const yaHecho = (patientId, nombre) => realizadas.has(claveTratamiento(patientId, nombre));
+
   // Items de treatment_items: realizados solo en rango, pendientes siempre
   const implantItems = items.filter(i => {
     if (!isImplant(i.treatment_name || "")) return false;
     if (i.realized_date) return inRange(i.realized_date);
+    if (yaHecho(i.patient_id, i.treatment_name)) return false;
     const pat = patients.find(p => p.id === i.patient_id);
     return pat?.status !== "frío";
   });
   const orthoItems = items.filter(i => {
     if (!orthoRx.test(i.treatment_name || "")) return false;
-    return i.realized_date ? inRange(i.realized_date) : true;
+    if (i.realized_date) return inRange(i.realized_date);
+    return !yaHecho(i.patient_id, i.treatment_name);
   });
 
   // Suplementar con ítems de pacientes sin registro en treatment_items
-  const inItemsKeys   = new Set(items.map(i => `${i.patient_id}|${(i.treatment_name||"").toLowerCase().trim()}`));
+  const inItemsKeys   = new Set(items.map(i => claveTratamiento(i.patient_id, i.treatment_name)));
   const patientsWithPayment = new Set(payments.map(p => p.patient_id));
   patients.forEach(pat => {
     const hasPayment = patientsWithPayment.has(pat.id);
     getTxItems(pat).forEach(tx => {
-      const key = `${pat.id}|${(tx.name||"").toLowerCase().trim()}`;
+      const key = claveTratamiento(pat.id, tx.name);
       if (inItemsKeys.has(key)) return;
+      if (realizadas.has(key)) return;
       if (excluded.has(key)) return;
       const syn = { id:null, patient_id:pat.id, patient_name:pat.name, hc:pat.hc,
                     treatment_name:tx.name, amount:tx.value||0, realized_date:null, _synthetic:true };
@@ -2301,7 +2315,7 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
   const excludedImplantItems = [];
   patients.forEach(pat => {
     getTxItems(pat).forEach(tx => {
-      const key = `${pat.id}|${(tx.name||"").toLowerCase().trim()}`;
+      const key = claveTratamiento(pat.id, tx.name);
       if (!excluded.has(key)) return;
       const syn = { patient_id:pat.id, patient_name:pat.name, hc:pat.hc, treatment_name:tx.name };
       if (orthoRx.test(tx.name||"")) excludedOrthoItems.push(syn);

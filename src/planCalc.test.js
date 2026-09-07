@@ -6,6 +6,7 @@ import {
   diasEntre, conciliarCuotas, precioSinDescuento, columnasTablero,
   estadoCobroMeses, vencimientosPorMes, avisosDelDia,
   nombreCortoTratamiento, tratamientosPorMes,
+  claveTratamiento, migraClaveTratamiento,
 } from "./planCalc.js";
 
 // ─── Fechas ──────────────────────────────────────────────────────────────────
@@ -1073,5 +1074,56 @@ describe("tratamientosPorMes", () => {
 
   test("sin colocación devuelve vacío", () => {
     assert.equal(tratamientosPorMes([]).size, 0);
+  });
+});
+
+describe("claveTratamiento", () => {
+  test("el mismo tratamiento escrito distinto da la misma clave", () => {
+    const a = claveTratamiento("p1", "4 IMPLANTES + BARRA ACKERMAN +SOBREDENTADURA");
+    const b = claveTratamiento("p1", "4 implantes + barra ackerman + sobredentadura");
+    assert.equal(a, b);
+  });
+
+  test("los acentos no separan lo que es el mismo tratamiento", () => {
+    assert.equal(claveTratamiento("p1", "PRÓTESIS METÁLICA"),
+                 claveTratamiento("p1", "protesis metalica"));
+  });
+
+  test("espacios de mas, saltos de linea y puntuacion no cuentan", () => {
+    assert.equal(claveTratamiento("p1", "  EXOS,   PIEZA 36 \n"),
+                 claveTratamiento("p1", "EXOS PIEZA 36"));
+  });
+
+  test("tratamientos distintos siguen siendo distintos", () => {
+    assert.notEqual(claveTratamiento("p1", "IMPLANTE 36"),
+                    claveTratamiento("p1", "IMPLANTE 46"));
+  });
+
+  test("el mismo tratamiento de otro paciente no se mezcla", () => {
+    assert.notEqual(claveTratamiento("p1", "IMPLANTE 36"),
+                    claveTratamiento("p2", "IMPLANTE 36"));
+  });
+
+  test("un id con guiones sobrevive intacto: solo se normaliza el nombre", () => {
+    const uuid = "3f2a1b7c-9d0e-4f11-8a2b-6c5d4e3f2a1b";
+    assert.ok(claveTratamiento(uuid, "Implante 36").startsWith(uuid + "|"));
+  });
+});
+
+describe("migraClaveTratamiento", () => {
+  test("una clave vieja acaba en la misma que genera la nueva", () => {
+    const uuid = "3f2a1b7c-9d0e-4f11-8a2b-6c5d4e3f2a1b";
+    const vieja = `${uuid}|4 implantes + barra ackerman +sobredentadura`;
+    assert.equal(migraClaveTratamiento(vieja),
+                 claveTratamiento(uuid, "4 IMPLANTES + BARRA ACKERMAN + SOBREDENTADURA"));
+  });
+
+  test("migrar dos veces no cambia nada", () => {
+    const k = claveTratamiento("p1", "Implante 36");
+    assert.equal(migraClaveTratamiento(k), k);
+  });
+
+  test("una clave sin separador se deja como esta en vez de romperse", () => {
+    assert.equal(migraClaveTratamiento("basura"), "basura");
   });
 });

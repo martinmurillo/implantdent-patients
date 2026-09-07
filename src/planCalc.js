@@ -377,6 +377,30 @@ export function nombreCortoTratamiento(nombre) {
   return pieza ? `${base} ${pieza}` : base;
 }
 
+// Clave con la que se empareja un tratamiento del presupuesto con su fila de
+// treatment_items. Se compara el nombre normalizado y no el literal porque el
+// mismo tratamiento acaba escrito de formas ligeramente distintas: acentos,
+// espacios de mas, un "+" pegado a la palabra siguiente, mayusculas. Con la
+// comparacion literal, tocar una letra del presupuesto dejaba huerfana la fila
+// ya marcada como realizada y el tratamiento reaparecia en pendientes para
+// siempre, que es justo lo que no puede pasar: lo marcado hecho, hecho queda.
+export function claveTratamiento(patientId, nombre) {
+  const limpio = String(nombre || "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  return `${patientId}|${limpio}`;
+}
+
+// Las exclusiones se guardan en el localStorage de cada navegador y las que ya
+// estaban tienen la clave vieja, sin normalizar. Se reescriben al vuelo para no
+// perder los falsos positivos que ya se habian quitado a mano.
+export function migraClaveTratamiento(clave) {
+  const txt = String(clave || "");
+  const i = txt.indexOf("|");
+  return i < 0 ? txt : claveTratamiento(txt.slice(0, i), txt.slice(i + 1));
+}
 // Qué hay que citar en cada mes, según dónde estén colocados los tratamientos
 export function tratamientosPorMes(colocacion = []) {
   const porMes = new Map();
