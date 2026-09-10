@@ -20,6 +20,21 @@ export const BLOQUEO_CRUZADO = false;
 // perdido en medio del cálculo.
 export const DEVUELTOS_BLOQUEAN = false;
 
+// Qué código es qué. Se trabaja por familia y no por código porque la serie
+// 321xx es la tarifa infantil de la 323xx: el mismo paciente pasa de una a
+// otra al crecer, sobre la misma pieza, y para la mutua es el mismo tratamiento.
+//
+// Esta tabla es el espejo del seed de mutua_familias en la migración. Si se
+// tocan los códigos hay que tocar las dos: aquí para el script de
+// verificación, y en la base para las vistas.
+export const FAMILIAS = new Map([
+  [32301, "OBTURACION"], [32102, "OBTURACION"], [32101, "OBTURACION"],
+  [32302, "ANGULOS"],    [32103, "ANGULOS"],
+  // Extracciones e implante: la pieza ya no está, no se ofrece nunca más.
+  [32020, "PERDIDA"], [32450, "PERDIDA"], [32222, "PERDIDA"], [32452, "PERDIDA"],
+  [32543, "PERDIDA"], [32878, "PERDIDA"], [32890, "PERDIDA"],
+]);
+
 const cuadrantes = (base, desde, hasta) => {
   const out = [];
   for (const q of base) for (let i = desde; i <= hasta; i++) out.push(q + i);

@@ -1,8 +1,9 @@
 // Corre los tests de aceptación de docs/spec_seccion_mutua.md contra el export
-// real, usando la misma función pura que usa la aplicación.
+// real, usando el mismo parser y la misma función pura que usa la aplicación.
+// Si aquí salieran los números buenos con otro código, no probarían nada.
 //
 // El Excel lleva DNI y datos de salud, así que no está en el repo: el script sí
-// y el archivo no. Se le pasa la ruta, o busca el más reciente en docs/.
+// y el archivo no.
 //
 //   node scripts/verificar-mutua.mjs [ruta.xlsx] [YYYY-MM-DD]
 //
@@ -10,57 +11,27 @@
 
 import XLSX from "xlsx";
 import { readdirSync } from "node:fs";
-import { calcularEstadoPiezas, liberadasEnElMes, ultimoDiaDelMes } from "../src/mutua/reglas.js";
+import {
+  calcularEstadoPiezas, liberadasEnElMes, ultimoDiaDelMes, FAMILIAS,
+} from "../src/mutua/reglas.js";
+import { normalizarFilas, normalizarNombre, HOJA_EXCEL } from "../src/mutua/importar.js";
 import { addMeses } from "../src/planCalc.js";
-
-const FAMILIAS = new Map(Object.entries({
-  32301: "OBTURACION", 32102: "OBTURACION", 32101: "OBTURACION",
-  32302: "ANGULOS",    32103: "ANGULOS",
-  32020: "PERDIDA", 32450: "PERDIDA", 32222: "PERDIDA", 32452: "PERDIDA",
-  32543: "PERDIDA", 32878: "PERDIDA", 32890: "PERDIDA",
-}).map(([k, v]) => [Number(k), v]));
-
-const COLUMNAS = ["Información de Paciente", "DNI del paciente", "código", "Tratamiento",
-  "Precio", "Pieza", "Producto", "Creado el", "Facturado", "Fecha Alb/Fact", "Devuelto",
-  "Fecha de Realización"];
-
-const DIACRITICOS = /[̀-ͯ]/g;
-
-const aIso = (t) => {
-  if (!t) return null;
-  if (t instanceof Date) return t.toLocaleDateString("sv-SE");
-  const [d, m, y] = String(t).split("/");
-  return y ? `${y}-${m}-${d}` : null;
-};
-const normNombre = (s) => String(s || "").normalize("NFD").replace(DIACRITICOS, "")
-  .trim().replace(/\s+/g, " ").toUpperCase();
 
 const ruta = process.argv[2] || "docs/" + readdirSync("docs")
   .filter(f => /^treatments_list_.*\.xlsx$/.test(f)).sort().pop();
 const HOY = process.argv[3] || new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Madrid" });
 
 const wb = XLSX.readFile(ruta, { cellDates: true });
-const hoja = wb.Sheets["Adeland Export"] || wb.Sheets[wb.SheetNames[0]];
+const hoja = wb.Sheets[HOJA_EXCEL] || wb.Sheets[wb.SheetNames[0]];
 const crudo = XLSX.utils.sheet_to_json(hoja, { defval: null });
 
-const faltan = COLUMNAS.filter(c => !(c in (crudo[0] || {})));
+const { filas: crudas, faltan, descartadas } = normalizarFilas(crudo);
 if (faltan.length) { console.error("Faltan columnas:", faltan.join(", ")); process.exit(1); }
+if (descartadas) console.log(`(${descartadas} filas sin fecha de realización, descartadas)`);
+const filas = crudas.map(f => ({ ...f, familia: FAMILIAS.get(f.codigo) || null }));
 
-const filas = crudo.map(f => {
-  const dni = String(f["DNI del paciente"] || "").trim().toUpperCase();
-  const nombre = normNombre(f["Información de Paciente"]);
-  const codigo = Number(f["código"]);
-  return {
-    paciente_key: dni || `NOM:${nombre}`, dni: dni || null, nombre, codigo,
-    familia: FAMILIAS.get(codigo) || null,
-    pieza: f["Pieza"] == null ? null : Number(f["Pieza"]),
-    devuelto: aIso(f["Devuelto"]),
-    fecha_realizacion: aIso(f["Fecha de Realización"]),
-  };
-});
-
-// Lo que en producción hacen las vistas mutua_ultimas, mutua_perdidas y
-// mutua_pacientes. Si esto y el SQL se separan, los números dejan de valer.
+// Espejo en JS de lo que hacen las vistas mutua_ultimas, mutua_perdidas y
+// mutua_pacientes. Si el SQL y esto se separan, los números dejan de valer.
 const pacientes = new Map();
 for (const f of filas) {
   if (!pacientes.has(f.paciente_key)) {
@@ -132,7 +103,7 @@ const chk = (nombre, real, esperado) => {
   }
 };
 const buscar = (q) => {
-  const n = normNombre(q);
+  const n = normalizarNombre(q);
   return [...pacientes.values()].filter(p => p.key.toUpperCase().includes(n) || p.nombre.includes(n));
 };
 const resumen = (p, fam, R) => {
