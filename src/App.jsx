@@ -13,6 +13,7 @@ import { htmlFichaCobro, htmlHojaFichas } from "./fichaCobro";
 import { DIRECCION_TEXTO, ETIQUETAS_LINEA, PAGO } from "./legalPlan";
 import { mensajePropuesta } from "./mensajePropuesta";
 import { escalaY } from "./chartScale";
+import PanelMutua from "./mutua/PanelMutua.jsx";
 import { BotonConsentimientos } from "./components/BotonConsentimientos";
 import { EditorPlantillas } from "./components/EditorPlantillas";
 import { PLAZOS as FRAG_PLAZOS, financiable, motivoNoFinanciable,
@@ -6029,6 +6030,13 @@ const esPortalPlanes = () =>
   typeof window !== "undefined" &&
   window.location.pathname.replace(/\/+$/, "") === "/planes";
 
+// /mutua es su propia entrada y no una pestana de la aplicacion principal
+// porque esa es solo del dueno, y aqui entran el dueno y el jefe. Necesita su
+// rewrite en vercel.json, como /planes, o al recargar da 404.
+const esPortalMutua = () =>
+  typeof window !== "undefined" &&
+  window.location.pathname.replace(/\/+$/, "") === "/mutua";
+
 // Un error al pintar desmonta todo React y deja la pantalla en blanco, que es
 // lo peor que puede pasarle a alguien a media faena: no sabe si guardó, no ve
 // qué pasó y no tiene a dónde volver. Esto lo atrapa, dice qué fue y deja
@@ -6089,6 +6097,7 @@ export default function App() {
     <Salvavidas>
       {recuperando
         ? <NuevaContrasena onListo={()=>{ setRecuperando(false); window.location.reload(); }}/>
+        : esPortalMutua()  ? <PanelMutua LoginForm={LoginForm} SinAcceso={SinAcceso}/>
         : esPortalPlanes() ? <PortalPlanes/> : <AppCompleta/>}
     </Salvavidas>
   );

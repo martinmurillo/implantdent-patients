@@ -1,6 +1,8 @@
 {
   "rewrites": [
     { "source": "/planes", "destination": "/index.html" },
-    { "source": "/planes/:path*", "destination": "/index.html" }
+    { "source": "/planes/:path*", "destination": "/index.html" },
+    { "source": "/mutua", "destination": "/index.html" },
+    { "source": "/mutua/:path*", "destination": "/index.html" }
   ]
 }
