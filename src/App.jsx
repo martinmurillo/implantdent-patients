@@ -5868,6 +5868,15 @@ function PortalPlanes() {
                 {label}
               </button>
             ))}
+            {/* Recepción no: son datos de salud con DNI y no los necesita.
+                La RLS dice lo mismo, esto es no ofrecer una puerta cerrada. */}
+            {puedeMover && (
+              <a href="/mutua" style={{border:"none", borderRadius:8, color:"#555",
+                padding:"8px 20px", cursor:"pointer", fontSize:13, textDecoration:"none",
+                display:"flex", alignItems:"center"}}>
+                Mutua
+              </a>
+            )}
           </div>
         )}
 
@@ -6636,6 +6645,12 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
         <NavBtn id="planes"        label="Planes de pago" badge={cuotasQueAvisan} onSelect={ensureArchived}/>
         <NavBtn id="clinica"       label="Clínica"/>
         <NavBtn id="stats"     label="Estadísticas" badge={0}/>
+        {/* Enlace de verdad y no navigate(): /mutua es otra entrada, con su
+            propio guard, no una vista más de esta pantalla. */}
+        <a href="/mutua" style={{color:"#666",cursor:"pointer",fontSize:13,textDecoration:"none",
+          borderBottom:"2px solid transparent",padding:"0 10px",height:60,display:"flex",alignItems:"center"}}>
+          Mutua
+        </a>
 
         {/* ── Contraseña ────────────────────────────────────────────── */}
         <button onClick={()=>setCambiandoClave(true)} title="Cambiar mi contraseña"

@@ -505,7 +505,7 @@ function PorHacerDelMes({ pacientes, ultimas, perdidas, previstos, busca, onAbri
 }
 
 // ── Cabecera con el estado de los datos y el importador ──────────────────────
-function Cabecera({ importacion, onImportado, email, hoy }) {
+function Cabecera({ importacion, onImportado, email, hoy, volverA }) {
   const [estado, setEstado] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [alta, setAlta] = useState(null);
@@ -566,6 +566,9 @@ function Cabecera({ importacion, onImportado, email, hoy }) {
   return (
     <div style={{ background: "#fff", borderBottom: `1px solid ${BORDE}`, padding: "10px 24px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        {/* Cada uno vuelve a su casa: el jefe al portal, el dueño a la
+            aplicación. Sin esto solo se sale editando la URL. */}
+        <a href={volverA} style={{ color: "#888", textDecoration: "none", fontSize: 13 }}>‹ Volver</a>
         <div style={{ fontSize: 11, letterSpacing: 3, fontWeight: 700, color: ORO }}>MUTUA · AGRUPACIÓ</div>
         <div style={{ fontSize: 12, color: viejo ? "#e74c3c" : "#777", fontWeight: viejo ? 700 : 400 }}>
           {importacion
@@ -691,7 +694,8 @@ export default function PanelMutua({ LoginForm, SinAcceso }) {
 
   return (
     <div style={{ minHeight: "100vh", background: FONDO, color: TINTA, fontFamily: FUENTE }}>
-      <Cabecera importacion={datos.importacion} onImportado={recargar} email={email} hoy={hoy} />
+      <Cabecera importacion={datos.importacion} onImportado={recargar} email={email} hoy={hoy}
+        volverA={rol === "dueno" ? "/" : "/planes"} />
 
       <div style={{ padding: "16px 24px 40px", maxWidth: 1240, margin: "0 auto" }}>
         <div style={{ display: "flex", gap: 10, marginBottom: 14, alignItems: "center", flexWrap: "wrap" }}>
