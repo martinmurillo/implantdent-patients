@@ -73,15 +73,21 @@ export const esTemporal = (pieza) => pieza >= 51;
 //
 //   disponible            nunca se hizo
 //   con_historial         se hizo y ya pasaron los 6 meses
+//   prevista              libre, pero ya hay trabajo planificado encima
 //   bloqueada             se hizo y todavía no pasaron
 //   perdida               extraída o con implante: no se ofrece nunca
 //   fuera_de_sector       ángulos en un posterior; se enseña, no cuenta
 //
-// `ultimas` y `perdidas` vienen de las vistas mutua_ultimas y mutua_perdidas,
-// ya filtradas a este paciente. R es la fecha de referencia: hoy en la ficha,
-// el último día del mes en la vista mensual.
+// Lo previsto no bloquea: no se facturó nada, así que la regla de los 6 meses
+// no tiene de dónde contar. Pero sale de "por hacer", porque ofrecer trabajo
+// que ya está agendado es ruido. Si la pieza además está bloqueada, manda el
+// bloqueo, que es el dato que impide facturar.
+//
+// `ultimas`, `perdidas` y `previstos` vienen de las vistas del mismo nombre, ya
+// filtradas a este paciente. R es la fecha de referencia: hoy en la ficha, el
+// último día del mes en la vista mensual.
 export function calcularEstadoPiezas({ familia, ultimas = [], perdidas = [],
-                                       ultimaTemporal = null, R }) {
+                                       previstos = [], ultimaTemporal = null, R }) {
   const universo = UNIVERSOS[familia];
   if (!universo) throw new Error(`Familia desconocida: ${familia}`);
 
@@ -103,6 +109,15 @@ export function calcularEstadoPiezas({ familia, ultimas = [], perdidas = [],
     const prev = perdidaDe.get(p.pieza);
     if (!prev || p.fecha_perdida > prev) perdidaDe.set(p.pieza, p.fecha_perdida);
   }
+  const previstoDe = new Map();
+  for (const p of previstos) {
+    if (p.familia && p.familia !== familia) continue;
+    const prev = previstoDe.get(p.pieza);
+    // la fecha más cercana: es la que dice cuándo toca
+    if (!prev || (p.fecha_prevista && p.fecha_prevista < prev.fecha_prevista)) {
+      previstoDe.set(p.pieza, p);
+    }
+  }
 
   // Historial fuera del universo: ángulos en posteriores, o temporales de un
   // paciente que ya no los incluye. Se enseñan para no esconder lo que pasó.
@@ -113,25 +128,28 @@ export function calcularEstadoPiezas({ familia, ultimas = [], perdidas = [],
     const enUniverso = piezasUniverso.includes(pieza);
     const u = ultimaDe.get(pieza);
     const fechaPerdida = perdidaDe.get(pieza);
+    const previsto = previstoDe.get(pieza);
+    const comun = { pieza, enUniverso, temporal: esTemporal(pieza),
+                    ...(previsto ? { previsto } : {}) };
 
     if (fechaPerdida && (!u || fechaPerdida >= u.ultima_fecha)) {
-      return { pieza, estado: "perdida", fechaPerdida, enUniverso,
-               temporal: esTemporal(pieza) };
+      return { ...comun, estado: "perdida", fechaPerdida };
     }
     if (!u) {
-      return { pieza, estado: enUniverso ? "disponible" : "fuera_de_sector",
-               enUniverso, temporal: esTemporal(pieza) };
+      if (!enUniverso) return { ...comun, estado: "fuera_de_sector" };
+      return { ...comun, estado: previsto ? "prevista" : "disponible" };
     }
     const liberacion = u.fecha_liberacion || addMeses(u.ultima_fecha, MESES_BLOQUEO);
-    const bloqueada  = liberacion > R;
+    if (liberacion > R) {
+      return { ...comun, estado: "bloqueada", ultimaFecha: u.ultima_fecha,
+               fechaLiberacion: liberacion, codigo: u.codigo };
+    }
     return {
-      pieza,
-      estado: bloqueada ? "bloqueada" : "con_historial",
+      ...comun,
+      estado: previsto ? "prevista" : "con_historial",
       ultimaFecha: u.ultima_fecha,
       fechaLiberacion: liberacion,
       codigo: u.codigo,
-      enUniverso,
-      temporal: esTemporal(pieza),
     };
   }).sort((a, b) => a.pieza - b.pieza);
 
@@ -144,6 +162,7 @@ export function calcularEstadoPiezas({ familia, ultimas = [], perdidas = [],
     piezas,
     total:        delUniverso.length,
     disponibles:  cuenta("disponible", "con_historial"),
+    previstas:    cuenta("prevista"),
     bloqueadas:   cuenta("bloqueada"),
     perdidas:     cuenta("perdida"),
   };

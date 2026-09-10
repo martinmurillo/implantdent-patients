@@ -170,3 +170,53 @@ describe("familia desconocida", () => {
       /Familia desconocida/);
   });
 });
+
+describe("trabajo previsto", () => {
+  const previsto = (pieza, fecha, familia = "OBTURACION") =>
+    ({ familia, pieza, fecha_prevista: fecha, nota: null });
+
+  test("una pieza libre con trabajo agendado sale de 'por hacer'", () => {
+    const r = calc({ previstos: [previsto(16, "2026-09-20")] });
+    assert.equal(estadoDe(r, 16), "prevista");
+    assert.equal(r.disponibles.length, 31, "ya no cuenta como por hacer");
+    assert.deepEqual(r.previstas.map(p => p.pieza), [16]);
+  });
+
+  test("previsto no bloquea: no se facturo nada de donde contar 6 meses", () => {
+    const r = calc({ previstos: [previsto(16, "2026-09-20")] });
+    assert.equal(r.bloqueadas.length, 0);
+  });
+
+  test("si la pieza esta bloqueada, manda el bloqueo", () => {
+    // El bloqueo es el dato que impide facturar; el previsto es una intención.
+    const r = calc({ ultimas: [ultima(16, "2026-08-17")], previstos: [previsto(16, "2026-09-20")] });
+    assert.equal(estadoDe(r, 16), "bloqueada");
+    assert.ok(r.piezas.find(p => p.pieza === 16).previsto, "pero el previsto sigue a la vista");
+  });
+
+  test("una pieza perdida no se puede planificar", () => {
+    const r = calc({ perdidas: [{ pieza: 24, fecha_perdida: "2022-05-10" }],
+                     previstos: [previsto(24, "2026-09-20")] });
+    assert.equal(estadoDe(r, 24), "perdida");
+  });
+
+  test("el previsto de la otra familia no ensucia", () => {
+    const r = calc({ previstos: [previsto(16, "2026-09-20", "ANGULOS")] });
+    assert.equal(estadoDe(r, 16), "disponible");
+  });
+
+  test("con varias fechas manda la mas cercana, que es la que toca", () => {
+    const r = calc({ previstos: [previsto(16, "2026-11-02"), previsto(16, "2026-09-20")] });
+    assert.equal(r.piezas.find(p => p.pieza === 16).previsto.fecha_prevista, "2026-09-20");
+  });
+
+  test("una pieza que se libera este mes pero ya esta agendada no se ofrece", () => {
+    const R = ultimoDiaDelMes(2026, 9);
+    const conPlan = calcularEstadoPiezas({ familia: "OBTURACION", R,
+      ultimas: [ultima(16, "2026-03-17")], previstos: [previsto(16, "2026-09-25")] });
+    const sinPlan = calcularEstadoPiezas({ familia: "OBTURACION", R,
+      ultimas: [ultima(16, "2026-03-17")] });
+    assert.deepEqual(liberadasEnElMes(sinPlan, 2026, 9).map(p => p.pieza), [16]);
+    assert.deepEqual(liberadasEnElMes(conPlan, 2026, 9), []);
+  });
+});
