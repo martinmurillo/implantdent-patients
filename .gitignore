@@ -38,3 +38,6 @@ docs/consentimientos/*.zip
 # presupuestos de muestra: llevan nombre, DNI y direccion de un paciente
 docs/presupuesto-muestra*.pdf
 public/_muestra.pdf
+
+# export de la mutua: lleva nombre, DNI y datos de salud
+docs/treatments_list_*.xlsx
