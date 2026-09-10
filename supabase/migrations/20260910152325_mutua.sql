@@ -1,6 +1,6 @@
 -- ============================================================
 -- Pacientes de mutua (Agrupació · Tomamos Impulso)
--- Ejecutar en: Supabase Dashboard → SQL Editor
+-- Se aplica con: npx supabase db push
 -- ============================================================
 -- ⚠ TOCA PERMISOS. Probar antes de dar por bueno.
 --
