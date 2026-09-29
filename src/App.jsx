@@ -6192,6 +6192,10 @@ function AppCompleta() {
   const [showWeekly, setShowWeekly] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0);
 
+  // OJO con recortar las columnas de fetchPatients: savePatient reescribe la
+  // fila entera con lo que tenga el objeto en memoria, así que cualquier
+  // columna que no se traiga aquí se guardaría vacía en el siguiente guardado.
+  // Si hace falta aligerarlo, hay que cambiar antes savePatient.
   const fetchPatients  = async () => { const {data}=await supabase.from("patients").select("*").neq("status","frío").neq("status","cerrado sin deuda").order("created_at",{ascending:false}); setPatients(data||[]); };
   const fetchArchived  = async () => { const {data}=await supabase.from("patients").select("*").in("status",["frío","cerrado sin deuda"]).order("created_at",{ascending:false}); setArchivedPatients(data||[]); setArchivedLoaded(true); setArchivedLoading(false); };
   const ensureArchived = () => { if (!archivedLoaded && !archivedLoading) { setArchivedLoading(true); fetchArchived(); } };
