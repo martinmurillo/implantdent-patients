@@ -5,7 +5,7 @@
 // enseña; quien de verdad corta el acceso a los datos es la RLS.
 
 import { useEffect, useMemo, useState } from "react";
-import * as XLSX from "xlsx";
+import { cargarXLSX } from "../xlsxLazy.js";
 import { supabase } from "../supabase";
 import {
   calcularEstadoPiezas, liberadasEnElMes, ultimoDiaDelMes, ETIQUETAS,
@@ -521,6 +521,7 @@ function Cabecera({ importacion, onImportado, email, hoy, volverA }) {
     if (!archivo) return;
     setOcupado(true); setEstado("Leyendo el archivo…");
     try {
+      const XLSX = await cargarXLSX();
       const buf = await archivo.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array", cellDates: true });
       const hoja = wb.Sheets[HOJA_EXCEL] || wb.Sheets[wb.SheetNames[0]];
