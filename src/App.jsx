@@ -1,4 +1,4 @@
-﻿import { Component, useState, useEffect, useRef } from "react";
+﻿import { Component, useState, useEffect, useRef, useMemo } from "react";
 import { supabase, hashDeEntrada } from "./supabase";
 import { translateTreatment, setTranslationDict } from "./treatments";
 import { loadPdfJs } from "./pdfjs";
@@ -19,7 +19,7 @@ import { EditorPlantillas } from "./components/EditorPlantillas";
 import { PLAZOS as FRAG_PLAZOS, financiable, motivoNoFinanciable,
          comisionFrakmenta, calcFrakmenta, lineaDeTiempo, fraseTramos,
          etiquetaMes } from "./frakmenta";
-import * as XLSX from "xlsx";
+import { cargarXLSX } from "./xlsxLazy.js";
 
 const parsePDF = async (file) => {
   const lib = await loadPdfJs();
@@ -32,8 +32,8 @@ const parsePDF = async (file) => {
   const get = (re) => { const m = txt.match(re); return m ? m[1].trim() : ""; };
   const hc       = get(/Expediente\s*:\s*(\d+)/i);
   const name     = get(/Nombre\s*:\s*([A-ZÁÉÍÓÚÑÜ][A-ZÁÉÍÓÚÑÜ\s]+?)(?=\s*DNI|\s*Pob\.)/i);
-  const dni      = get(/DNI\s*:\s*([\w\-]+)/i);
-  const budgetNo = get(/Presupuesto\s*:\s*([\d\s\/]+)/i).replace(/\s+/g,"");
+  const dni      = get(/DNI\s*:\s*([\w-]+)/i);
+  const budgetNo = get(/Presupuesto\s*:\s*([\d\s/]+)/i).replace(/\s+/g,"");
   const dateRaw  = get(/Fecha\s*:\s*(\d{2}\/\d{2}\/\d{4})/i);
   const date     = dateRaw ? dateRaw.split("/").reverse().join("-") : today();
   const treatments = [];
@@ -43,7 +43,7 @@ const parsePDF = async (file) => {
     const value = parseFloat(m[6].replace(",","."));
     treatments.push({ id:genId(), name:m[2].trim(), value:String(value), discount:m[5] });
   }
-  const phone = get(/Móv\.?\s*[\/]\s*Tel[eé]f\.?\s*:?\s*([\d\s\+\(\)\-\.]{6,})/i).replace(/[\s\.]/g,"").replace(/\/$/, "");
+  const phone = get(/Móv\.?\s*\/\s*Tel[eé]f\.?\s*:?\s*([\d\s+()\-.]{6,})/i).replace(/[\s.]/g,"").replace(/\/$/, "");
   // El profesional que firma el presupuesto viene en la cabecera, y con su
   // número de colegiado: "NIF : B17962564 Colegiado : 9239 WEB : ...". Se
   // guarda el número y no el nombre porque es clave exacta contra
@@ -366,13 +366,13 @@ function CambiarContrasena({ email, onCerrar }) {
 const genId    = () => Math.random().toString(36).slice(2,10);
 const today    = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
 const daysDiff = (d) => !d ? 999 : Math.floor((new Date()-new Date(d))/86400000);
+const VACIO = [];
 const STATUSES = ["frío","pendiente","en curso","cerrado sin deuda"];
 const STATUS_COLOR = { "frío":"#7f8c8d", "pendiente":"#c9a84c", "en curso":"#3498db", "cerrado sin deuda":"#2ecc71" };
 const STATUS_LABEL = { "frío":"Frío", "pendiente":"Pendiente", "en curso":"Con citas", "cerrado sin deuda":"Sin deuda" };
 const isCerrado = (st) => st === "cerrado sin deuda";
 const getStatus = (p) => STATUSES.includes(p.status) ? p.status : (p.closed ? "cerrado sin deuda" : "pendiente");
 const fmtEur   = (v) => v && parseFloat(v) ? `€${parseFloat(v).toLocaleString("es-ES",{minimumFractionDigits:2})}` : "-";
-const effectiveValue = (tr) => parseFloat(tr.value) || 0;
 
 const getTxItems = (patient) => {
   const raw = patient.treatments;
@@ -477,7 +477,7 @@ const s = {
 };
 
 // ─── PDF EXPORT ───────────────────────────────────────────────────────────────
-const exportToPDF = async (patient, lang, setExporting, patPayments=[], templates=[]) => {
+const exportToPDF = async (patient, lang, setExporting, patPayments=[]) => {
   if (setExporting) setExporting(lang);
   let treatments = [...getTxItems(patient)];
   const discPct = patient.discountPct !== undefined ? (parseInt(patient.discountPct)||0) : getTxDiscountPct(patient);
@@ -489,7 +489,7 @@ const exportToPDF = async (patient, lang, setExporting, patPayments=[], template
   const t     = T[lang];
   const subtotal   = treatments.reduce((a,tr)=>a+(parseFloat(tr.value)||0),0);
   const pdfPriced  = patient.pdfPriced !== undefined ? patient.pdfPriced : isPdfPriced(patient);
-  const { discAmt, grand } = applyDiscount(subtotal, discPct, pdfPriced);
+  const { grand } = applyDiscount(subtotal, discPct, pdfPriced);
   const pdfFactor  = subtotal > 0 && discPct > 0 ? grand / subtotal : 1;
   const totalPaid  = (patPayments||[]).reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
   const remaining  = grand - totalPaid;
@@ -634,6 +634,20 @@ function AppointmentRow({ appt, idx, treatments, allAppointments, onChange, onRe
 }
 
 // ─── PatientForm ──────────────────────────────────────────────────────────────
+// Field vive fuera de PatientForm a propósito: declarado dentro, cada render
+// creaba un tipo de componente nuevo y React remontaba los siete inputs en
+// cada tecla — se perdía el foco y la ficha escribía a tirones.
+function Field({ label, value, onChange, type = "text" }) {
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:4}}>
+      <label style={s.label}>{label}</label>
+      <input type={type} value={value||""} onChange={e=>onChange(e.target.value)} style={s.input}
+        onFocus={e=>e.target.style.borderColor="#c9a84c"}
+        onBlur={e=>e.target.style.borderColor="#dde4ef"}/>
+    </div>
+  );
+}
+
 function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaymentsChange=null, isNew=false, onArmarPlan=null, onPagoAplicado=null }) {
   const [p, setP] = useState(() => {
     const raw = patient.treatments;
@@ -736,18 +750,9 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
         pdfPriced:parsed.treatments.length?true:prev.pdfPriced,
         discountPct:parsed.treatments.length?"0":prev.discountPct }));
       setMsg(`✓ ${parsed.treatments.length} tratamiento(s) importados`);
-    } catch(e) { setMsg("Error al leer el PDF — completá manualmente"); }
+    } catch { setMsg("Error al leer el PDF — completá manualmente"); }
     setL(false); e.target.value="";
   };
-
-  const Field = ({label, field, type="text"}) => (
-    <div style={{display:"flex",flexDirection:"column",gap:4}}>
-      <label style={s.label}>{label}</label>
-      <input type={type} value={p[field]||""} onChange={e=>setF(field,e.target.value)} style={s.input}
-        onFocus={e=>e.target.style.borderColor="#c9a84c"}
-        onBlur={e=>e.target.style.borderColor="#dde4ef"}/>
-    </div>
-  );
 
   return (
     <div>
@@ -762,15 +767,15 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
       </div>
       <div style={{...s.card, marginBottom:16}}>
         <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",gap:14,marginBottom:14}}>
-          <Field label="Nombre del paciente" field="name"/>
-          <Field label="Expediente / HC" field="hc"/>
-          <Field label="DNI" field="dni"/>
-          <Field label="Nº Presupuesto" field="budgetNo"/>
+          <Field label="Nombre del paciente" value={p.name} onChange={v=>setF("name",v)}/>
+          <Field label="Expediente / HC" value={p.hc} onChange={v=>setF("hc",v)}/>
+          <Field label="DNI" value={p.dni} onChange={v=>setF("dni",v)}/>
+          <Field label="Nº Presupuesto" value={p.budgetNo} onChange={v=>setF("budgetNo",v)}/>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14}}>
-          <Field label="Fecha" field="date" type="date"/>
-          <Field label="Hora" field="time" type="time"/>
-          <Field label="Teléfono" field="phone" type="tel"/>
+          <Field label="Fecha" value={p.date} onChange={v=>setF("date",v)} type="date"/>
+          <Field label="Hora" value={p.time} onChange={v=>setF("time",v)} type="time"/>
+          <Field label="Teléfono" value={p.phone} onChange={v=>setF("phone",v)} type="tel"/>
         </div>
       </div>
       <div style={{...s.card, marginBottom:16}}>
@@ -972,7 +977,7 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
       </div>
       <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
         {["es","en","fr"].map(lang=>(
-          <button key={lang} onClick={()=>exportToPDF(p,lang,setExp,patPayments,templates)} disabled={!!exporting}
+          <button key={lang} onClick={()=>exportToPDF(p,lang,setExp,patPayments)} disabled={!!exporting}
             style={{...s.btnDark, opacity:exporting?0.6:1, cursor:exporting?"not-allowed":"pointer"}}>
             {exporting===lang?"⏳ Traduciendo...":`🖨 PDF ${lang.toUpperCase()}`}
           </button>
@@ -1017,7 +1022,7 @@ function AlertCard({ patient, onOpen }) {
 }
 
 // ─── PatientCard ──────────────────────────────────────────────────────────────
-function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[], onOpen=null, templates=[], waClicks=[], onWaClick=()=>{}, plans=[], planCuotas=[] }) {
+function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[], onOpen=null, waClicks=[], onWaClick=()=>{}, plans=[], planCuotas=[] }) {
   const grand = patientGrand(patient);
   const pdfDisc = pdfDiscountLabel(patient);
   const totalPaid = patientPayments.reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
@@ -1056,10 +1061,6 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
     .sort((a,b)=>a.date.localeCompare(b.date))[0];
   const upcomingCount = (patient.appointments||[]).filter(a=>a.date&&a.date>=todayStr).length;
   const iniciadoSinCita = status === "en curso" && totalPaid > 0 && !nextAppt;
-  const nextReminder = [...(patient.reminders||[])]
-    .filter(r=>r.date&&r.date>=todayStr)
-    .sort((a,b)=>a.date.localeCompare(b.date))[0];
-
   const firstName  = ((patient.name||"").trim().split(/\s+/)[0] || "paciente").replace(/^./, c => c.toUpperCase()).replace(/(?<=^.).*/, s => s.toLowerCase());
   const waPhone    = patient.phone ? (n => /^[6789]\d{8}$/.test(n) ? "34"+n : n)(patient.phone.replace(/\D/g,"")) : null;
   const getWaCount = (key) => {
@@ -1277,7 +1278,7 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
   const isImplant  = (name) => implantRx.test(name) && !implantExcRx.test(name);
   const orthoRx    = /ortodoncia|orthodontic|invisalign|invisaling|invisible\s|ortod|placa expansiva|hass/i;
 
-  const computeYearFull = (year) => {
+  const calcularAnio = (year) => {
     const a12 = () => Array(12).fill(0);
     const l12 = () => Array.from({length:12}, ()=>[]);
 
@@ -1297,13 +1298,16 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
 
     // Pacientes que tienen al menos un pago registrado
     const patientsWithPayments = new Set(payments.map(p => p.patient_id));
+    // Buscar con patients.find() dentro de los bucles de abajo salía
+    // O(pagos x pacientes). Con el índice, cada fila es una consulta directa.
+    const porId = new Map(patients.map(p => [p.id, p]));
 
     payments.forEach(pay => {
       const d = pay.date; if (!d) return;
       const y = parseInt(d.slice(0,4)), m = parseInt(d.slice(5,7));
       if (y !== year || m < 1 || m > 12) return;
       paid[m-1] += parseFloat(pay.amount)||0;
-      const pat = patients.find(p => p.id === pay.patient_id);
+      const pat = porId.get(pay.patient_id);
       paidPts[m-1].push({
         patientId: pay.patient_id,
         name: pat?.name || "Paciente eliminado",
@@ -1372,7 +1376,7 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
       if (ry !== year || rm < 1 || rm > 12) return;
       const exKey = claveTratamiento(item.patient_id, name);
       if (excluded.has(exKey)) return;
-      const pat   = patients.find(p => p.id === item.patient_id);
+      const pat   = porId.get(item.patient_id);
       const entry = { patientId:item.patient_id, name:item.patient_name||pat?.name||"—", hc:item.hc||pat?.hc||"—", detail:name+" · "+fmtDate(item.realized_date), txName:name };
 
       if (orthoRx.test(name)) { orthoRealized[rm-1]++; orthoRealizedPts[rm-1].push(entry); }
@@ -1408,6 +1412,24 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
 
   const [selectedYears, setSelectedYears] = useState([currentYear]);
   const [compareMode,   setCompareMode]   = useState(false);
+
+  // Los años que la pantalla está pidiendo ahora mismo. Se calculaban dos veces
+  // por render (una para las series y otra para la efectividad) y se rehacían
+  // enteros en cada render aunque no hubiera cambiado nada: recorrer pagos,
+  // tratamientos y pacientes doce veces por año es lo que costaba.
+  const aniosEnPantalla = compareMode ? [...selectedYears].sort() : [selectedYears[0] || currentYear];
+  const claveAnios = aniosEnPantalla.join(",");
+  const datosPorAnio = useMemo(() => {
+    const m = new Map();
+    for (const y of aniosEnPantalla) m.set(y, calcularAnio(y));
+    return m;
+    // calcularAnio y aniosEnPantalla se rehacen en cada render por vivir dentro
+    // del componente; lo que de verdad cambia el resultado es lo de la lista.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payments, items, patients, claveAnios]);
+  // Si alguna vez se pide un año fuera de la lista, se calcula y ya: el memo es
+  // una caché, no la única vía.
+  const computeYearFull = (year) => datosPorAnio.get(year) || calcularAnio(year);
   const [pointModal,    setPointModal]    = useState(null);
 
   // ── Clínica: estado local para inputs mensuales ───────────────────────────
@@ -1460,7 +1482,9 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
     setExcluded(prev => {
       const next = new Set(prev);
       next.add(key);
-      try { localStorage.setItem("progreso_excluded", JSON.stringify([...next])); } catch {}
+      // si el navegador no deja guardar (ventana privada, cuota llena) la
+      // pantalla sigue igual: esto solo recuerda la preferencia entre visitas
+      try { localStorage.setItem("progreso_excluded", JSON.stringify([...next])); } catch { /* da igual */ }
       return next;
     });
     setPointModal(prev => prev
@@ -2238,7 +2262,7 @@ ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Marti
 }
 
 // ─── EstadisticasPanel ───────────────────────────────────────────────────────
-function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefreshItems, onSync, onEnsureArchived, archivedLoaded, clinicStats=[], onSaveClinicStat }) {
+function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefreshItems, onSync, onEnsureArchived, clinicStats=[], onSaveClinicStat }) {
   const now = new Date();
   const y = now.getFullYear(), mo = now.getMonth();
   const [from,         setFrom]   = useState(`${y}-${String(mo+1).padStart(2,"0")}-01`);
@@ -2256,7 +2280,9 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
     const key = claveTratamiento(patientId, txName);
     setExcluded(prev => {
       const next = new Set(prev); next.add(key);
-      try { localStorage.setItem("progreso_excluded", JSON.stringify([...next])); } catch {}
+      // si el navegador no deja guardar (ventana privada, cuota llena) la
+      // pantalla sigue igual: esto solo recuerda la preferencia entre visitas
+      try { localStorage.setItem("progreso_excluded", JSON.stringify([...next])); } catch { /* da igual */ }
       return next;
     });
   };
@@ -2264,7 +2290,9 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
     const key = claveTratamiento(patientId, txName);
     setExcluded(prev => {
       const next = new Set(prev); next.delete(key);
-      try { localStorage.setItem("progreso_excluded", JSON.stringify([...next])); } catch {}
+      // si el navegador no deja guardar (ventana privada, cuota llena) la
+      // pantalla sigue igual: esto solo recuerda la preferencia entre visitas
+      try { localStorage.setItem("progreso_excluded", JSON.stringify([...next])); } catch { /* da igual */ }
       return next;
     });
   };
@@ -2359,15 +2387,6 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
     if (!confirm("¿Eliminar este item de estadísticas? No afecta el presupuesto del paciente.")) return;
     setBusy(itemId);
     await supabase.from("treatment_items").delete().eq("id", itemId);
-    await onRefreshItems();
-    setBusy(null);
-  };
-
-  const toggleRealized = async (e, item) => {
-    e.stopPropagation();
-    setBusy(item.id);
-    const newDate = item.realized_date ? null : today();
-    await supabase.from("treatment_items").update({ realized_date: newDate }).eq("id", item.id);
     await onRefreshItems();
     setBusy(null);
   };
@@ -3102,7 +3121,8 @@ function PagosExcelPanel({ patients, payments, onPaymentsChange, onDebtCleared, 
   const handleFile = (e) => {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
+      const XLSX = await cargarXLSX();
       const wb   = XLSX.read(ev.target.result, { type:"array", cellDates:true });
       const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header:1, defval:"" });
 
@@ -3369,7 +3389,7 @@ function CitasExcelPanel({ patients, onRefresh, onEnCursoUpdated }) {
       d = new Date(Math.round((val - 25569) * 86400 * 1000));
     } else if (typeof val === "string") {
       const s = val.trim();
-      const dmy = s.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+      const dmy = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/);
       if (dmy) d = new Date(`${dmy[3]}-${dmy[2].padStart(2,"0")}-${dmy[1].padStart(2,"0")}`);
       else d = new Date(s);
       if (isNaN(d)) return null;
@@ -3392,7 +3412,8 @@ function CitasExcelPanel({ patients, onRefresh, onEnCursoUpdated }) {
     const file = e.target.files[0]; if (!file) return;
     const todayIso = today();
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
+      const XLSX = await cargarXLSX();
       const wb = XLSX.read(ev.target.result, { type: "array", cellDates: true });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
@@ -3560,6 +3581,7 @@ function PresupuestosExcelPanel({ patients, onRefresh }) {
     setProcessing(true);
     const reader = new FileReader();
     reader.onload = async (ev) => {
+      const XLSX = await cargarXLSX();
       const wb   = XLSX.read(ev.target.result, { type: "array" });
       const ws   = wb.Sheets[wb.SheetNames[0]];
       const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
@@ -5307,13 +5329,24 @@ function ColaDeAvisos({ avisos, pacientes, avisados, email, firmante = "", onEnv
 // "algo cambió" y no puede enseñar nada que ese usuario no pudiera leer igual.
 const escucharCambiosDePlanes = (nombre, alCambiar) => {
   let t = null;
+  // Qué tablas se movieron durante el rebote. Antes cualquier aviso recargaba
+  // las cuatro enteras; ahora quien escucha recarga solo lo que cambió.
+  const tocadas = new Set();
   // varios cambios seguidos (importar el Excel del día) son una sola recarga
-  const rebote = () => { clearTimeout(t); t = setTimeout(alCambiar, 500); };
+  const rebote = (tabla) => () => {
+    tocadas.add(tabla);
+    clearTimeout(t);
+    t = setTimeout(() => {
+      const cambiadas = new Set(tocadas);
+      tocadas.clear();
+      alCambiar(cambiadas);
+    }, 500);
+  };
   const canal = supabase.channel(`planes-en-vivo-${nombre}`)
-    .on("postgres_changes", { event: "*", schema: "public", table: "payment_plans" }, rebote)
-    .on("postgres_changes", { event: "*", schema: "public", table: "payment_plan_cuotas" }, rebote)
-    .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, rebote)
-    .on("postgres_changes", { event: "*", schema: "public", table: "plan_avisos" }, rebote)
+    .on("postgres_changes", { event: "*", schema: "public", table: "payment_plans" }, rebote("payment_plans"))
+    .on("postgres_changes", { event: "*", schema: "public", table: "payment_plan_cuotas" }, rebote("payment_plan_cuotas"))
+    .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, rebote("payments"))
+    .on("postgres_changes", { event: "*", schema: "public", table: "plan_avisos" }, rebote("plan_avisos"))
     .subscribe();
   return () => { clearTimeout(t); supabase.removeChannel(canal); };
 };
@@ -6112,6 +6145,18 @@ export default function App() {
   );
 }
 
+// Fuera de AppCompleta por lo mismo que Field: declarado dentro, cada render
+// creaba un componente nuevo y React rehacía los nueve botones de la barra.
+function NavBtn({id,label,badge,onSelect,activo,onIr}) {
+  return (
+    <button onClick={()=>{onIr(id); if(onSelect) onSelect();}}
+      style={{background:"none",border:"none",color:activo?"#c9a84c":"#666",cursor:"pointer",fontSize:13,fontWeight:activo?700:400,borderBottom:activo?"2px solid #c9a84c":"2px solid transparent",padding:"0 10px",height:60,display:"flex",alignItems:"center"}}>
+      {label}
+      {badge>0 && <span style={{background:"#e74c3c",color:"#fff",borderRadius:"50%",width:18,height:18,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,marginLeft:5}}>{badge}</span>}
+    </button>
+  );
+}
+
 function AppCompleta() {
 
   const [cambiandoClave, setCambiandoClave] = useState(false);
@@ -6172,7 +6217,8 @@ function AppCompleta() {
     const lsVal = parseInt(localStorage.getItem(lsKey)||"0");
     const newCount = Math.max((existing?.count||0), lsVal) + 1;
     setWaClicks(prev=>[...prev.filter(c=>!(c.patient_id===patientId&&c.button_key===key)), {patient_id:patientId,button_key:key,count:newCount}]);
-    try { localStorage.setItem(lsKey, String(newCount)); } catch {}
+    // el contador de WhatsApp es una comodidad, no un dato que haga falta
+    try { localStorage.setItem(lsKey, String(newCount)); } catch { /* da igual */ }
     await supabase.from("wa_clicks").upsert({patient_id:patientId,button_key:key,count:newCount},{onConflict:"patient_id,button_key"});
   };
 
@@ -6188,14 +6234,14 @@ function AppCompleta() {
   // Que se vea al momento lo que hagan el jefe o recepción, sin recargar
   useEffect(() => {
     if (!hasSession) return;
-    return escucharCambiosDePlanes("dueno", async () => {
-      const [{ data: pl }, { data: cu }, { data: pg }, { data: av }] = await Promise.all([
-        supabase.from("payment_plans").select("*").order("updated_at", { ascending:false }),
-        supabase.from("payment_plan_cuotas").select("*").order("vence_el"),
-        supabase.from("payments").select("*").order("date", { ascending:false }),
-        supabase.from("plan_avisos").select("*"),
-      ]);
-      setPlans(pl || []); setPlanCuotas(cu || []); setPayments(pg || []); setPlanAvisos(av || []);
+    return escucharCambiosDePlanes("dueno", async (tablas) => {
+      // Un cobro nuevo no obliga a rebajarse los planes, ni al revés.
+      await Promise.all([
+        tablas.has("payment_plans")       && fetchPlans(),
+        tablas.has("payment_plan_cuotas") && fetchPlanCuotas(),
+        tablas.has("payments")            && fetchPayments(),
+        tablas.has("plan_avisos")         && fetchPlanAvisos(),
+      ].filter(Boolean));
     });
   }, [hasSession]);
 
@@ -6216,16 +6262,6 @@ function AppCompleta() {
     return () => subscription.unsubscribe();
   }, []);
 
-  useEffect(()=>{ Promise.all([fetchPatients(),fetchDoctors(),fetchItems(),fetchTemplates(),fetchTranslations(),fetchPayments(),fetchWaClicks(),fetchClinicStats()]).finally(()=>setDbLoad(false)); },[]);
-
-  useEffect(()=>{
-    if (!unlocked) return;
-    setDbLoad(true);
-    Promise.all([fetchPatients(),fetchDoctors(),fetchItems(),fetchTemplates(),fetchTranslations(),fetchPayments(),fetchWaClicks(),fetchPlans(),fetchPlanCuotas(),fetchPlanAvisos()])
-      .then(() => autoSyncStatuses())
-      .finally(()=>setDbLoad(false));
-  },[unlocked]);
-
   const insertTreatmentItems = async (patient) => {
     const {data:existing} = await supabase.from("treatment_items").select("id").eq("patient_id", patient.id);
     if ((existing||[]).length > 0) return;
@@ -6236,6 +6272,24 @@ function AppCompleta() {
       doctor_id: null, closed_date: today(), realized_date: null,
     }));
     if (rows.length > 0) await supabase.from("treatment_items").insert(rows);
+  };
+
+  // Tras guardar, Postgres nos devuelve la fila tal como quedó. Con eso basta
+  // para refrescar la pantalla: bajarse las dos tablas enteras en cada guardado
+  // era lo que hacía que la ficha tardara en cerrarse.
+  // El reparto entre lista activa y archivada repite el mismo criterio que
+  // fetchPatients/fetchArchived, para que una no se quede sin la fila.
+  const ARCHIVADOS = ["frío", "cerrado sin deuda"];
+  const aplicarFilaPaciente = (fila) => {
+    const sinFila = (lista) => lista.filter(x => x.id !== fila.id);
+    if (ARCHIVADOS.includes(fila.status)) {
+      setPatients(prev => sinFila(prev));
+      // si los archivados no se han cargado todavía se cargarán ya con la fila
+      if (archivedLoaded) setArchivedPatients(prev => [fila, ...sinFila(prev)]);
+    } else {
+      setPatients(prev => [fila, ...sinFila(prev)]);
+      if (archivedLoaded) setArchivedPatients(prev => sinFila(prev));
+    }
   };
 
   const savePatient = async (p) => {
@@ -6249,31 +6303,25 @@ function AppCompleta() {
       status:p.status||"pendiente", last_contact:p.last_contact||today(), closed:isCerrado(p.status),
     };
     const isNew = ![...patients, ...archivedPatients].some(x=>x.id===p.id);
-    if (isNew) await supabase.from("patients").insert([payload]);
-    else       await supabase.from("patients").update(payload).eq("id",p.id);
-    const savedId = p.id;
-    await fetchPatients();
-    if (archivedLoaded) await fetchArchived();
-    setPatients(prev => {
-      const idx = prev.findIndex(x => x.id === savedId);
-      if (idx <= 0) return prev;
-      const copy = [...prev];
-      copy.unshift(...copy.splice(idx, 1));
-      return copy;
-    });
+    const { data: fila } = isNew
+      ? await supabase.from("patients").insert([payload]).select().maybeSingle()
+      : await supabase.from("patients").update(payload).eq("id",p.id).select().maybeSingle();
+    // Si por lo que sea no vuelve la fila, no adivinamos: recargamos como antes.
+    if (fila) aplicarFilaPaciente(fila);
+    else { await fetchPatients(); if (archivedLoaded) await fetchArchived(); }
     goBack(); setEditing(null);
   };
 
   const setPatientStatus = async (patient, newStatus) => {
-    await supabase.from("patients").update({
+    const { data: fila } = await supabase.from("patients").update({
       status: newStatus, closed: isCerrado(newStatus), last_contact: today()
-    }).eq("id", patient.id);
+    }).eq("id", patient.id).select().maybeSingle();
     if (isCerrado(newStatus) || newStatus === "en curso") {
       await insertTreatmentItems({...patient, status:newStatus, closed:isCerrado(newStatus)});
       await fetchItems();
     }
-    await fetchPatients();
-    if (archivedLoaded) await fetchArchived();
+    if (fila) aplicarFilaPaciente(fila);
+    else { await fetchPatients(); if (archivedLoaded) await fetchArchived(); }
   };
 
   const syncAllItems = async () => {
@@ -6286,7 +6334,7 @@ function AppCompleta() {
 
   const autoSyncStatuses = async () => {
     const todayStr = today();
-    const {data} = await supabase.from("patients").select("*");
+    const {data} = await supabase.from("patients").select("id,name,hc,treatments,appointments,status,closed");
     const toUpdate = [];
     for (const p of (data||[])) {
       const st = getStatus(p);
@@ -6310,6 +6358,16 @@ function AppCompleta() {
     await fetchPatients();
     if (archivedLoaded) await fetchArchived();
   };
+
+  // Después de autoSyncStatuses a propósito: la llama, y declarada más arriba
+  // la alcanzaba antes de existir.
+  useEffect(()=>{
+    if (!unlocked) return;
+    setDbLoad(true);
+    Promise.all([fetchPatients(),fetchDoctors(),fetchItems(),fetchTemplates(),fetchTranslations(),fetchPayments(),fetchWaClicks(),fetchPlans(),fetchPlanCuotas(),fetchPlanAvisos(),fetchClinicStats()])
+      .then(() => autoSyncStatuses())
+      .finally(()=>setDbLoad(false));
+  },[unlocked]);
 
   // Al reguardar un plan se regeneran las cuotas, pero las que ya tienen un
   // cobro vinculado quedan intactas: son un hecho, no una previsión.
@@ -6462,7 +6520,7 @@ function AppCompleta() {
       if (appts.length === 0) return `<tr><td colspan="7" class="dayhead">${label}</td></tr><tr><td colspan="7" class="empty">Sin citas</td></tr>`;
       const rows = appts.map(({patient:pat, appt}) => {
         const grand = patientGrand(pat);
-        const paid  = payments.filter(pay=>pay.patient_id===pat.id).reduce((s,pay)=>s+(parseFloat(pay.amount)||0),0);
+        const paid  = (pagosPorPaciente.get(pat.id)||VACIO).reduce((s,pay)=>s+(parseFloat(pay.amount)||0),0);
         const debt  = parseFloat((grand-paid).toFixed(2));
         let estado = "";
         if (grand > 0) {
@@ -6510,26 +6568,67 @@ function AppCompleta() {
     setTimeout(()=>win.print(),600);
   };
 
+  // Estos tres se recalculaban en cada render de la pantalla entera — en cada
+  // tecla del buscador, en cada cambio de pestaña. Ahora solo cuando cambian
+  // los datos de los que salen. hoyStr va en las dependencias para que al
+  // cruzar la medianoche con la pantalla abierta los avisos se rehagan igual
+  // que antes.
+  const hoyStr = today();
+
+  /* eslint-disable react-hooks/preserve-manual-memoization --
+     Estos tres agrupan en un Map con un bucle. El compilador de React no puede
+     probar que el Map no se modifica luego, así que renunciaría a optimizar el
+     componente entero. Map.groupBy lo dejaría contento pero pide navegadores de
+     2024 y por aquí entra gente con el portátil que haya; la mutación no sale
+     de cada useMemo, así que la memoización es correcta. */
+  // Los clics de WhatsApp, agrupados por paciente por el mismo motivo.
+  const waClicksPorPaciente = useMemo(() => {
+    const m = new Map();
+    for (const c of waClicks) {
+      const lista = m.get(c.patient_id);
+      if (lista) lista.push(c); else m.set(c.patient_id, [c]);
+    }
+    return m;
+  }, [waClicks]);
+
+  // Los pagos agrupados una vez, en vez de recorrerlos enteros por paciente.
+  const pagosPorPaciente = useMemo(() => {
+    const m = new Map();
+    for (const pay of payments) {
+      const lista = m.get(pay.patient_id);
+      if (lista) lista.push(pay); else m.set(pay.patient_id, [pay]);
+    }
+    return m;
+  }, [payments]);
+
   // Cuotas que reclaman atención hoy: vencidas, o que vencen dentro de 5 días.
   // Es el aviso que pedía verse sin entrar a buscarlo.
-  const avisosDeHoy = avisosDelDia({ planes: plans, cuotas: planCuotas, pagos: payments, hoy: today() });
-  const cuotasQueAvisan = (() => {
-    const hoyStr = today();
+  const avisosDeHoy = useMemo(
+    () => avisosDelDia({ planes: plans, cuotas: planCuotas, pagos: payments, hoy: hoyStr }),
+    [plans, planCuotas, payments, hoyStr]);
+
+  const cuotasQueAvisan = useMemo(() => {
+    const cuotasPorPlan = new Map();
+    for (const c of planCuotas) {
+      const lista = cuotasPorPlan.get(c.plan_id);
+      if (lista) lista.push(c); else cuotasPorPlan.set(c.plan_id, [c]);
+    }
     return plans.filter(pl => pl.estado === "activo").filter(pl => {
-      const propias = planCuotas.filter(c => c.plan_id === pl.id);
-      if (!propias.length) return false;
+      const propias = cuotasPorPlan.get(pl.id);
+      if (!propias || !propias.length) return false;
       const r = resumenPlan({ plan: pl, cuotas: propias, pagos: payments, hoy: hoyStr });
       return r.proxima && r.diasParaProxima !== null && r.diasParaProxima <= 5;
     }).length;
-  })();
+  }, [plans, planCuotas, payments, hoyStr]);
 
-  const pendingDebtPatients = patients.filter(p=>{
-    const hasPayments = payments.some(pay=>pay.patient_id===p.id);
-    if (!hasPayments) return false;
+  const pendingDebtPatients = useMemo(() => patients.filter(p=>{
+    const suyos = pagosPorPaciente.get(p.id);
+    if (!suyos || !suyos.length) return false;
     const grand = patientGrand(p);
-    const paid = payments.filter(pay=>pay.patient_id===p.id).reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
+    const paid = suyos.reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
     return paid < grand;
-  });
+  }), [patients, pagosPorPaciente]);
+  /* eslint-enable react-hooks/preserve-manual-memoization */
 
   const printDebts = () => {
     const fmt = (v) => v ? `€${parseFloat(v).toLocaleString("es-ES",{minimumFractionDigits:2})}` : "-";
@@ -6544,7 +6643,7 @@ function AppCompleta() {
     };
     const rows = pendingDebtPatients.map(p=>{
       const grand = patientGrand(p);
-      const paid = payments.filter(pay=>pay.patient_id===p.id).reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
+      const paid = (pagosPorPaciente.get(p.id)||[]).reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
       return { name:p.name||"Sin nombre", hc:p.hc||"—", budget_no:p.budget_no||"—", grand, paid, pending:grand-paid, appt:nextAppt(p) };
     }).sort((a,b)=>b.pending-a.pending);
     const totalGrand   = rows.reduce((a,r)=>a+r.grand,0);
@@ -6590,14 +6689,6 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
       )
     : recent;
 
-  const NavBtn = ({id,label,badge,onSelect}) => (
-    <button onClick={()=>{navigate(id); if(onSelect) onSelect();}}
-      style={{background:"none",border:"none",color:view===id?"#c9a84c":"#666",cursor:"pointer",fontSize:13,fontWeight:view===id?700:400,borderBottom:view===id?"2px solid #c9a84c":"2px solid transparent",padding:"0 10px",height:60,display:"flex",alignItems:"center"}}>
-      {label}
-      {badge>0 && <span style={{background:"#e74c3c",color:"#fff",borderRadius:"50%",width:18,height:18,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,marginLeft:5}}>{badge}</span>}
-    </button>
-  );
-
   // Esperar a que se verifique la sesión antes de mostrar cualquier pantalla
   if (!sessionChecked) return (
     <div style={{minHeight:"100vh",background:"#f0f2f7",display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -6634,17 +6725,17 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
       <div style={{background:"#ffffff",borderBottom:"1px solid #e2e5ed",padding:"0 16px",display:"flex",alignItems:"center",gap:4,height:60}}>
         <span style={{fontWeight:900,fontSize:15,letterSpacing:3,color:"#c9a84c",marginRight:8}}>IMPLANTDENT</span>
         <div style={{flex:1}}/>
-        <NavBtn id="avisos"    label="Avisos"     badge={avisosDeHoy.length}/>
-        <NavBtn id="dashboard" label="Pacientes"  badge={0}/>
-        <NavBtn id="debts"     label="Deudas"     badge={pendingDebtPatients.length}/>
-        <NavBtn id="pagos"     label="Cobros"/>
-        <NavBtn id="citas"         label="Citas"/>
-        <NavBtn id="presupuestos"  label="N° Presupuestos"/>
+        <NavBtn activo={view==="avisos"} onIr={navigate} id="avisos"    label="Avisos"     badge={avisosDeHoy.length}/>
+        <NavBtn activo={view==="dashboard"} onIr={navigate} id="dashboard" label="Pacientes"  badge={0}/>
+        <NavBtn activo={view==="debts"} onIr={navigate} id="debts"     label="Deudas"     badge={pendingDebtPatients.length}/>
+        <NavBtn activo={view==="pagos"} onIr={navigate} id="pagos"     label="Cobros"/>
+        <NavBtn activo={view==="citas"} onIr={navigate} id="citas"         label="Citas"/>
+        <NavBtn activo={view==="presupuestos"} onIr={navigate} id="presupuestos"  label="N° Presupuestos"/>
         {/* los planes de pacientes ya cerrados viven en la lista archivada,
             que se carga bajo demanda: sin esto Pendientes los saltearía */}
-        <NavBtn id="planes"        label="Planes de pago" badge={cuotasQueAvisan} onSelect={ensureArchived}/>
-        <NavBtn id="clinica"       label="Clínica"/>
-        <NavBtn id="stats"     label="Estadísticas" badge={0}/>
+        <NavBtn activo={view==="planes"} onIr={navigate} id="planes"        label="Planes de pago" badge={cuotasQueAvisan} onSelect={ensureArchived}/>
+        <NavBtn activo={view==="clinica"} onIr={navigate} id="clinica"       label="Clínica"/>
+        <NavBtn activo={view==="stats"} onIr={navigate} id="stats"     label="Estadísticas" badge={0}/>
         {/* Enlace de verdad y no navigate(): /mutua es otra entrada, con su
             propio guard, no una vista más de esta pantalla. */}
         <a href="/mutua" style={{color:"#666",cursor:"pointer",fontSize:13,textDecoration:"none",
@@ -6710,7 +6801,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
                   ? <div style={{padding:24,color:"#555",textAlign:"center",fontSize:13}}>Sin citas ni recordatorios para hoy</div>
                   : todayAppts.map(({patient:pat, appt}) => {
                       const grand   = patientGrand(pat);
-                      const paid    = payments.filter(pay=>pay.patient_id===pat.id).reduce((s,pay)=>s+(parseFloat(pay.amount)||0),0);
+                      const paid    = (pagosPorPaciente.get(pat.id)||VACIO).reduce((s,pay)=>s+(parseFloat(pay.amount)||0),0);
                       const debt    = parseFloat((grand - paid).toFixed(2));
                       let payBadge = null;
                       if (grand > 0) {
@@ -6802,7 +6893,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
           {/* Almanaque grid */}
           <div style={{flex:1,overflowY:"auto",padding:"16px",display:"grid",
             gridTemplateColumns:"repeat(7,1fr)",gap:10,alignContent:"start"}}>
-            {weekAppts.map(({iso, label, appts, reminders}, idx)=>{
+            {weekAppts.map(({iso, label, appts, reminders})=>{
               const isToday = iso === todayStr;
               const [dayNameFull, dayDate] = label.split(" ");
               const dayShort = dayNameFull.slice(0,3).toUpperCase();
@@ -6837,7 +6928,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
                       ? <div style={{padding:"12px 8px",color:"#ffffff22",fontSize:11,textAlign:"center"}}>—</div>
                       : appts.map(({patient:pat, appt})=>{
                           const grand = patientGrand(pat);
-                          const paid  = payments.filter(pay=>pay.patient_id===pat.id).reduce((s,pay)=>s+(parseFloat(pay.amount)||0),0);
+                          const paid  = (pagosPorPaciente.get(pat.id)||VACIO).reduce((s,pay)=>s+(parseFloat(pay.amount)||0),0);
                           const debt  = parseFloat((grand-paid).toFixed(2));
                           let badgeColor = null;
                           if (grand>0) {
@@ -7008,10 +7099,9 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
                   {(() => {
                     const renderCard = (p) => (
                       <PatientCard key={p.id} patient={p} onEdit={openEdit} onSetStatus={setPatientStatus} onDelete={deletePatient}
-                        patientPayments={payments.filter(pay=>pay.patient_id===p.id)}
+                        patientPayments={pagosPorPaciente.get(p.id) || VACIO}
                         onOpen={isSearching ? openEdit : null}
-                        templates={templates}
-                        waClicks={waClicks.filter(c=>c.patient_id===p.id)}
+                        waClicks={waClicksPorPaciente.get(p.id) || VACIO}
                         onWaClick={(key)=>incWaClick(p.id,key)}
                         plans={plans} planCuotas={planCuotas}
                       />
@@ -7020,8 +7110,8 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
                       const sortByDate = arr => [...arr].sort((a,b) => (b.date||"").localeCompare(a.date||""));
                       const hasOrtho    = p => getTxItems(p).some(t=>(t.name||"").toLowerCase().includes("ortodoncia"));
                       const hasImplant  = p => getTxItems(p).some(t=>(t.name||"").toLowerCase().includes("implante"));
-                      const withPayment = sortByDate(tabList.filter(p => payments.some(pay=>pay.patient_id===p.id)));
-                      const noPayment   = tabList.filter(p => !payments.some(pay=>pay.patient_id===p.id));
+                      const withPayment = sortByDate(tabList.filter(p => pagosPorPaciente.has(p.id)));
+                      const noPayment   = tabList.filter(p => !pagosPorPaciente.has(p.id));
                       const withOrtho   = sortByDate(noPayment.filter(hasOrtho));
                       const noOrtho     = noPayment.filter(p => !hasOrtho(p));
                       const withImplant = sortByDate(noOrtho.filter(hasImplant));
@@ -7064,7 +7154,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
                   const todayStr = new Date().toISOString().slice(0,10);
                   return pendingDebtPatients.map(p=>{
                   const grand = patientGrand(p);
-                  const paid = payments.filter(pay=>pay.patient_id===p.id).reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
+                  const paid = (pagosPorPaciente.get(p.id)||VACIO).reduce((a,pay)=>a+(parseFloat(pay.amount)||0),0);
                   const pending = grand - paid;
                   const nextApptP = (p.appointments||[])
                     .filter(a=>a.date&&a.date>=todayStr)

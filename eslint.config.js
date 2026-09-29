@@ -23,7 +23,14 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      // Sin eslint-plugin-react, usar un componente en JSX no cuenta como uso:
+      // PanelMutua recibía LoginForm y SinAcceso como props, los pintaba, y aun
+      // así salían como "sin usar". argsIgnorePattern exime a los parámetros en
+      // PascalCase igual que varsIgnorePattern ya hacía con las variables.
+      'no-unused-vars': ['error', {
+        varsIgnorePattern: '^[A-Z_]',
+        argsIgnorePattern: '^[A-Z_]',
+      }],
     },
   },
 ])
