@@ -1412,6 +1412,13 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
 
   const [selectedYears, setSelectedYears] = useState([currentYear]);
   const [compareMode,   setCompareMode]   = useState(false);
+  // Tiene que estar declarado antes del useMemo de abajo: calcularAnio lo lee
+  // durante el render y, si viene después, revienta con "before initialization".
+  const [excluded, setExcluded] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("progreso_excluded") || "[]")
+      .map(migraClaveTratamiento)); }
+    catch { return new Set(); }
+  });
 
   // Los años que la pantalla está pidiendo ahora mismo. Se calculaban dos veces
   // por render (una para las series y otra para la efectividad) y se rehacían
@@ -1426,7 +1433,7 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
     // calcularAnio y aniosEnPantalla se rehacen en cada render por vivir dentro
     // del componente; lo que de verdad cambia el resultado es lo de la lista.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [payments, items, patients, claveAnios]);
+  }, [payments, items, patients, excluded, claveAnios]);
   // Si alguna vez se pide un año fuera de la lista, se calcula y ya: el memo es
   // una caché, no la única vía.
   const computeYearFull = (year) => datosPorAnio.get(year) || calcularAnio(year);
@@ -1471,11 +1478,6 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
     });
     return { presupuestado:a("presupuestado"), cobrado:a("cobrado"), implantes:a("implantes"), ortodoncia:a("ortodoncia") };
   };
-  const [excluded, setExcluded] = useState(() => {
-    try { return new Set(JSON.parse(localStorage.getItem("progreso_excluded") || "[]")
-      .map(migraClaveTratamiento)); }
-    catch { return new Set(); }
-  });
 
   const excludeItem = (patientId, txName) => {
     const key = claveTratamiento(patientId, txName);
