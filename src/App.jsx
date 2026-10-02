@@ -2382,6 +2382,21 @@ function EstadisticasPanel({ payments, items, patients, onOpenPatient, onRefresh
   });
   const orthoTotal = orthoItems.filter(i => i.realized_date).length;
 
+  // El número de cada tarjeta abre los realizados, por fecha; el desplegable
+  // de siempre se queda solo con lo pendiente.
+  const porFechaRealizado = (a, b) => a.realized_date.localeCompare(b.realized_date);
+  const implantRealizados = implantItems.filter(i => i.realized_date).sort(porFechaRealizado);
+  const orthoRealizados   = orthoItems.filter(i => i.realized_date).sort(porFechaRealizado);
+  const implantPendientes = implantItems.filter(i => !i.realized_date);
+  const orthoPendientes   = orthoItems.filter(i => !i.realized_date);
+  // Los sintéticos no tienen id: sin esto compartían key y React mezclaba
+  // el estado de edición de una fila con el de otra.
+  const claveFila = (item) => item.id ?? `syn_${item.patient_id}_${item.treatment_name}`;
+  const nImpl = (item) => {
+    const m = (item.treatment_name||"").match(/(\d+)\s*implante/i);
+    return m ? parseInt(m[1]) : 1;
+  };
+
   const findPatient = (id) => patients.find(p => p.id === id);
 
   const deleteItem = async (e, itemId) => {
@@ -2532,8 +2547,11 @@ ${pendOrtho.length === 0
     w.print();
   };
 
-  const StatCard = ({ id, label, value, sub, color }) => {
+  // Con idValor, tocar el número abre su propio detalle (los realizados) y el
+  // resto de la tarjeta sigue abriendo el de siempre (los pendientes).
+  const StatCard = ({ id, idValor, label, value, sub, color, textoDetalle="Ver detalle" }) => {
     const active = activeDetail === id;
+    const valorActivo = idValor && activeDetail === idValor;
     return (
       <div onClick={() => toggle(id)}
         style={{background: active ? color+"18" : "#f5f7fa", borderRadius:10, padding:"20px 22px",
@@ -2541,10 +2559,19 @@ ${pendOrtho.length === 0
           cursor:"pointer", transition:"background 0.15s"}}
         onMouseEnter={e => { if(!active) e.currentTarget.style.background="#e2e5ed"; }}
         onMouseLeave={e => { if(!active) e.currentTarget.style.background="#f5f7fa"; }}>
-        <div style={{fontSize:34,fontWeight:800,color,lineHeight:1}}>{value}</div>
+        {idValor
+          ? <div onClick={e => { e.stopPropagation(); toggle(idValor); }}
+              title="Ver los realizados"
+              style={{display:"inline-block",fontSize:34,fontWeight:800,color,lineHeight:1,
+                padding:"4px 10px",margin:"-4px -10px",borderRadius:8,
+                background: valorActivo ? color+"22" : "transparent",
+                border:`1px dashed ${valorActivo ? color : color+"66"}`}}>
+              {value}
+            </div>
+          : <div style={{fontSize:34,fontWeight:800,color,lineHeight:1}}>{value}</div>}
         <div style={{fontSize:12,color:"#777",marginTop:5}}>{sub}</div>
         <div style={{fontSize:11,color:"#444",marginTop:6,letterSpacing:1,textTransform:"uppercase"}}>{label}</div>
-        <div style={{fontSize:11,color:active?color:"#555",marginTop:10}}>{active?"▲ Ocultar":"▼ Ver detalle"}</div>
+        <div style={{fontSize:11,color:active?color:"#555",marginTop:10}}>{active?"▲ Ocultar":`▼ ${textoDetalle}`}</div>
       </div>
     );
   };
@@ -2555,6 +2582,7 @@ ${pendOrtho.length === 0
     const [pendingNotes, setPendingNotes] = useState("");
     const pat       = findPatient(item.patient_id);
     const name      = item.patient_name || pat?.name || "—";
+    const hc        = item.hc || pat?.hc;
     const realizado = !!item.realized_date;
     const busyKey   = item.id ?? `syn_${item.patient_id}_${(item.treatment_name||"").slice(0,30)}`;
     const loading   = busy === busyKey;
@@ -2597,7 +2625,10 @@ ${pendOrtho.length === 0
       <div style={{...s.card, marginBottom:6, opacity: loading ? 0.5 : 1}}>
         <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
           <div onClick={() => pat && onOpenPatient(pat)} style={{flex:1, cursor: pat ? "pointer" : "default"}}>
-            <div style={{fontWeight:700, color:"#2c3250", fontSize:14}}>{name}</div>
+            <div style={{fontWeight:700, color:"#2c3250", fontSize:14}}>
+              {hc && <span style={{color:"#c9a84c", marginRight:8}}>HC {hc}</span>}
+              {name}
+            </div>
             <div style={{fontSize:12, color:"#777", marginTop:2}}>
               {item.treatment_name}{qty > 1 ? ` · ${qty} uds` : ""} · {fmtEur(item.amount)}
             </div>
@@ -2728,8 +2759,8 @@ ${pendOrtho.length === 0
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:20}}>
         <StatCard id="pagos"      label="Pagos recibidos" value={fmtEur(totalPaid)} sub={`${rangePayments.length} pago(s)`} color="#2ecc71"/>
-        <StatCard id="implantes"  label="Implantes"        value={implantTotal}      sub={`${implantItems.filter(i=>!i.realized_date).length} pendiente(s)`} color="#3498db"/>
-        <StatCard id="ortodoncia" label="Ortodoncia"       value={orthoTotal}        sub={`${orthoItems.filter(i=>!i.realized_date).length} pendiente(s)`}  color="#9b59b6"/>
+        <StatCard id="implantes"  idValor="implantes-realizados"  label="Implantes"  value={implantTotal} sub={`${implantPendientes.length} pendiente(s)`} color="#3498db" textoDetalle="Ver pendientes"/>
+        <StatCard id="ortodoncia" idValor="ortodoncia-realizados" label="Ortodoncia" value={orthoTotal}   sub={`${orthoPendientes.length} pendiente(s)`}   color="#9b59b6" textoDetalle="Ver pendientes"/>
       </div>
 
       {activeDetail === "pagos" && (
@@ -2758,16 +2789,35 @@ ${pendOrtho.length === 0
         </div>
       )}
 
+      {activeDetail === "implantes-realizados" && (
+        <div>
+          <div style={{fontSize:11,color:"#3498db",letterSpacing:2,marginBottom:8,fontWeight:700}}>IMPLANTES REALIZADOS ({implantTotal}) — {fmtDate(from)} al {fmtDate(to)}</div>
+          <div style={{fontSize:12,color:"#555",marginBottom:12}}>Ordenados por fecha de colocación. Tocá "Realizado" para devolverlo a pendientes.</div>
+          {implantRealizados.length === 0
+            ? <div style={{color:"#555",padding:20,textAlign:"center"}}>Sin implantes realizados en este período</div>
+            : implantRealizados.map(item => <ItemRow key={claveFila(item)} item={item} qty={nImpl(item)} type="implant"/>)
+          }
+        </div>
+      )}
+
+      {activeDetail === "ortodoncia-realizados" && (
+        <div>
+          <div style={{fontSize:11,color:"#9b59b6",letterSpacing:2,marginBottom:8,fontWeight:700}}>ORTODONCIA REALIZADA ({orthoTotal}) — {fmtDate(from)} al {fmtDate(to)}</div>
+          <div style={{fontSize:12,color:"#555",marginBottom:12}}>Ordenada por fecha de inicio. Tocá "Realizado" para devolverla a pendientes.</div>
+          {orthoRealizados.length === 0
+            ? <div style={{color:"#555",padding:20,textAlign:"center"}}>Sin ortodoncia realizada en este período</div>
+            : orthoRealizados.map(item => <ItemRow key={claveFila(item)} item={item} qty={1} type="ortho"/>)
+          }
+        </div>
+      )}
+
       {activeDetail === "implantes" && (
         <div>
-          <div style={{fontSize:11,color:"#3498db",letterSpacing:2,marginBottom:8,fontWeight:700}}>IMPLANTES — TODOS LOS TRATAMIENTOS</div>
-          <div style={{fontSize:12,color:"#555",marginBottom:12}}>Marcá "Realizado" para sumar al contador. Eliminá falsos positivos con ×.</div>
-          {implantItems.length === 0
-            ? <div style={{color:"#555",padding:20,textAlign:"center"}}>Sin implantes en este período</div>
-            : implantItems.map(item => {
-                const m = (item.treatment_name||"").match(/(\d+)\s*implante/i);
-                return <ItemRow key={item.id} item={item} qty={m ? parseInt(m[1]) : 1} type="implant"/>;
-              })
+          <div style={{fontSize:11,color:"#3498db",letterSpacing:2,marginBottom:8,fontWeight:700}}>IMPLANTES PENDIENTES ({implantPendientes.length})</div>
+          <div style={{fontSize:12,color:"#555",marginBottom:12}}>Tocá "Pendiente" para marcarlo realizado y sumarlo al contador. Eliminá falsos positivos con ×.</div>
+          {implantPendientes.length === 0
+            ? <div style={{color:"#555",padding:20,textAlign:"center"}}>Sin implantes pendientes</div>
+            : implantPendientes.map(item => <ItemRow key={claveFila(item)} item={item} qty={nImpl(item)} type="implant"/>)
           }
           {excludedImplantItems.length > 0 && (
             <div style={{marginTop:16,borderTop:"1px dashed #ccc",paddingTop:12}}>
@@ -2793,11 +2843,11 @@ ${pendOrtho.length === 0
 
       {activeDetail === "ortodoncia" && (
         <div>
-          <div style={{fontSize:11,color:"#9b59b6",letterSpacing:2,marginBottom:8,fontWeight:700}}>ORTODONCIA — TODOS LOS TRATAMIENTOS</div>
-          <div style={{fontSize:12,color:"#555",marginBottom:12}}>Marcá "Realizado" para sumar al contador. Eliminá falsos positivos con ×.</div>
-          {orthoItems.length === 0
-            ? <div style={{color:"#555",padding:20,textAlign:"center"}}>Sin ortodoncia en este período</div>
-            : orthoItems.map(item => <ItemRow key={item.id} item={item} qty={1} type="ortho"/>)
+          <div style={{fontSize:11,color:"#9b59b6",letterSpacing:2,marginBottom:8,fontWeight:700}}>ORTODONCIA PENDIENTE ({orthoPendientes.length})</div>
+          <div style={{fontSize:12,color:"#555",marginBottom:12}}>Tocá "Pendiente" para marcarla realizada y sumarla al contador. Eliminá falsos positivos con ×.</div>
+          {orthoPendientes.length === 0
+            ? <div style={{color:"#555",padding:20,textAlign:"center"}}>Sin ortodoncia pendiente</div>
+            : orthoPendientes.map(item => <ItemRow key={claveFila(item)} item={item} qty={1} type="ortho"/>)
           }
           {excludedOrthoItems.length > 0 && (
             <div style={{marginTop:16,borderTop:"1px dashed #ccc",paddingTop:12}}>
