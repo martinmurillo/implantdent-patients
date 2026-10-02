@@ -7,6 +7,7 @@ import {
   estadoCobroMeses, vencimientosPorMes, avisosDelDia,
   nombreCortoTratamiento, tratamientosPorMes,
   claveTratamiento, migraClaveTratamiento, clavesRealizadas,
+  esImplante, esOrtodoncia, unidadesImplante, fechasColocacion,
 } from "./planCalc.js";
 
 // ─── Fechas ──────────────────────────────────────────────────────────────────
@@ -1174,5 +1175,76 @@ describe("lo marcado como hecho no vuelve a pendientes", () => {
   test("sin nada marcado no se tapa nada", () => {
     assert.equal(clavesRealizadas([]).size, 0);
     assert.equal(clavesRealizadas([{ patient_id: CESAR, treatment_name: TX, realized_date: null }]).size, 0);
+  });
+});
+
+// ─── Fechas de colocación en la ficha ────────────────────────────────────────
+describe("esImplante / esOrtodoncia", () => {
+  test("una corona o un aditamento sobre implante no es un implante", () => {
+    assert.equal(esImplante("Implante 36"), true);
+    assert.equal(esImplante("Corona sobre implante 36"), false);
+    assert.equal(esImplante("Aditamento implante"), false);
+  });
+
+  test("reconoce la ortodoncia por sus nombres habituales", () => {
+    assert.equal(esOrtodoncia("Invisalign completo"), true);
+    assert.equal(esOrtodoncia("Ortodoncia brackets"), true);
+    assert.equal(esOrtodoncia("Limpieza"), false);
+  });
+
+  test("'3 implantes' son tres unidades; el resto, una", () => {
+    assert.equal(unidadesImplante("3 implantes"), 3);
+    assert.equal(unidadesImplante("Implante 46"), 1);
+  });
+});
+
+describe("fechasColocacion", () => {
+  const PAC = "p1";
+  const tratamientos = [
+    { id: "a", name: "Implante 36" },
+    { id: "b", name: "Implante 46" },
+    { id: "c", name: "Corona sobre implante 36" },
+    { id: "d", name: "Invisalign" },
+    { id: "e", name: "Limpieza" },
+  ];
+
+  test("cada implante del presupuesto sale aparte, con su fecha o sin ella", () => {
+    const items = [{ patient_id: PAC, treatment_name: "Implante 36", realized_date: "2026-03-10" }];
+    const r = fechasColocacion({ patientId: PAC, tratamientos, items });
+    assert.deepEqual(r.implantes.map(i => [i.nombre, i.fecha]), [
+      ["Implante 36", "2026-03-10"],
+      ["Implante 46", null],
+    ]);
+    assert.deepEqual(r.ortodoncia.map(i => [i.nombre, i.fecha]), [["Invisalign", null]]);
+  });
+
+  test("empareja aunque el nombre esté escrito distinto (acentos, mayúsculas)", () => {
+    const items = [{ patient_id: PAC, treatment_name: "INVISALIGN ", realized_date: "2026-05-02T00:00:00" }];
+    const r = fechasColocacion({ patientId: PAC, tratamientos, items });
+    assert.equal(r.ortodoncia[0].fecha, "2026-05-02");
+  });
+
+  test("no toma fechas de otro paciente ni de filas sin marcar", () => {
+    const items = [
+      { patient_id: "otro", treatment_name: "Implante 46", realized_date: "2026-01-01" },
+      { patient_id: PAC,    treatment_name: "Implante 46", realized_date: null },
+    ];
+    const r = fechasColocacion({ patientId: PAC, tratamientos, items });
+    assert.equal(r.implantes[1].fecha, null);
+  });
+
+  test("con dos filas marcadas del mismo tratamiento vale la primera fecha", () => {
+    const items = [
+      { patient_id: PAC, treatment_name: "Implante 36", realized_date: "2026-04-01" },
+      { patient_id: PAC, treatment_name: "Implante 36", realized_date: "2026-02-15" },
+    ];
+    const r = fechasColocacion({ patientId: PAC, tratamientos, items });
+    assert.equal(r.implantes[0].fecha, "2026-02-15");
+  });
+
+  test("lo excluido como falso positivo no aparece", () => {
+    const excluidas = new Set([claveTratamiento(PAC, "Implante 46")]);
+    const r = fechasColocacion({ patientId: PAC, tratamientos, items: [], excluidas });
+    assert.deepEqual(r.implantes.map(i => i.nombre), ["Implante 36"]);
   });
 });

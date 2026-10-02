@@ -6,7 +6,7 @@ import { calcPlan, cuotaSugerida, totalTratamientos, cuotasDelPlan,
          resumenPlan, coberturaProxima, addMeses, conciliarCuotas,
          precioSinDescuento, columnasTablero, estadoCobroMeses,
          vencimientosPorMes, avisosDelDia,
-         claveTratamiento, migraClaveTratamiento, clavesRealizadas } from "./planCalc";
+         claveTratamiento, migraClaveTratamiento, clavesRealizadas, fechasColocacion } from "./planCalc";
 import { colocacionInicial, parsePlanPDF, importeFila } from "./pdfPlan";
 import { htmlPlanImpreso } from "./planPrint";
 import { htmlFichaCobro, htmlHojaFichas } from "./fichaCobro";
@@ -648,7 +648,54 @@ function Field({ label, value, onChange, type = "text" }) {
   );
 }
 
-function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaymentsChange=null, isNew=false, onArmarPlan=null, onPagoAplicado=null }) {
+// Fechas de colocación de implantes y ortodoncia, línea por línea del
+// presupuesto. Solo lectura: la fecha se marca desde Estadísticas.
+function FechasColocacion({ patientId, tratamientos, items }) {
+  const excluidas = (() => {
+    // los falsos positivos quitados a mano en Estadísticas tampoco salen aquí
+    try { return new Set(JSON.parse(localStorage.getItem("progreso_excluded") || "[]").map(migraClaveTratamiento)); }
+    catch { return new Set(); }
+  })();
+  const { implantes, ortodoncia } = fechasColocacion({ patientId, tratamientos, items, excluidas });
+  if (implantes.length === 0 && ortodoncia.length === 0) return null;
+
+  const Linea = ({ l, extra }) => (
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"7px 0",borderBottom:"1px solid #e2e5ed"}}>
+      <span style={{fontSize:13,color:"#2c3250"}}>{l.nombre}{extra}</span>
+      {l.fecha
+        ? <span style={{fontSize:12,fontWeight:700,color:"#2ecc71",whiteSpace:"nowrap"}}>{fmtDate(l.fecha)}</span>
+        : <span style={{fontSize:12,fontStyle:"italic",color:"#999",whiteSpace:"nowrap"}}>Sin fecha aún</span>}
+    </div>
+  );
+  const Grupo = ({ titulo, color, children }) => (
+    <div style={{flex:1,minWidth:240}}>
+      <div style={{fontSize:10,color,letterSpacing:1,fontWeight:700,marginBottom:4}}>{titulo}</div>
+      {children}
+    </div>
+  );
+
+  return (
+    <div style={{...s.card, marginBottom:16}}>
+      <div style={{fontSize:11,color:"#c9a84c",letterSpacing:2,fontWeight:700,marginBottom:10}}>FECHAS DE COLOCACIÓN</div>
+      <div style={{display:"flex",gap:24,flexWrap:"wrap"}}>
+        {implantes.length > 0 && (
+          <Grupo titulo="IMPLANTES" color="#3498db">
+            {implantes.map((l, i) => (
+              <Linea key={l.id ?? i} l={l} extra={l.unidades > 1 ? ` · ${l.unidades} uds` : ""}/>
+            ))}
+          </Grupo>
+        )}
+        {ortodoncia.length > 0 && (
+          <Grupo titulo="ORTODONCIA (INICIO)" color="#9b59b6">
+            {ortodoncia.map((l, i) => <Linea key={l.id ?? i} l={l}/>)}
+          </Grupo>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PatientForm({ patient, onSave, onCancel, templates, payments=[], items=[], onPaymentsChange=null, isNew=false, onArmarPlan=null, onPagoAplicado=null }) {
   const [p, setP] = useState(() => {
     const raw = patient.treatments;
     const items = Array.isArray(raw) ? raw : (raw?.items || []);
@@ -818,6 +865,8 @@ function PatientForm({ patient, onSave, onCancel, templates, payments=[], onPaym
           </div>
         ))}
       </div>
+
+      <FechasColocacion patientId={p.id} tratamientos={p.treatments} items={items}/>
 
       <div style={{display:"flex",gap:12,marginBottom:16,alignItems:"center",flexWrap:"wrap"}}>
         <div style={{display:"flex",gap:0,background:"#ffffff",borderRadius:10,padding:4}}>
@@ -7092,7 +7141,7 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
               )}
             </div>
             <PatientForm patient={editing} onSave={savePatient} onCancel={()=>{goBack();setEditing(null);}} templates={templates}
-              payments={payments} onPaymentsChange={fetchPayments} isNew={!allPatients.some(x=>x.id===editing.id)}
+              payments={payments} items={items} onPaymentsChange={fetchPayments} isNew={!allPatients.some(x=>x.id===editing.id)}
               onArmarPlan={(p)=>{ ensureArchived(); setPlanPara(p.id); navigate("planes"); }}
               onPagoAplicado={conciliarPagosDePlan}/>
           </>

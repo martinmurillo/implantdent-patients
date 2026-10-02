@@ -404,6 +404,46 @@ export function clavesRealizadas(items = []) {
     .map(i => claveTratamiento(i.patient_id, i.treatment_name)));
 }
 
+// Las mismas reglas que usa Estadísticas para decidir qué cuenta como implante
+// y qué como ortodoncia. Una corona o un aditamento sobre implante no es un
+// implante colocado.
+const implanteRx = /implant/i;
+const noImplanteRx = /corona|aditamento/i;
+const ortodonciaRx = /ortodoncia|orthodontic|invisalign|invisaling|invisible\s|ortod|placa expansiva|hass/i;
+export const esImplante = (nombre) => implanteRx.test(nombre || "") && !noImplanteRx.test(nombre || "");
+export const esOrtodoncia = (nombre) => ortodonciaRx.test(nombre || "");
+// "3 implantes" son tres; cualquier otra línea de implante, uno.
+export function unidadesImplante(nombre) {
+  const m = String(nombre || "").match(/(\d+)\s*implante/i);
+  return m ? parseInt(m[1], 10) : 1;
+}
+
+// Para la ficha del paciente: cada línea de implante y de ortodoncia de su
+// presupuesto con la fecha en que se colocó, o null si todavía no hay. La
+// fecha se guarda por línea en treatment_items, así que "3 implantes" lleva
+// una sola. Si el mismo tratamiento tiene varias filas marcadas, vale la
+// primera fecha: es cuando se hizo.
+export function fechasColocacion({ patientId, tratamientos = [], items = [], excluidas = new Set() }) {
+  const fechas = new Map();
+  for (const i of items || []) {
+    if (!i || i.patient_id !== patientId || !i.realized_date) continue;
+    const clave = claveTratamiento(i.patient_id, i.treatment_name);
+    const fecha = i.realized_date.slice(0, 10);
+    if (!fechas.has(clave) || fecha < fechas.get(clave)) fechas.set(clave, fecha);
+  }
+  const implantes = [], ortodoncia = [];
+  for (const t of tratamientos || []) {
+    const nombre = (t?.name || "").trim();
+    if (!nombre) continue;
+    const clave = claveTratamiento(patientId, nombre);
+    if (excluidas.has(clave)) continue;
+    const linea = { id: t.id, nombre, fecha: fechas.get(clave) || null };
+    if (esImplante(nombre)) implantes.push({ ...linea, unidades: unidadesImplante(nombre) });
+    else if (esOrtodoncia(nombre)) ortodoncia.push(linea);
+  }
+  return { implantes, ortodoncia };
+}
+
 // Las exclusiones se guardan en el localStorage de cada navegador y las que ya
 // estaban tienen la clave vieja, sin normalizar. Se reescriben al vuelo para no
 // perder los falsos positivos que ya se habian quitado a mano.
