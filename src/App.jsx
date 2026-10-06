@@ -1318,6 +1318,22 @@ function MonthNav({ year, month, onChange }) {
 }
 
 // ─── ProgresoPanel ───────────────────────────────────────────────────────────
+// Martin empezó en la clínica en mayo de 2026. En ese año, todo lo que va de
+// mayo en adelante se marca en dorado para separarlo de un vistazo de lo de
+// antes. Otros años son enteros de antes o de después: no se marca nada.
+const INICIO_MARTIN = { anio: 2026, mes: 4 };   // mes 0-based: 4 = mayo
+const mesInicioMartin = (anio) => anio === INICIO_MARTIN.anio ? INICIO_MARTIN.mes : null;
+const ORO = "#c9a84c";
+// Franja de "desde que está Martin" en los gráficos: empieza a medio camino
+// entre abril y mayo y baja hasta las filas de valores, para que los números
+// de esos meses queden dentro.
+const zonaMartin = ({ inicio, PL, PR, W, CW, PT, H, PB, SVG_H }) => {
+  const paso = CW / 11;
+  const x0   = PL + (inicio - 0.5) * paso;
+  const x1   = Math.min(W, W - PR + paso / 2);
+  const yTop = PT - 18;
+  return { x0: +x0.toFixed(1), ancho: +(x1 - x0).toFixed(1), yTop, yEje: H - PB, alto: SVG_H - 4 - yTop };
+};
 function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinicStat, onClose, onOpenPatient }) {
   const now = new Date();
   const currentYear = now.getFullYear();
@@ -1630,7 +1646,7 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
   };
   const fmtInt = (v) => String(Math.round(v));
 
-  const makeSVG = (seriesData, formatVal, W=900, H=220, statsRowsData=[], targetLine=null) => {
+  const makeSVG = (seriesData, formatVal, W=900, H=220, statsRowsData=[], targetLine=null, inicio=null) => {
     // Mismo doble eje y misma escala que el gráfico de pantalla, para que el
     // informe impreso no enseñe una forma distinta de los mismos datos.
     const izq = seriesData.filter(s => s.eje !== "der");
@@ -1669,6 +1685,13 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
       `<text x="${xPos(i)}" y="${H-6}" text-anchor="middle" font-size="10" fill="#777">${m}</text>`
     ).join('');
 
+    const zona = inicio != null ? (() => {
+      const z = zonaMartin({ inicio, PL, PR, W, CW, PT, H, PB, SVG_H });
+      return `<rect x="${z.x0}" y="${z.yTop}" width="${z.ancho}" height="${z.alto}" fill="${ORO}" fill-opacity="0.09"/>` +
+        `<line x1="${z.x0}" y1="${z.yTop}" x2="${z.x0}" y2="${z.yEje}" stroke="${ORO}" stroke-width="1.5" stroke-dasharray="5,4"/>` +
+        `<text x="${z.x0+5}" y="${z.yTop+11}" font-size="10" fill="${ORO}" font-weight="700">Inicio Martin</text>`;
+    })() : '';
+
     const paths = seriesData.map(s =>
       `<path d="${pathD(s.data, s)}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`
     ).join('');
@@ -1705,10 +1728,10 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
       return rect + lbl + vals;
     }).join('');
 
-    return `<svg viewBox="0 0 ${W} ${SVG_H}" style="width:100%;display:block" xmlns="http://www.w3.org/2000/svg">${grid}${xAxis}${target}${xLabels}${paths}${dots}${valueRows}${statsRowsSVG}</svg>`;
+    return `<svg viewBox="0 0 ${W} ${SVG_H}" style="width:100%;display:block" xmlns="http://www.w3.org/2000/svg">${zona}${grid}${xAxis}${target}${xLabels}${paths}${dots}${valueRows}${statsRowsSVG}</svg>`;
   };
 
-  const LineChart = ({ title, series, formatVal, statsRows = [], targetLine = null }) => {
+  const LineChart = ({ title, series, formatVal, statsRows = [], targetLine = null, inicio = null }) => {
     // Doble eje: las series marcadas eje:"der" se miden aparte. Cobrado y
     // presupuestado se mueven en órdenes distintos y compartir eje dejaba la
     // línea de cobrado casi recta. Ver chartScale.js.
@@ -1735,6 +1758,16 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
         <div style={{fontSize:11,color:"#555",letterSpacing:2,fontWeight:700,marginBottom:8,textTransform:"uppercase"}}>{title}</div>
         <div style={{background:"#fff",borderRadius:10,border:"1px solid #e2e5ed",padding:"4px 0",overflow:"hidden"}}>
           <svg viewBox={`0 0 ${W} ${SVG_H}`} style={{width:"100%",display:"block"}}>
+            {inicio != null && (() => {
+              const z = zonaMartin({ inicio, PL, PR, W, CW, PT, H, PB, SVG_H });
+              return (
+                <g>
+                  <rect x={z.x0} y={z.yTop} width={z.ancho} height={z.alto} fill={ORO} fillOpacity={0.09}/>
+                  <line x1={z.x0} y1={z.yTop} x2={z.x0} y2={z.yEje} stroke={ORO} strokeWidth={1.5} strokeDasharray="5,4"/>
+                  <text x={z.x0+5} y={z.yTop+11} fontSize={10} fill={ORO} fontWeight="700">Inicio Martin</text>
+                </g>
+              );
+            })()}
             {gridVals.map(v=>(
               <g key={v}>
                 <line x1={PL} y1={yPos(v)} x2={W-PR} y2={yPos(v)} stroke="#e2e5ed" strokeWidth={1} strokeDasharray="4,3"/>
@@ -1871,12 +1904,12 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
 
     // ── SVGs (filas comparativas: Martin | Clínica) ───────────────────────
     const svgW = 840;
-    const svgMartin1 = makeSVG(allSeries.billing,       fmtEurK, svgW, 180, billStatsRows);
-    const svgMartin2 = makeSVG(allSeries.ortho,         fmtInt,  svgW, 180, orthoStatsRows);
-    const svgMartin3 = makeSVG(allSeries.implants,      fmtInt,  svgW, 180, implStatsRows);
-    const svgClinic1 = makeSVG(clinicBillingSeries,     fmtEurK, svgW, 180, clinicBillingStats, {value:90000,color:'#e74c3c',label:'Objetivo 90k'});
-    const svgClinic2 = makeSVG(clinicOrthoSeries,       fmtInt,  svgW, 180);
-    const svgClinic3 = makeSVG(clinicImplantsSeries,    fmtInt,  svgW, 180);
+    const svgMartin1 = makeSVG(allSeries.billing,       fmtEurK, svgW, 180, billStatsRows,  null, inicioMartin);
+    const svgMartin2 = makeSVG(allSeries.ortho,         fmtInt,  svgW, 180, orthoStatsRows, null, inicioMartin);
+    const svgMartin3 = makeSVG(allSeries.implants,      fmtInt,  svgW, 180, implStatsRows,  null, inicioMartin);
+    const svgClinic1 = makeSVG(clinicBillingSeries,     fmtEurK, svgW, 180, clinicBillingStats, {value:90000,color:'#e74c3c',label:'Objetivo 90k'}, inicioClinica);
+    const svgClinic2 = makeSVG(clinicOrthoSeries,       fmtInt,  svgW, 180, [], null, inicioClinica);
+    const svgClinic3 = makeSVG(clinicImplantsSeries,    fmtInt,  svgW, 180, [], null, inicioClinica);
 
     // ── Indicadores efectividad (Otros indicadores) ───────────────────────
     const MAY = 4;
@@ -1933,8 +1966,10 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
       const c    = cd.cobrado[mi];
       const impl = cd.implantes[mi];
       const orto = cd.ortodoncia[mi];
-      const bg   = mi % 2 === 0 ? '#fff' : '#fafbfd';
-      return `<div style="display:grid;grid-template-columns:44px 1fr 1fr 56px 56px;gap:4px;padding:4px 10px;border-bottom:1px solid #f0f2f7;align-items:center;background:${bg};">
+      const conMartin = inicioClinica != null && mi >= inicioClinica;
+      const bg   = conMartin ? '#fbf6e9' : mi % 2 === 0 ? '#fff' : '#fafbfd';
+      const borde = conMartin ? `border-left:3px solid ${ORO};padding-left:7px;` : '';
+      return `<div style="display:grid;grid-template-columns:44px 1fr 1fr 56px 56px;gap:4px;padding:4px 10px;border-bottom:1px solid #f0f2f7;align-items:center;background:${bg};${borde}">
       <div style="font-size:11px;color:#888;font-weight:600;">${mn}</div>
       <div style="font-size:11px;color:${p>0?'#c9a84c':'#ccc'};font-weight:${p>0?600:400};">${p>0?fmtEur(p):'—'}</div>
       <div style="font-size:11px;color:${c>0?'#2ecc71':'#ccc'};font-weight:${c>0?600:400};">${c>0?fmtEur(c):'—'}</div>
@@ -2020,6 +2055,12 @@ ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Marti
     { label:"% que se cobra de lo presupuestado", color:"#2980b9",
       data: conversion.map((v,i) => cd.presupuestado[i] ? Math.round(v) : null) },
   ];
+  // Desde qué mes se pinta la franja de Martin. Comparando años, la de los
+  // gráficos de Martin sale si el año en que empezó está entre los elegidos.
+  const inicioMartin  = compareMode
+    ? (selectedYears.includes(INICIO_MARTIN.anio) ? INICIO_MARTIN.mes : null)
+    : mesInicioMartin(activeYear);
+  const inicioClinica = mesInicioMartin(activeYear);
   const clinicImplantsSeries = [{ label:"Implantes",data:cd.implantes,color:"#3498db" }];
   const clinicOrthoSeries    = [{ label:"Ortodoncia",data:cd.ortodoncia,color:"#9b59b6" }];
 
@@ -2065,6 +2106,12 @@ ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Marti
           );
         })}
         {compareMode && <span style={{fontSize:11,color:"#aaa",marginLeft:4}}>Hasta 4 años</span>}
+        {(inicioMartin != null || inicioClinica != null) && (
+          <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,color:"#8a7330",marginLeft:"auto"}}>
+            <span style={{width:14,height:10,background:"#c9a84c22",borderLeft:`2px dashed ${ORO}`,display:"inline-block"}}/>
+            Desde mayo {INICIO_MARTIN.anio}: inicio de Martin en la clínica
+          </span>
+        )}
       </div>
 
       </div>{/* cierre padding barra superior */}
@@ -2223,8 +2270,11 @@ ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Marti
                 const m   = mi+1;
                 const key = `${activeYear}-${m}`;
                 const saving = savingClinic.has(key);
+                const conMartin = inicioClinica != null && mi >= inicioClinica;
                 return (
-                  <div key={mi} style={{display:"grid",gridTemplateColumns:"44px 1fr 1fr 56px 56px",gap:4,padding:"4px 10px",borderBottom:"1px solid #f0f2f7",alignItems:"center",background:mi%2===0?"#fff":"#fafbfd"}}>
+                  <div key={mi} style={{display:"grid",gridTemplateColumns:"44px 1fr 1fr 56px 56px",gap:4,padding:"4px 10px",borderBottom:"1px solid #f0f2f7",alignItems:"center",
+                    background: conMartin ? "#fbf6e9" : mi%2===0?"#fff":"#fafbfd",
+                    ...(conMartin ? {borderLeft:`3px solid ${ORO}`, paddingLeft:7} : {})}}>
                     <div style={{fontSize:11,color:"#888",fontWeight:600}}>{MONTHS_SHORT[mi]}</div>
                     {["presupuestado","cobrado","implantes","ortodoncia"].map(field=>(
                       <input key={field} type="number" placeholder="0"
@@ -2259,10 +2309,10 @@ ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Marti
       ].map(({titleM,seriesM,fmtM,statsM=[],titleC,seriesC,fmtC,targetC=null,statsC=[]},ri)=>(
         <div key={ri} style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0,borderTop:"1px solid #dde4ef"}}>
           <div style={{padding:"16px 12px 0 32px",borderRight:"2px solid #dde4ef"}}>
-            <LineChart title={titleM} series={seriesM} formatVal={fmtM} statsRows={statsM}/>
+            <LineChart title={titleM} series={seriesM} formatVal={fmtM} statsRows={statsM} inicio={inicioMartin}/>
           </div>
           <div style={{padding:"16px 32px 0 12px"}}>
-            <LineChart title={titleC} series={seriesC} formatVal={fmtC} targetLine={targetC} statsRows={statsC}/>
+            <LineChart title={titleC} series={seriesC} formatVal={fmtC} targetLine={targetC} statsRows={statsC} inicio={inicioClinica}/>
           </div>
         </div>
       ))}
