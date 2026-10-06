@@ -72,3 +72,25 @@ function reparte(min, max, lineas) {
   return Array.from({ length: lineas + 1 }, (_, i) =>
     Math.round(min + ((max - min) * i) / lineas));
 }
+
+// Promedio mensual de cada tramo: antes de que llegara Martin (enero hasta el
+// mes anterior a "inicio") y desde que está. Cada tramo llega hasta su último
+// mes con dato, así que la línea se va moviendo a medida que entran los meses:
+// los que aún no han llegado, o que la clínica no ha cargado todavía, no
+// tiran el promedio hacia abajo. Los ceros de en medio sí cuentan: un mes
+// sin actividad es un mes sin actividad. Un tramo sin ningún dato no tiene
+// promedio que dibujar.
+export function promediosPorTramo(datos = [], inicio) {
+  if (inicio == null) return [];
+  const tramos = [[0, inicio - 1], [inicio, 11]];
+  const out = [];
+  for (const [desde, hasta] of tramos) {
+    let fin = -1;
+    for (let i = hasta; i >= desde; i--) if (datos[i]) { fin = i; break; }
+    if (fin < 0) continue;
+    let suma = 0;
+    for (let i = desde; i <= fin; i++) suma += Number(datos[i]) || 0;
+    out.push({ desde, hasta: fin, valor: suma / (fin - desde + 1) });
+  }
+  return out;
+}

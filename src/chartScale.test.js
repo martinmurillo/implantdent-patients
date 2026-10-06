@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { escalaY, valoresDibujados } from "./chartScale.js";
+import { escalaY, valoresDibujados, promediosPorTramo } from "./chartScale.js";
 
 const serie = (data) => [{ data }];
 
@@ -80,5 +80,33 @@ describe("escala vertical", () => {
       assert.equal(v, Math.round(v), `${v} no es entero`);
       assert.equal(v % 100, 0, `${v} no está redondeado`);
     }
+  });
+});
+
+describe("promediosPorTramo", () => {
+  const MAYO = 4;
+
+  test("un promedio antes de mayo y otro desde mayo", () => {
+    const datos = [2, 4, 6, 8, 10, 20, 30, 0, 0, 0, 0, 0];
+    assert.deepEqual(promediosPorTramo(datos, MAYO), [
+      { desde: 0, hasta: 3, valor: 5 },
+      { desde: 4, hasta: 6, valor: 20 },
+    ]);
+  });
+
+  test("los meses que aún no llegaron no bajan el promedio; los vacíos de en medio sí", () => {
+    const datos = [0, 0, 0, 0, 10, 0, 20, 0, 0, 0, 0, 0];
+    const [desdeMayo] = promediosPorTramo(datos, MAYO);
+    assert.equal(desdeMayo.hasta, 6);
+    assert.equal(desdeMayo.valor, 10);   // (10 + 0 + 20) / 3
+  });
+
+  test("un tramo sin datos no tiene línea", () => {
+    const datos = [0, 0, 0, 0, 5, 7, 0, 0, 0, 0, 0, 0];
+    assert.deepEqual(promediosPorTramo(datos, MAYO), [{ desde: 4, hasta: 5, valor: 6 }]);
+  });
+
+  test("sin mes de inicio no hay tramos", () => {
+    assert.deepEqual(promediosPorTramo([1, 2, 3], null), []);
   });
 });

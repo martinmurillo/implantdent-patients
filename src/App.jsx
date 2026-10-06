@@ -12,7 +12,7 @@ import { htmlPlanImpreso } from "./planPrint";
 import { htmlFichaCobro, htmlHojaFichas } from "./fichaCobro";
 import { DIRECCION_TEXTO, ETIQUETAS_LINEA, PAGO } from "./legalPlan";
 import { mensajePropuesta } from "./mensajePropuesta";
-import { escalaY } from "./chartScale";
+import { escalaY, promediosPorTramo } from "./chartScale";
 import PanelMutua from "./mutua/PanelMutua.jsx";
 import { BotonConsentimientos } from "./components/BotonConsentimientos";
 import { EditorPlantillas } from "./components/EditorPlantillas";
@@ -1646,7 +1646,31 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
   };
   const fmtInt = (v) => String(Math.round(v));
 
-  const makeSVG = (seriesData, formatVal, W=900, H=220, statsRowsData=[], targetLine=null, inicio=null) => {
+  // Promedio de la serie principal antes y después de que llegara Martin, una
+  // línea horizontal por tramo con el número encima. Lo comparten el gráfico
+  // de pantalla y el impreso. Los conteos (implantes, ortodoncia) llevan un
+  // decimal: un promedio de 2 y otro de 2,4 no son lo mismo.
+  const lineasPromedio = ({ serie, inicio, formatVal, xPos, yDe, PT, CH, CW }) => {
+    if (!serie || inicio == null) return [];
+    const y = yDe(serie);
+    return promediosPorTramo(serie.data, inicio).map(t => {
+      const solo = t.desde === t.hasta ? (CW / 11) * 0.35 : 0;
+      const x0 = +xPos(t.desde) - solo, x1 = +xPos(t.hasta) + solo;
+      const yv = Math.min(PT + CH, Math.max(PT, +y(t.valor)));
+      const num = formatVal === fmtInt
+        ? String(Math.round(t.valor * 10) / 10).replace(".", ",")
+        : formatVal(t.valor);
+      return { x0, x1, y: yv, xm: (x0 + x1) / 2, texto: `Prom. ${num}`, color: serie.color };
+    });
+  };
+  // Para que la escala deje sitio a los promedios: con el eje acercado, un
+  // promedio más bajo que todos los meses quedaría por debajo del gráfico.
+  const conPromedios = (lista, serie, inicio) => {
+    const vals = serie ? promediosPorTramo(serie.data, inicio).map(t => t.valor) : [];
+    return vals.length ? [...lista, { data: vals }] : lista;
+  };
+
+  const makeSVG = (seriesData, formatVal, W=900, H=220, statsRowsData=[], targetLine=null, inicio=null, promedio=false) => {
     // Mismo doble eje y misma escala que el gráfico de pantalla, para que el
     // informe impreso no enseñe una forma distinta de los mismos datos.
     const izq = seriesData.filter(s => s.eje !== "der");
@@ -1656,7 +1680,8 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
     const LBL_H=16, VAL_H=22;
     const SVG_H = H + (seriesData.length + statsRowsData.length)*(LBL_H+VAL_H) + 16;
     const CW = W - PL - PR, CH = H - PT - PB;
-    const eIzq = escalaY(hayDer ? izq : seriesData, targetLine?.value ?? null);
+    const sProm = promedio && inicio != null ? seriesData[0] : null;
+    const eIzq = escalaY(conPromedios(hayDer ? izq : seriesData, sProm, inicio), targetLine?.value ?? null);
     const eDer = hayDer ? escalaY(der) : eIzq;
     const { yMin, grid: gridVals } = eIzq;   // las posiciones van por enEje()
     const xPos = i => (PL + (i/11) * CW).toFixed(1);
@@ -1696,6 +1721,11 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
       `<path d="${pathD(s.data, s)}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`
     ).join('');
 
+    const promedios = lineasPromedio({ serie: sProm, inicio, formatVal, xPos, yDe, PT, CH, CW }).map(l =>
+      `<line x1="${l.x0.toFixed(1)}" y1="${l.y.toFixed(1)}" x2="${l.x1.toFixed(1)}" y2="${l.y.toFixed(1)}" stroke="${l.color}" stroke-width="1.75" stroke-dasharray="7,4" opacity="0.85"/>` +
+      `<text x="${l.xm.toFixed(1)}" y="${(l.y-6).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="700" fill="${l.color}" stroke="#fff" stroke-width="3" paint-order="stroke">${l.texto}</text>`
+    ).join('');
+
     const dots = seriesData.map(s => {
       const e = lastNZ(s.data);
       return s.data.map((v,i) =>
@@ -1728,10 +1758,10 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
       return rect + lbl + vals;
     }).join('');
 
-    return `<svg viewBox="0 0 ${W} ${SVG_H}" style="width:100%;display:block" xmlns="http://www.w3.org/2000/svg">${zona}${grid}${xAxis}${target}${xLabels}${paths}${dots}${valueRows}${statsRowsSVG}</svg>`;
+    return `<svg viewBox="0 0 ${W} ${SVG_H}" style="width:100%;display:block" xmlns="http://www.w3.org/2000/svg">${zona}${grid}${xAxis}${target}${xLabels}${paths}${promedios}${dots}${valueRows}${statsRowsSVG}</svg>`;
   };
 
-  const LineChart = ({ title, series, formatVal, statsRows = [], targetLine = null, inicio = null }) => {
+  const LineChart = ({ title, series, formatVal, statsRows = [], targetLine = null, inicio = null, promedio = false }) => {
     // Doble eje: las series marcadas eje:"der" se miden aparte. Cobrado y
     // presupuestado se mueven en órdenes distintos y compartir eje dejaba la
     // línea de cobrado casi recta. Ver chartScale.js.
@@ -1743,7 +1773,8 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
     // Cada serie ocupa 2 filas: una de label centrado + una de valores
     const LBL_H = 16, VAL_H = 22;
     const SVG_H = H + (series.length + statsRows.length)*(LBL_H+VAL_H) + 16;
-    const eIzq = escalaY(hayDer ? izq : series, targetLine?.value ?? null);
+    const sProm = promedio && inicio != null ? series[0] : null;
+    const eIzq = escalaY(conPromedios(hayDer ? izq : series, sProm, inicio), targetLine?.value ?? null);
     const eDer = hayDer ? escalaY(der) : eIzq;
     const { yMin, grid:gridVals } = eIzq;   // las posiciones van por enEje()
     const xPos = i => PL+(i/11)*CW;
@@ -1794,6 +1825,13 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
             ))}
             {series.map((s,si)=>(
               <path key={si} d={pathD(s.data, s)} fill="none" stroke={s.color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round"/>
+            ))}
+            {lineasPromedio({ serie: sProm, inicio, formatVal, xPos, yDe, PT, CH, CW }).map((l,i)=>(
+              <g key={`prom_${i}`}>
+                <line x1={l.x0} y1={l.y} x2={l.x1} y2={l.y} stroke={l.color} strokeWidth={1.75} strokeDasharray="7,4" opacity={0.85}/>
+                <text x={l.xm} y={l.y-6} textAnchor="middle" fontSize={11} fontWeight="700" fill={l.color}
+                  stroke="#fff" strokeWidth={3} paintOrder="stroke">{l.texto}</text>
+              </g>
             ))}
             {series.map((s,si)=>{
               const e=lastNZ(s.data);
@@ -1904,12 +1942,12 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
 
     // ── SVGs (filas comparativas: Martin | Clínica) ───────────────────────
     const svgW = 840;
-    const svgMartin1 = makeSVG(allSeries.billing,       fmtEurK, svgW, 180, billStatsRows,  null, inicioMartin);
-    const svgMartin2 = makeSVG(allSeries.ortho,         fmtInt,  svgW, 180, orthoStatsRows, null, inicioMartin);
-    const svgMartin3 = makeSVG(allSeries.implants,      fmtInt,  svgW, 180, implStatsRows,  null, inicioMartin);
-    const svgClinic1 = makeSVG(clinicBillingSeries,     fmtEurK, svgW, 180, clinicBillingStats, {value:90000,color:'#e74c3c',label:'Objetivo 90k'}, inicioClinica);
-    const svgClinic2 = makeSVG(clinicOrthoSeries,       fmtInt,  svgW, 180, [], null, inicioClinica);
-    const svgClinic3 = makeSVG(clinicImplantsSeries,    fmtInt,  svgW, 180, [], null, inicioClinica);
+    const svgMartin1 = makeSVG(allSeries.billing,       fmtEurK, svgW, 180, billStatsRows,  null, inicioMartin, !compareMode);
+    const svgMartin2 = makeSVG(allSeries.ortho,         fmtInt,  svgW, 180, orthoStatsRows, null, inicioMartin, !compareMode);
+    const svgMartin3 = makeSVG(allSeries.implants,      fmtInt,  svgW, 180, implStatsRows,  null, inicioMartin, !compareMode);
+    const svgClinic1 = makeSVG(clinicBillingSeries,     fmtEurK, svgW, 180, clinicBillingStats, {value:90000,color:'#e74c3c',label:'Objetivo 90k'}, inicioClinica, true);
+    const svgClinic2 = makeSVG(clinicOrthoSeries,       fmtInt,  svgW, 180, [], null, inicioClinica, true);
+    const svgClinic3 = makeSVG(clinicImplantsSeries,    fmtInt,  svgW, 180, [], null, inicioClinica, true);
 
     // ── Indicadores efectividad (Otros indicadores) ───────────────────────
     const MAY = 4;
@@ -2309,10 +2347,10 @@ ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Marti
       ].map(({titleM,seriesM,fmtM,statsM=[],titleC,seriesC,fmtC,targetC=null,statsC=[]},ri)=>(
         <div key={ri} style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0,borderTop:"1px solid #dde4ef"}}>
           <div style={{padding:"16px 12px 0 32px",borderRight:"2px solid #dde4ef"}}>
-            <LineChart title={titleM} series={seriesM} formatVal={fmtM} statsRows={statsM} inicio={inicioMartin}/>
+            <LineChart title={titleM} series={seriesM} formatVal={fmtM} statsRows={statsM} inicio={inicioMartin} promedio={!compareMode}/>
           </div>
           <div style={{padding:"16px 32px 0 12px"}}>
-            <LineChart title={titleC} series={seriesC} formatVal={fmtC} targetLine={targetC} statsRows={statsC} inicio={inicioClinica}/>
+            <LineChart title={titleC} series={seriesC} formatVal={fmtC} targetLine={targetC} statsRows={statsC} inicio={inicioClinica} promedio/>
           </div>
         </div>
       ))}
