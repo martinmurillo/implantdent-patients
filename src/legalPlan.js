@@ -55,7 +55,7 @@ export const ETIQUETAS_LINEA = {
 
 // ─── Datos de cobro ──────────────────────────────────────────────────────────
 export const PAGO = {
-  iban: "ES13 0049 2439 1723 1521 9830",
+  iban: "ES13 0049 2439 1723 1521 9831",
   // el concepto lleva el nombre completo del paciente para poder identificarlo
   concepto: (nombrePaciente) =>
     `${String(nombrePaciente || "").trim().toUpperCase()} · SANTA EUGENIA`.replace(/^· /, ""),
