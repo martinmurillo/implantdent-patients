@@ -1950,8 +1950,8 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
     // ── Tarjetas Martin (2x2) ─────────────────────────────────────────────
     const martinCards = globalEfect ? `
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-  <div style="${cc}"><div style="${ts}color:#c9a84c;">💰 Fact. s/Total</div><div style="${cn('#3498db')}">${globalEfect.billAll!=null?globalEfect.billAll+'%':'—'}</div><div style="${csb}">${fmtEur(globalEfect.tp)} / ${fmtEur(globalEfect.tb)}</div></div>
-  <div style="${cc}"><div style="${ts}color:#c9a84c;">💰 Fact. c/Pagos</div><div style="${cn('#2ecc71')}">${globalEfect.billPay!=null?globalEfect.billPay+'%':'—'}</div><div style="${csb}">${fmtEur(globalEfect.tp)} / ${fmtEur(globalEfect.bwp)}</div></div>
+  <div style="${cc}"><div style="${ts}color:#2ecc71;">💳 Cobrado</div><div style="${cn('#2ecc71')}">${globalEfect.tp>0?fmtEur(globalEfect.tp):'—'}</div><div style="${csb}">Total ${activeYear}</div></div>
+  <div style="${cc}"><div style="${ts}color:#e67e22;">👥 Efect. por paciente</div><div style="${cn('#e67e22')}">${globalEfect.ptsPct!=null?globalEfect.ptsPct+'%':'—'}</div><div style="${csb}">${globalEfect.ptsWithPay} de ${globalEfect.totalPts} pacientes pagaron</div></div>
   <div style="${cc}"><div style="${ts}color:#9b59b6;">🦷 Ortodoncia</div><div style="${cn('#9b59b6')}">${globalEfect.ortho!=null?globalEfect.ortho+'%':'—'}</div><div style="${csb}">${globalEfect.oR} realiz. · ${globalEfect.oP} pend.</div></div>
   <div style="${cc}"><div style="${ts}color:#3498db;">🔩 Implantes</div><div style="${cn('#3498db')}">${globalEfect.impl!=null?globalEfect.impl+'%':'—'}</div><div style="${csb}">${globalEfect.iR} realiz. · ${globalEfect.iP} pend.</div></div>
 </div>` : '';
@@ -2238,17 +2238,17 @@ ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Marti
 
           {globalEfect && (
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
-              {/* Facturación s/total */}
+              {/* Cobrado en el año */}
               <div style={cc}>
-                <div style={ct}>💰 Fact. s/Total</div>
-                <div style={cn(globalEfect.billAll!=null?"#3498db":"#ccc")}>{globalEfect.billAll!=null?`${globalEfect.billAll}%`:"—"}</div>
-                <div style={csb}>{fmtEur(globalEfect.tp)} / {fmtEur(globalEfect.tb)}</div>
+                <div style={ct}>💳 Cobrado</div>
+                <div style={cn(globalEfect.tp>0?"#2ecc71":"#ccc")}>{globalEfect.tp>0?fmtEur(globalEfect.tp):"—"}</div>
+                <div style={csb}>Total {activeYear}</div>
               </div>
-              {/* Facturación c/pagos */}
+              {/* Efectividad por paciente: misma cuenta que la fila del gráfico */}
               <div style={cc}>
-                <div style={ct}>💰 Fact. c/Pagos</div>
-                <div style={cn(globalEfect.billPay!=null?"#2ecc71":"#ccc")}>{globalEfect.billPay!=null?`${globalEfect.billPay}%`:"—"}</div>
-                <div style={csb}>{fmtEur(globalEfect.tp)} / {fmtEur(globalEfect.bwp)}</div>
+                <div style={ct}>👥 Efect. por paciente</div>
+                <div style={cn(globalEfect.ptsPct!=null?"#e67e22":"#ccc")}>{globalEfect.ptsPct!=null?`${globalEfect.ptsPct}%`:"—"}</div>
+                <div style={csb}>{globalEfect.ptsWithPay} de {globalEfect.totalPts} pacientes pagaron</div>
               </div>
               {/* Ortodoncia */}
               <div style={cc}>
