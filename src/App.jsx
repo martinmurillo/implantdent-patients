@@ -13,6 +13,7 @@ import { htmlFichaCobro, htmlHojaFichas } from "./fichaCobro";
 import { DIRECCION_TEXTO, ETIQUETAS_LINEA, PAGO } from "./legalPlan";
 import { mensajePropuesta } from "./mensajePropuesta";
 import { escalaY, promediosPorTramo } from "./chartScale";
+import { comparaInteranual } from "./interanual";
 import PanelMutua from "./mutua/PanelMutua.jsx";
 import { BotonConsentimientos } from "./components/BotonConsentimientos";
 import { EditorPlantillas } from "./components/EditorPlantillas";
@@ -1473,6 +1474,8 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
       const d = i.realized_date || i.closed_date || "";
       return d ? parseInt(d.slice(0,4)) : 0;
     }).filter(y => y > 2000),
+    // Años con datos de la clínica cargados a mano (2025 no tiene pagos en la app)
+    ...clinicStats.map(s => s.year).filter(y => y > 2000),
   ])].sort((a, b) => b - a);
 
   const [selectedYears, setSelectedYears] = useState([currentYear]);
@@ -2018,6 +2021,30 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
   </div>
 </div>`;
 
+    // ── Progreso interanual (misma lectura que en pantalla) ─────────────────
+    const tdI = "text-align:center;padding:2px 4px;font-weight:700;";
+    const interanualHTML = interanual ? `
+<div style="border:1px solid #e2e5ed;border-radius:8px;padding:10px 12px;background:#fff;margin-bottom:14px;page-break-inside:avoid;">
+  <div style="font-size:9px;letter-spacing:3px;font-weight:700;color:${ORO};margin-bottom:2px;">PROGRESO INTERANUAL · ${tramoInter.toUpperCase()} vs MISMOS MESES ${activeYear-1}</div>
+  <div style="font-size:9px;color:#999;margin-bottom:8px;">Clínica completa (incluye a Martin). Solo cuentan los meses cargados en los dos años.</div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">
+    ${interanual.map(m => `<div style="${cc}"><div style="${ts}color:${m.color};">${m.icono} ${m.label}</div>` +
+      `<div style="${cn(m.pct!=null?colorInter(m.pct):'#ccc')}">${m.pct!=null?pctInter(m.pct):'—'}</div>` +
+      (m.pct!=null
+        ? `<div style="${csb}">${m.fmt(m.actual)} vs ${m.fmt(m.anterior)} · ${difInter(m.dif, m.fmt)}</div>` +
+          (m.meses.length < mesesInter.length ? `<div style="${csb}">${m.meses.length} de ${mesesInter.length} meses con dato</div>` : '')
+        : `<div style="${csb}">Falta cargar ${m.porMes.some(p=>p.anterior) ? activeYear : activeYear-1}</div>`) +
+      `</div>`).join('')}
+  </div>
+  <table style="width:100%;border-collapse:collapse;font-size:10px;">
+    <tr><td></td>${mesesInter.map(mn=>`<td style="${tdI}color:#aaa;">${mn}</td>`).join('')}</tr>
+    ${interanual.filter(m => m.meses.length > 0).map(m => `
+    <tr style="border-top:1px solid #f0f2f7;"><td style="color:#aaa;font-weight:700;white-space:nowrap;">${m.label} ${activeYear-1}</td>${m.porMes.map(p=>`<td style="${tdI}font-weight:400;color:${p.anterior?'#999':'#ddd'};">${p.anterior?m.fmt(p.anterior):'—'}</td>`).join('')}</tr>
+    <tr><td style="color:${m.color};font-weight:700;white-space:nowrap;">${m.label} ${activeYear}</td>${m.porMes.map(p=>`<td style="${tdI}color:${p.actual?m.color:'#ddd'};">${p.actual?m.fmt(p.actual):'—'}</td>`).join('')}</tr>
+    <tr><td style="color:#888;font-weight:700;">%</td>${m.porMes.map(p=>`<td style="${tdI}color:${p.pct!=null?colorInter(p.pct):'#ddd'};">${p.pct!=null?pctInter(p.pct):'—'}</td>`).join('')}</tr>`).join('')}
+  </table>
+</div>` : '';
+
     const rowSVG = (tM, svM, tC, svC, pb=false) => `
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:1px solid #dde4ef;margin-bottom:0;${pb?'page-break-before:always;':''}">
   <div style="padding:10px 8px 0 0;border-right:2px solid #dde4ef;">
@@ -2052,6 +2079,8 @@ h1{font-size:15px;margin:0 0 2px;color:#2c3250;}
     ${datosMenusuales}
   </div>
 </div>
+
+${interanualHTML}
 
 ${rowSVG('Cobrado vs Presupuestado', svgMartin1, 'Cobrado y % de cierre CLÍNICA (Incluye producción Martin)', svgClinic1, true)}
 ${rowSVG('Ortodoncia', svgMartin2, 'Ortodoncia CLÍNICA (Incluye producción Martin)', svgClinic2)}
@@ -2101,6 +2130,27 @@ ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Marti
   const inicioClinica = mesInicioMartin(activeYear);
   const clinicImplantsSeries = [{ label:"Implantes",data:cd.implantes,color:"#3498db" }];
   const clinicOrthoSeries    = [{ label:"Ortodoncia",data:cd.ortodoncia,color:"#9b59b6" }];
+
+  // ── Progreso interanual de la clínica ────────────────────────────────────
+  // Desde que llegó Martin, cada mes contra el mismo mes del año anterior. Ver
+  // interanual.js. En el año en que empezó se mira de mayo en adelante; los
+  // años siguientes, enteros. Hasta el mes en curso: lo posterior no ha pasado.
+  const desdeInter  = activeYear === INICIO_MARTIN.anio ? INICIO_MARTIN.mes : 0;
+  const hastaInter  = activeYear === currentYear ? now.getMonth() : 11;
+  const cdAnterior  = buildClinicData(activeYear - 1);
+  const interanual  = !compareMode && activeYear >= INICIO_MARTIN.anio && hastaInter >= desdeInter
+    ? [
+        { campo:"cobrado",       label:"Cobrado",       icono:"💳", color:"#2ecc71", fmt:fmtEur },
+        { campo:"presupuestado", label:"Presupuestado", icono:"💰", color:"#c9a84c", fmt:fmtEur },
+        { campo:"implantes",     label:"Implantes",     icono:"🔩", color:"#3498db", fmt:fmtInt },
+        { campo:"ortodoncia",    label:"Ortodoncia",    icono:"🦷", color:"#9b59b6", fmt:fmtInt },
+      ].map(m => ({ ...m, ...comparaInteranual(cd[m.campo], cdAnterior[m.campo], desdeInter, hastaInter) }))
+    : null;
+  const tramoInter  = `${MONTHS_SHORT[desdeInter].toLowerCase()}–${MONTHS_SHORT[hastaInter].toLowerCase()} ${activeYear}`;
+  const mesesInter  = MONTHS_SHORT.slice(desdeInter, hastaInter + 1);
+  const colorInter  = (v) => v > 0 ? "#27ae60" : v < 0 ? "#e74c3c" : "#888";
+  const pctInter    = (v) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${String(Math.abs(v)).replace(".", ",")}%`;
+  const difInter    = (v, fmt) => v === 0 ? "igual" : `${v > 0 ? "+" : "−"}${fmt(Math.abs(v))}`;
 
   // estilos reutilizables para tarjetas compactas
   const cc  = { background:"#fff", border:"1px solid #e2e5ed", borderRadius:8, padding:"8px 12px" };
@@ -2329,6 +2379,61 @@ ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Marti
           </div>
         </div>
       </div>{/* fin split cards */}
+
+      {/* ── Progreso interanual (clínica, mismos meses del año anterior) ──── */}
+      {interanual && (
+        <div style={{padding:"16px 32px 24px",borderTop:"1px solid #dde4ef"}}>
+          <div style={{fontSize:10,color:ORO,letterSpacing:3,fontWeight:700,marginBottom:2}}>
+            PROGRESO INTERANUAL · {tramoInter.toUpperCase()} vs MISMOS MESES {activeYear-1}
+          </div>
+          <div style={{fontSize:11,color:"#999",marginBottom:12}}>
+            Clínica completa (incluye a Martin). Solo cuentan los meses cargados en los dos años.
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:12}}>
+            {interanual.map(m => (
+              <div key={m.campo} style={cc}>
+                <div style={{...ct,color:m.color}}>{m.icono} {m.label}</div>
+                <div style={cn(m.pct!=null?colorInter(m.pct):"#ccc")}>{m.pct!=null?pctInter(m.pct):"—"}</div>
+                {m.pct!=null ? (
+                  <>
+                    <div style={csb}>{m.fmt(m.actual)} vs {m.fmt(m.anterior)} · {difInter(m.dif, m.fmt)}</div>
+                    {m.meses.length < mesesInter.length &&
+                      <div style={csb}>{m.meses.length} de {mesesInter.length} meses con dato</div>}
+                  </>
+                ) : (
+                  <div style={csb}>Falta cargar {m.porMes.some(p=>p.anterior) ? activeYear : activeYear-1}</div>
+                )}
+              </div>
+            ))}
+          </div>
+          <div style={{background:"#fff",borderRadius:8,border:"1px solid #e2e5ed",padding:"8px 12px",overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+              <thead>
+                <tr>
+                  <th style={{textAlign:"left",color:"#aaa",fontWeight:700,padding:"3px 4px"}}></th>
+                  {mesesInter.map(mn => <th key={mn} style={{textAlign:"center",color:"#aaa",fontWeight:700,padding:"3px 4px"}}>{mn}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {interanual.filter(m => m.meses.length > 0).map(m => [
+                  <tr key={`${m.campo}_a`} style={{borderTop:"1px solid #f0f2f7"}}>
+                    <td style={{color:"#aaa",fontWeight:700,padding:"3px 4px",whiteSpace:"nowrap"}}>{m.label} {activeYear-1}</td>
+                    {m.porMes.map(p => <td key={p.mes} style={{textAlign:"center",color:p.anterior?"#999":"#ddd",padding:"3px 4px"}}>{p.anterior?m.fmt(p.anterior):"—"}</td>)}
+                  </tr>,
+                  <tr key={`${m.campo}_b`}>
+                    <td style={{color:m.color,fontWeight:700,padding:"3px 4px",whiteSpace:"nowrap"}}>{m.label} {activeYear}</td>
+                    {m.porMes.map(p => <td key={p.mes} style={{textAlign:"center",color:p.actual?m.color:"#ddd",fontWeight:700,padding:"3px 4px"}}>{p.actual?m.fmt(p.actual):"—"}</td>)}
+                  </tr>,
+                  <tr key={`${m.campo}_p`}>
+                    <td style={{color:"#888",fontWeight:700,padding:"3px 4px"}}>%</td>
+                    {m.porMes.map(p => <td key={p.mes} style={{textAlign:"center",color:p.pct!=null?colorInter(p.pct):"#ddd",fontWeight:700,padding:"3px 4px"}}>{p.pct!=null?pctInter(p.pct):"—"}</td>)}
+                  </tr>,
+                ])}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* ── Filas de gráficos comparativos (Martin izq | Clínica der) ──────── */}
       {[
