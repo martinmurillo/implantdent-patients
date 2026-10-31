@@ -1416,6 +1416,10 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
         }
       }
 
+      // Los pendientes van al mes del presupuesto, y solo en su año: sin esto
+      // un presupuesto de mayo de 2026 salía también como pendiente en mayo de
+      // cualquier otro año.
+      if (py !== year) return;
       getTxItems(pat).forEach(tx => {
         const txName = tx.name || "";
         const key    = claveTratamiento(pat.id, txName);
