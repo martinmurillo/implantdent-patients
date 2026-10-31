@@ -1361,9 +1361,14 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
     const hcPayByMonth = Array.from({length:12}, () => new Set());
     const hcYearAll    = new Set();
     const hcYearPay    = new Set();
+    // Quiénes son, para abrir el listado desde la fila de pacientes: uno por
+    // HC y mes, con lo que lleva pagado en total
+    const atendidosPts = Array.from({length:12}, () => new Map());
 
     // Pacientes que tienen al menos un pago registrado
     const patientsWithPayments = new Set(payments.map(p => p.patient_id));
+    const pagadoPorPaciente = new Map();
+    payments.forEach(p => pagadoPorPaciente.set(p.patient_id, (pagadoPorPaciente.get(p.patient_id) || 0) + (parseFloat(p.amount) || 0)));
     // Buscar con patients.find() dentro de los bucles de abajo salía
     // O(pagos x pacientes). Con el índice, cada fila es una consulta directa.
     const porId = new Map(patients.map(p => [p.id, p]));
@@ -1412,6 +1417,13 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
           if (patientsWithPayments.has(pat.id)) {
             hcPayByMonth[pm-1].add(hc);
             hcYearPay.add(hc);
+          }
+          // Con dos presupuestos del mismo paciente en el mes, gana el que tiene pagos
+          const pagado = pagadoPorPaciente.get(pat.id) || 0;
+          const previo = atendidosPts[pm-1].get(hc);
+          if (!previo || (pagado > 0 && !previo.pagado)) {
+            atendidosPts[pm-1].set(hc, { patientId:pat.id, name:pat.name||"—", hc,
+              pagado, detail: pagado > 0 ? `Pagó ${fmtEur(pagado)}` : "Sin pagos" });
           }
         }
       }
@@ -1463,7 +1475,8 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
     return {
       nums: { paid, budgeted, totalBudgeted, orthoRealized, orthoPending, implantRealized, implantPending,
               patientsTotal, patientsWithPay, totalPtsYear: hcYearAll.size, ptsWithPayYear: hcYearPay.size },
-      pts:  { paid:paidPts, budgeted:budgetedPts, totalBudgeted:totalBudgetedPts, orthoRealized:orthoRealizedPts, orthoPending:orthoPendingPts, implantRealized:implantRealizedPts, implantPending:implantPendingPts },
+      pts:  { atendidos: atendidosPts.map(m => [...m.values()].sort((a, b) => b.pagado - a.pagado)),
+              paid:paidPts, budgeted:budgetedPts, totalBudgeted:totalBudgetedPts, orthoRealized:orthoRealizedPts, orthoPending:orthoPendingPts, implantRealized:implantRealizedPts, implantPending:implantPendingPts },
     };
   };
 
@@ -1586,10 +1599,11 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
     if (!compareMode) {
       const { nums: d, pts: p } = computeYearFull(years[0]);
       return {
+        // Lo cobrado y nada más: los presupuestos en el mismo gráfico eran tres
+        // líneas y dos ejes para leer una sola cosa. La efectividad va por
+        // paciente, en las filas de abajo.
         billing:  [
-          { label:"Pagos cobrados",        data: d.paid,         color:"#2ecc71", pts: p.paid },
-          { label:"Presupuestado c/pagos", data: d.budgeted,     color:"#c9a84c", pts: p.budgeted,      eje:"der" },
-          { label:"Total presupuestado",   data: d.totalBudgeted, color:"#3498db", pts: p.totalBudgeted, eje:"der" },
+          { label:"Cobrado", data: d.paid, color:"#2ecc71", pts: p.paid },
         ],
         // Solo se dibuja lo realizado. Los pendientes se leen mejor de fila de
         // valores que de linea: son un stock, no una evolucion, y cruzados con
@@ -1630,10 +1644,11 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
       totalPts: d.totalPtsYear, ptsWithPay: d.ptsWithPayYear,
       ptsPct: safePct(d.ptsWithPayYear, d.totalPtsYear),
     };
+    // Por paciente (una HC cuenta una vez aunque tenga varios presupuestos):
+    // atendido = presupuesto con fecha en el mes; pagó = tiene algún pago.
     billStatsRows = [
-      { label: "Efect. s/Total", data: d.paid.map((v, i) => safePct(v, d.totalBudgeted[i])), color: "#3498db" },
-      { label: "Efect. c/Pagos", data: d.paid.map((v, i) => safePct(v, d.budgeted[i])),      color: "#2ecc71" },
-      { label: "Pacientes",      data: d.patientsTotal.map((v, i) => v > 0 ? `${d.patientsWithPay[i]}/${v}` : null), color: "#e67e22", isRaw: true },
+      { label: "Pacientes que pagaron / atendidos", data: d.patientsTotal.map((v, i) => v > 0 ? `${d.patientsWithPay[i]}/${v}` : null), color: "#3498db", isRaw: true, pts: yearFull.pts.atendidos },
+      { label: "Efectividad por paciente",          data: d.patientsTotal.map((v, i) => safePct(d.patientsWithPay[i], v)), color: "#e67e22" },
     ];
     orthoStatsRows = [
       { label: "Pendientes",  data: d.orthoPending.map(v => v > 0 ? String(v) : null), color: "#e74c3c", isRaw: true, pts: yearFull.pts.orthoPending },
@@ -2089,7 +2104,7 @@ h1{font-size:15px;margin:0 0 2px;color:#2c3250;}
 
 ${interanualHTML}
 
-${rowSVG('Cobrado vs Presupuestado', svgMartin1, 'Cobrado y % de cierre CLÍNICA (Incluye producción Martin)', svgClinic1, true)}
+${rowSVG('Cobrado y efectividad por paciente', svgMartin1, 'Cobrado y % de cierre CLÍNICA (Incluye producción Martin)', svgClinic1, true)}
 ${rowSVG('Ortodoncia', svgMartin2, 'Ortodoncia CLÍNICA (Incluye producción Martin)', svgClinic2)}
 ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Martin)', svgClinic3)}
 </body></html>`;
@@ -2448,7 +2463,7 @@ ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Marti
       {/* ── Filas de gráficos comparativos (Martin izq | Clínica der) ──────── */}
       {[
         {
-          titleM:"Cobrado vs Presupuestado", seriesM:allSeries.billing,  fmtM:fmtEurK, statsM:billStatsRows,
+          titleM:"Cobrado y efectividad por paciente", seriesM:allSeries.billing,  fmtM:fmtEurK, statsM:billStatsRows,
           titleC:"Cobrado y % de cierre CLÍNICA (Incluye producción Martin)", seriesC:clinicBillingSeries, fmtC:fmtEurK, targetC:{value:90000,color:"#e74c3c",label:"Objetivo 90k"}, statsC:clinicBillingStats,
         },
         {
