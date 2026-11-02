@@ -1971,8 +1971,8 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
     const svgMartin2 = makeSVG(allSeries.ortho,         fmtInt,  svgW, 180, orthoStatsRows, null, inicioMartin, !compareMode);
     const svgMartin3 = makeSVG(allSeries.implants,      fmtInt,  svgW, 180, implStatsRows,  null, inicioMartin, !compareMode);
     const svgClinic1 = makeSVG(clinicBillingSeries,     fmtEurK, svgW, 180, clinicBillingStats, {value:90000,color:'#e74c3c',label:'Objetivo 90k'}, inicioClinica, true, corteCobroClinica);
-    const svgClinic2 = makeSVG(clinicOrthoSeries,       fmtInt,  svgW, 180, [], null, inicioClinica, true, corteClinica);
-    const svgClinic3 = makeSVG(clinicImplantsSeries,    fmtInt,  svgW, 180, [], null, inicioClinica, true, corteClinica);
+    const svgClinic2 = makeSVG(clinicOrthoSeries,       fmtInt,  svgW, 180, [], objetivoOrtho, inicioClinica, true, corteClinica);
+    const svgClinic3 = makeSVG(clinicImplantsSeries,    fmtInt,  svgW, 180, [], objetivoImpl, inicioClinica, true, corteClinica);
 
     // ── Indicadores efectividad (Otros indicadores) ───────────────────────
     const MAY = 4;
@@ -2155,6 +2155,9 @@ ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Marti
   const corteClinica  = activeYear <= INICIO_MARTIN.anio ? 0 : null;
   // Salvo el cobrado de 2026, que sí se parte: enero-abril y desde mayo.
   const corteCobroClinica = activeYear === INICIO_MARTIN.anio ? INICIO_MARTIN.mes : corteClinica;
+  // Objetivos mensuales de 2026: 100 ortodoncias y 200 implantes al año.
+  const objetivoOrtho = activeYear === 2026 ? { value: 100/12, color: "#e74c3c", label: "Objetivo 8,33" } : null;
+  const objetivoImpl  = activeYear === 2026 ? { value: 200/12, color: "#e74c3c", label: "Objetivo 16,66" } : null;
   const clinicImplantsSeries = [{ label:"Implantes",data:cd.implantes,color:"#3498db" }];
   const clinicOrthoSeries    = [{ label:"Ortodoncia",data:cd.ortodoncia,color:"#9b59b6" }];
 
@@ -2470,11 +2473,11 @@ ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Marti
         },
         {
           titleM:"Ortodoncia", seriesM:allSeries.ortho,    fmtM:fmtInt, statsM:orthoStatsRows,
-          titleC:"Ortodoncia CLÍNICA (Incluye producción Martin)", seriesC:clinicOrthoSeries,  fmtC:fmtInt,
+          titleC:"Ortodoncia CLÍNICA (Incluye producción Martin)", seriesC:clinicOrthoSeries,  fmtC:fmtInt, targetC:objetivoOrtho,
         },
         {
           titleM:"Implantes",  seriesM:allSeries.implants, fmtM:fmtInt, statsM:implStatsRows,
-          titleC:"Implantes CLÍNICA (Incluye producción Martin)",  seriesC:clinicImplantsSeries, fmtC:fmtInt,
+          titleC:"Implantes CLÍNICA (Incluye producción Martin)",  seriesC:clinicImplantsSeries, fmtC:fmtInt, targetC:objetivoImpl,
         },
       ].map(({titleM,seriesM,fmtM,statsM=[],titleC,seriesC,fmtC,targetC=null,statsC=[],corteC=corteClinica},ri)=>(
         <div key={ri} style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0,borderTop:"1px solid #dde4ef"}}>
