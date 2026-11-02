@@ -1786,7 +1786,7 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
   // "corte" es el mes en que se parten los promedios; por defecto, el de la
   // franja de Martin. Van por separado para que la clínica pinte la franja
   // sin partir el promedio (corte 0 = un solo promedio del año entero).
-  const LineChart = ({ title, series, formatVal, statsRows = [], targetLine = null, inicio = null, promedio = false, corte = inicio }) => {
+  const LineChart = ({ title, series, formatVal, statsRows = [], targetLine = null, inicio = null, promedio = false, corte = inicio, cumple = null }) => {
     // Doble eje: las series marcadas eje:"der" se miden aparte. Cobrado y
     // presupuestado se mueven en órdenes distintos y compartir eje dejaba la
     // línea de cobrado casi recta. Ver chartScale.js.
@@ -1811,7 +1811,16 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
 
     return (
       <div style={{marginBottom:24}}>
-        <div style={{fontSize:11,color:"#555",letterSpacing:2,fontWeight:700,marginBottom:8,textTransform:"uppercase"}}>{title}</div>
+        <div style={{fontSize:11,color:"#555",letterSpacing:2,fontWeight:700,marginBottom:8,textTransform:"uppercase",display:"flex",alignItems:"center",flexWrap:"wrap",gap:8}}>
+          <span>{title}</span>
+          {cumple && (
+            <span style={{display:"inline-flex",alignItems:"center",gap:6,textTransform:"none",letterSpacing:0}}>
+              <span style={{padding:"3px 11px",borderRadius:999,background:cumple.ok?"#27ae60":"#e74c3c",color:"#fff",
+                fontSize:13,fontWeight:800,boxShadow:`0 1px 4px ${cumple.ok?"#27ae6055":"#e74c3c55"}`}}>{cumple.texto}</span>
+              <span style={{fontSize:10,color:"#888",fontWeight:600}}>{cumple.detalle}</span>
+            </span>
+          )}
+        </div>
         <div style={{background:"#fff",borderRadius:10,border:"1px solid #e2e5ed",padding:"4px 0",overflow:"hidden"}}>
           <svg viewBox={`0 0 ${W} ${SVG_H}`} style={{width:"100%",display:"block"}}>
             {inicio != null && (() => {
@@ -1970,7 +1979,7 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
     const svgMartin1 = makeSVG(allSeries.billing,       fmtEurK, svgW, 180, billStatsRows,  null, inicioMartin, !compareMode);
     const svgMartin2 = makeSVG(allSeries.ortho,         fmtInt,  svgW, 180, orthoStatsRows, null, inicioMartin, !compareMode);
     const svgMartin3 = makeSVG(allSeries.implants,      fmtInt,  svgW, 180, implStatsRows,  null, inicioMartin, !compareMode);
-    const svgClinic1 = makeSVG(clinicBillingSeries,     fmtEurK, svgW, 180, clinicBillingStats, {value:90000,color:'#e74c3c',label:'Objetivo 90k'}, inicioClinica, true, corteCobroClinica);
+    const svgClinic1 = makeSVG(clinicBillingSeries,     fmtEurK, svgW, 180, clinicBillingStats, objetivoCobro, inicioClinica, true, corteCobroClinica);
     const svgClinic2 = makeSVG(clinicOrthoSeries,       fmtInt,  svgW, 180, [], objetivoOrtho, inicioClinica, true, corteClinica);
     const svgClinic3 = makeSVG(clinicImplantsSeries,    fmtInt,  svgW, 180, [], objetivoImpl, inicioClinica, true, corteClinica);
 
@@ -2104,9 +2113,9 @@ h1{font-size:15px;margin:0 0 2px;color:#2c3250;}
 
 ${interanualHTML}
 
-${rowSVG('Cobrado y efectividad por paciente', svgMartin1, 'Cobrado y % de cierre CLÍNICA (Incluye producción Martin)', svgClinic1, true)}
-${rowSVG('Ortodoncia', svgMartin2, 'Ortodoncia CLÍNICA (Incluye producción Martin)', svgClinic2)}
-${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Martin)', svgClinic3)}
+${rowSVG('Cobrado y efectividad por paciente', svgMartin1, 'Cobrado y % de cierre CLÍNICA (Incluye producción Martin)' + insigniaHTML(cumpleCobro), svgClinic1, true)}
+${rowSVG('Ortodoncia', svgMartin2, 'Ortodoncia CLÍNICA (Incluye producción Martin)' + insigniaHTML(cumpleOrtho), svgClinic2)}
+${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Martin)' + insigniaHTML(cumpleImpl), svgClinic3)}
 </body></html>`;
 
     const w = window.open("","_blank");
@@ -2158,6 +2167,31 @@ ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Marti
   // Objetivos mensuales de 2026: 100 ortodoncias y 200 implantes al año.
   const objetivoOrtho = activeYear === 2026 ? { value: 100/12, color: "#e74c3c", label: "Objetivo 8,33" } : null;
   const objetivoImpl  = activeYear === 2026 ? { value: 200/12, color: "#e74c3c", label: "Objetivo 16,66" } : null;
+  const objetivoCobro = { value: 90000, color: "#e74c3c", label: "Objetivo 90k" };
+
+  // Cuánto se supera o cuánto falta del objetivo en lo que va de año. Solo
+  // cuentan los meses cerrados: el mes en curso está a medias y lo hundiría.
+  const cumplimiento = (data, objetivo) => {
+    if (!objetivo) return null;
+    const hasta = activeYear < currentYear ? 11
+                : activeYear === currentYear ? now.getMonth() - 1 : -1;
+    if (hasta < 0) return null;
+    let suma = 0;
+    for (let i = 0; i <= hasta; i++) suma += Number(data[i]) || 0;
+    const pct = Math.round((suma / (objetivo.value * (hasta + 1))) * 100);
+    const meses = hasta === 0 ? MONTHS_SHORT[0] : `${MONTHS_SHORT[0]}–${MONTHS_SHORT[hasta]}`;
+    return {
+      ok: pct >= 100,
+      texto: pct >= 100 ? `▲ Supera +${pct - 100}%` : `▼ Faltan ${100 - pct}%`,
+      detalle: `${pct}% del objetivo · ${meses.toLowerCase()}`,
+    };
+  };
+  const cumpleCobro = cumplimiento(cd.cobrado, objetivoCobro);
+  const cumpleOrtho = cumplimiento(cd.ortodoncia, objetivoOrtho);
+  const cumpleImpl  = cumplimiento(cd.implantes, objetivoImpl);
+  const insigniaHTML = c => !c ? "" :
+    `<span style="display:inline-block;margin-left:8px;padding:2px 9px;border-radius:999px;background:${c.ok?'#27ae60':'#e74c3c'};color:#fff;font-size:11px;font-weight:800;letter-spacing:0;text-transform:none;vertical-align:middle">${c.texto}</span>` +
+    `<span style="margin-left:6px;font-size:9px;color:#888;letter-spacing:0;text-transform:none;font-weight:600">${c.detalle}</span>`;
   const clinicImplantsSeries = [{ label:"Implantes",data:cd.implantes,color:"#3498db" }];
   const clinicOrthoSeries    = [{ label:"Ortodoncia",data:cd.ortodoncia,color:"#9b59b6" }];
 
@@ -2469,23 +2503,23 @@ ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Marti
       {[
         {
           titleM:"Cobrado y efectividad por paciente", seriesM:allSeries.billing,  fmtM:fmtEurK, statsM:billStatsRows,
-          titleC:"Cobrado y % de cierre CLÍNICA (Incluye producción Martin)", seriesC:clinicBillingSeries, fmtC:fmtEurK, targetC:{value:90000,color:"#e74c3c",label:"Objetivo 90k"}, statsC:clinicBillingStats, corteC:corteCobroClinica,
+          titleC:"Cobrado y % de cierre CLÍNICA (Incluye producción Martin)", seriesC:clinicBillingSeries, fmtC:fmtEurK, targetC:objetivoCobro, cumpleC:cumpleCobro, statsC:clinicBillingStats, corteC:corteCobroClinica,
         },
         {
           titleM:"Ortodoncia", seriesM:allSeries.ortho,    fmtM:fmtInt, statsM:orthoStatsRows,
-          titleC:"Ortodoncia CLÍNICA (Incluye producción Martin)", seriesC:clinicOrthoSeries,  fmtC:fmtInt, targetC:objetivoOrtho,
+          titleC:"Ortodoncia CLÍNICA (Incluye producción Martin)", seriesC:clinicOrthoSeries,  fmtC:fmtInt, targetC:objetivoOrtho, cumpleC:cumpleOrtho,
         },
         {
           titleM:"Implantes",  seriesM:allSeries.implants, fmtM:fmtInt, statsM:implStatsRows,
-          titleC:"Implantes CLÍNICA (Incluye producción Martin)",  seriesC:clinicImplantsSeries, fmtC:fmtInt, targetC:objetivoImpl,
+          titleC:"Implantes CLÍNICA (Incluye producción Martin)",  seriesC:clinicImplantsSeries, fmtC:fmtInt, targetC:objetivoImpl, cumpleC:cumpleImpl,
         },
-      ].map(({titleM,seriesM,fmtM,statsM=[],titleC,seriesC,fmtC,targetC=null,statsC=[],corteC=corteClinica},ri)=>(
+      ].map(({titleM,seriesM,fmtM,statsM=[],titleC,seriesC,fmtC,targetC=null,cumpleC=null,statsC=[],corteC=corteClinica},ri)=>(
         <div key={ri} style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0,borderTop:"1px solid #dde4ef"}}>
           <div style={{padding:"16px 12px 0 32px",borderRight:"2px solid #dde4ef"}}>
             <LineChart title={titleM} series={seriesM} formatVal={fmtM} statsRows={statsM} inicio={inicioMartin} promedio={!compareMode}/>
           </div>
           <div style={{padding:"16px 32px 0 12px"}}>
-            <LineChart title={titleC} series={seriesC} formatVal={fmtC} targetLine={targetC} statsRows={statsC} inicio={inicioClinica} promedio corte={corteC}/>
+            <LineChart title={titleC} series={seriesC} formatVal={fmtC} targetLine={targetC} statsRows={statsC} inicio={inicioClinica} promedio corte={corteC} cumple={cumpleC}/>
           </div>
         </div>
       ))}
