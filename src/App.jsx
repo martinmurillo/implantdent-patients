@@ -1784,8 +1784,8 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
   };
 
   // "corte" es el mes en que se parten los promedios; por defecto, el de la
-  // franja de Martin. Van por separado para que 2025 tenga los mismos dos
-  // promedios que 2026 sin pintar una llegada que ese año no hubo.
+  // franja de Martin. Van por separado para que la clínica pinte la franja
+  // sin partir el promedio (corte 0 = un solo promedio del año entero).
   const LineChart = ({ title, series, formatVal, statsRows = [], targetLine = null, inicio = null, promedio = false, corte = inicio }) => {
     // Doble eje: las series marcadas eje:"der" se miden aparte. Cobrado y
     // presupuestado se mueven en órdenes distintos y compartir eje dejaba la
@@ -1970,7 +1970,7 @@ function ProgresoPanel({ payments, items, patients, clinicStats=[], onSaveClinic
     const svgMartin1 = makeSVG(allSeries.billing,       fmtEurK, svgW, 180, billStatsRows,  null, inicioMartin, !compareMode);
     const svgMartin2 = makeSVG(allSeries.ortho,         fmtInt,  svgW, 180, orthoStatsRows, null, inicioMartin, !compareMode);
     const svgMartin3 = makeSVG(allSeries.implants,      fmtInt,  svgW, 180, implStatsRows,  null, inicioMartin, !compareMode);
-    const svgClinic1 = makeSVG(clinicBillingSeries,     fmtEurK, svgW, 180, clinicBillingStats, {value:90000,color:'#e74c3c',label:'Objetivo 90k'}, inicioClinica, true, corteClinica);
+    const svgClinic1 = makeSVG(clinicBillingSeries,     fmtEurK, svgW, 180, clinicBillingStats, {value:90000,color:'#e74c3c',label:'Objetivo 90k'}, inicioClinica, true, corteCobroClinica);
     const svgClinic2 = makeSVG(clinicOrthoSeries,       fmtInt,  svgW, 180, [], null, inicioClinica, true, corteClinica);
     const svgClinic3 = makeSVG(clinicImplantsSeries,    fmtInt,  svgW, 180, [], null, inicioClinica, true, corteClinica);
 
@@ -2153,6 +2153,8 @@ ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Marti
   // Un solo promedio del año entero (corte en enero deja un único tramo). En
   // 2026 la franja de "Inicio Martin" sigue saliendo, solo como referencia.
   const corteClinica  = activeYear <= INICIO_MARTIN.anio ? 0 : null;
+  // Salvo el cobrado de 2026, que sí se parte: enero-abril y desde mayo.
+  const corteCobroClinica = activeYear === INICIO_MARTIN.anio ? INICIO_MARTIN.mes : corteClinica;
   const clinicImplantsSeries = [{ label:"Implantes",data:cd.implantes,color:"#3498db" }];
   const clinicOrthoSeries    = [{ label:"Ortodoncia",data:cd.ortodoncia,color:"#9b59b6" }];
 
@@ -2464,7 +2466,7 @@ ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Marti
       {[
         {
           titleM:"Cobrado y efectividad por paciente", seriesM:allSeries.billing,  fmtM:fmtEurK, statsM:billStatsRows,
-          titleC:"Cobrado y % de cierre CLÍNICA (Incluye producción Martin)", seriesC:clinicBillingSeries, fmtC:fmtEurK, targetC:{value:90000,color:"#e74c3c",label:"Objetivo 90k"}, statsC:clinicBillingStats,
+          titleC:"Cobrado y % de cierre CLÍNICA (Incluye producción Martin)", seriesC:clinicBillingSeries, fmtC:fmtEurK, targetC:{value:90000,color:"#e74c3c",label:"Objetivo 90k"}, statsC:clinicBillingStats, corteC:corteCobroClinica,
         },
         {
           titleM:"Ortodoncia", seriesM:allSeries.ortho,    fmtM:fmtInt, statsM:orthoStatsRows,
@@ -2474,13 +2476,13 @@ ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Marti
           titleM:"Implantes",  seriesM:allSeries.implants, fmtM:fmtInt, statsM:implStatsRows,
           titleC:"Implantes CLÍNICA (Incluye producción Martin)",  seriesC:clinicImplantsSeries, fmtC:fmtInt,
         },
-      ].map(({titleM,seriesM,fmtM,statsM=[],titleC,seriesC,fmtC,targetC=null,statsC=[]},ri)=>(
+      ].map(({titleM,seriesM,fmtM,statsM=[],titleC,seriesC,fmtC,targetC=null,statsC=[],corteC=corteClinica},ri)=>(
         <div key={ri} style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0,borderTop:"1px solid #dde4ef"}}>
           <div style={{padding:"16px 12px 0 32px",borderRight:"2px solid #dde4ef"}}>
             <LineChart title={titleM} series={seriesM} formatVal={fmtM} statsRows={statsM} inicio={inicioMartin} promedio={!compareMode}/>
           </div>
           <div style={{padding:"16px 32px 0 12px"}}>
-            <LineChart title={titleC} series={seriesC} formatVal={fmtC} targetLine={targetC} statsRows={statsC} inicio={inicioClinica} promedio corte={corteClinica}/>
+            <LineChart title={titleC} series={seriesC} formatVal={fmtC} targetLine={targetC} statsRows={statsC} inicio={inicioClinica} promedio corte={corteC}/>
           </div>
         </div>
       ))}
