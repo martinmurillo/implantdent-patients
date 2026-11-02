@@ -2150,9 +2150,10 @@ ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Marti
     ? (selectedYears.includes(INICIO_MARTIN.anio) ? INICIO_MARTIN.mes : null)
     : mesInicioMartin(activeYear);
   const inicioClinica = mesInicioMartin(activeYear);
-  // Los años de antes de Martin parten sus promedios en el mismo mes, para
-  // comparar enero-abril y mayo-diciembre con los de 2026.
-  const corteClinica  = activeYear <= INICIO_MARTIN.anio ? INICIO_MARTIN.mes : null;
+  // 2026 parte sus promedios en la llegada de Martin. Los años de antes llevan
+  // un solo promedio del año entero: corte en enero deja un único tramo.
+  const corteClinica  = activeYear === INICIO_MARTIN.anio ? INICIO_MARTIN.mes
+                      : activeYear < INICIO_MARTIN.anio ? 0 : null;
   const clinicImplantsSeries = [{ label:"Implantes",data:cd.implantes,color:"#3498db" }];
   const clinicOrthoSeries    = [{ label:"Ortodoncia",data:cd.ortodoncia,color:"#9b59b6" }];
 

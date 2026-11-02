@@ -106,6 +106,11 @@ describe("promediosPorTramo", () => {
     assert.deepEqual(promediosPorTramo(datos, MAYO), [{ desde: 4, hasta: 5, valor: 6 }]);
   });
 
+  test("con corte en enero sale un solo promedio del año entero", () => {
+    const datos = [2, 4, 6, 8, 10, 0, 0, 0, 0, 0, 0, 0];
+    assert.deepEqual(promediosPorTramo(datos, 0), [{ desde: 0, hasta: 4, valor: 6 }]);
+  });
+
   test("sin mes de inicio no hay tramos", () => {
     assert.deepEqual(promediosPorTramo([1, 2, 3], null), []);
   });
