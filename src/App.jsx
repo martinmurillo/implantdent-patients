@@ -2169,12 +2169,12 @@ ${rowSVG('Implantes', svgMartin3, 'Implantes CLÍNICA (Incluye producción Marti
   const objetivoImpl  = activeYear === 2026 ? { value: 200/12, color: "#e74c3c", label: "Objetivo 16,66" } : null;
   const objetivoCobro = { value: 90000, color: "#e74c3c", label: "Objetivo 90k" };
 
-  // Cuánto se supera o cuánto falta del objetivo en lo que va de año. Solo
-  // cuentan los meses cerrados: el mes en curso está a medias y lo hundiría.
+  // Cuánto se supera o cuánto falta del objetivo de enero a la actualidad:
+  // hasta el último mes con valores, así se mueve en cuanto se carga uno nuevo.
   const cumplimiento = (data, objetivo) => {
     if (!objetivo) return null;
-    const hasta = activeYear < currentYear ? 11
-                : activeYear === currentYear ? now.getMonth() - 1 : -1;
+    let hasta = -1;
+    for (let i = 11; i >= 0; i--) if (Number(data[i])) { hasta = i; break; }
     if (hasta < 0) return null;
     let suma = 0;
     for (let i = 0; i <= hasta; i++) suma += Number(data[i]) || 0;
