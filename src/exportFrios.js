@@ -34,7 +34,7 @@ const relleno = argb => ({ type: "pattern", pattern: "solid", fgColor: { argb } 
 
 /**
  * pacientes: [{ hc, nombre, telefono, fecha, presupuesto, items:[{name,value}],
- *               descuentoPct, descuentoImporte, total, comentarios:[string] }]
+ *               descuentoPct, descuentoImporte, total, pagado, comentarios:[string] }]
  * corte: "dd/mm/aaaa" para la cabecera; archivo: nombre del .xlsx
  */
 export async function exportarFriosImplantes({ pacientes, corte, archivo }) {
@@ -85,6 +85,10 @@ export async function exportarFriosImplantes({ pacientes, corte, archivo }) {
     lineas.push({ tipo: "hueco" });
     if (p.descuentoImporte) lineas.push({ tipo: "otro", texto: `Descuento ${p.descuentoPct}%`, valor: -p.descuentoImporte });
     lineas.push({ tipo: "total", texto: "TOTAL PRESUPUESTO", valor: p.total });
+    // Aviso de pagos: un frío que ya pagó algo no es igual que uno que nunca pagó.
+    lineas.push(p.pagado > 0
+      ? { tipo: "pago", texto: "⚠ YA TIENE PAGOS — pagado", valor: p.pagado }
+      : { tipo: "sinpago", texto: "Sin pagos aún" });
 
     const comentarios = p.comentarios.length ? p.comentarios : ["Sin comentarios"];
     const n = Math.max(lineas.length, comentarios.length);
@@ -103,6 +107,16 @@ export async function exportarFriosImplantes({ pacientes, corte, archivo }) {
           c.font = { bold: true, color: { argb: l.color } };
           c.border = { top: { style: "thin", color: { argb: COLOR.borde } } };
         });
+        cA.alignment = { horizontal: "right" };
+      } else if (l.tipo === "pago") {
+        [cA, cB].forEach(c => {
+          c.fill = relleno("FFD4EFDF");
+          c.font = { bold: true, size: 12, color: { argb: "FF1E8449" } };
+          c.border = { bottom: { style: "thin", color: { argb: "FF1E8449" } } };
+        });
+        cA.alignment = { horizontal: "right" };
+      } else if (l.tipo === "sinpago") {
+        cA.font = { italic: true, color: { argb: "FF999999" } };
         cA.alignment = { horizontal: "right" };
       } else if (l.tipo === "total") {
         [cA, cB].forEach(c => {

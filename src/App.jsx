@@ -7014,6 +7014,7 @@ function AppCompleta() {
         hc: p.hc, nombre: p.name, telefono: p.phone, fecha: fmtDate(p.date),
         presupuesto: p.budget_no || p.budgetNo, items,
         descuentoPct: pct, descuentoImporte: discAmt, total: patientGrand(p),
+        pagado: (pagosPorPaciente.get(p.id) || VACIO).reduce((a, pay) => a + (parseFloat(pay.amount) || 0), 0),
         comentarios: [...historial, ...(p.notes?.trim() ? [`Notas: ${p.notes.trim()}`] : [])],
       };
     });
