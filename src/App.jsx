@@ -6992,48 +6992,33 @@ function AppCompleta() {
   }), [patients, pagosPorPaciente]);
   /* eslint-enable react-hooks/preserve-manual-memoization */
 
-  // Excel de los fríos que tienen implantes en el presupuesto. La fecha de
-  // corte va en el nombre del archivo y en la primera fila, para que cada
-  // exportación quede aparte y no pise la anterior.
+  // Excel de los fríos que tienen implantes en el presupuesto, con un bloque
+  // por paciente (ver exportFrios.js). La fecha de corte va en el nombre del
+  // archivo y en la cabecera, para que cada exportación quede aparte.
   const exportarFriosImplantes = async () => {
     const tieneImplante = p => getTxItems(p).some(t => /implant/i.test(t.name || "") && !/corona|aditamento/i.test(t.name || ""));
     const frios = archivedPatients
       .filter(p => getStatus(p) === "frío" && tieneImplante(p))
       .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
     if (!frios.length) { alert("No hay pacientes fríos con implantes en el presupuesto."); return; }
-    const eur = v => `${(parseFloat(v) || 0).toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
     const corte = today();
-    const SALTO = String.fromCharCode(10);   // salto de línea dentro de la celda
-    const filas = frios.map(p => {
-      const items = getTxItems(p).filter(t => (t.name || "").trim());
+    const pacientes = frios.map(p => {
+      const items = getTxItems(p);
       const sub = items.reduce((a, t) => a + (parseFloat(t.value) || 0), 0);
       const pct = getTxDiscountPct(p);
       const { discAmt } = applyDiscount(sub, pct, isPdfPriced(p));
-      const tratamientos = items.map(t => `${t.name.trim()}: ${eur(t.value)}`);
-      if (discAmt) tratamientos.push(`Descuento ${pct}%: -${eur(discAmt)}`);
       const historial = [...(p.history || [])]
         .sort((a, b) => (a.date || "").localeCompare(b.date || ""))
         .map(e => `${fmtDate(e.date)}: ${e.text}`);
-      const comentarios = [...historial, ...(p.notes?.trim() ? [`Notas: ${p.notes.trim()}`] : [])];
-      return [p.hc || "", p.name || "", p.phone || "", fmtDate(p.date), p.budget_no || p.budgetNo || "",
-              tratamientos.join(SALTO), patientGrand(p), comentarios.join(SALTO)];
+      return {
+        hc: p.hc, nombre: p.name, telefono: p.phone, fecha: fmtDate(p.date),
+        presupuesto: p.budget_no || p.budgetNo, items,
+        descuentoPct: pct, descuentoImporte: discAmt, total: patientGrand(p),
+        comentarios: [...historial, ...(p.notes?.trim() ? [`Notas: ${p.notes.trim()}`] : [])],
+      };
     });
-    const XLSX = await cargarXLSX();
-    const ws = XLSX.utils.aoa_to_sheet([
-      [`Pacientes fríos con implantes — fecha de corte: ${fmtDate(corte)}`],
-      [`${filas.length} paciente(s)`],
-      [],
-      ["HC", "Nombre completo", "Teléfono", "Fecha presupuesto", "Nº presupuesto", "Tratamientos y precios", "Valor total (€)", "Comentarios"],
-      ...filas,
-    ]);
-    ws["!cols"] = [{ wch: 9 }, { wch: 32 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 55 }, { wch: 14 }, { wch: 70 }];
-    for (let r = 4; r < 4 + filas.length; r++) {
-      const c = ws[XLSX.utils.encode_cell({ r, c: 6 })];
-      if (c) c.z = '#,##0.00 "€"';
-    }
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Fríos con implantes");
-    XLSX.writeFile(wb, `frios_implantes_corte_${corte}.xlsx`);
+    const { exportarFriosImplantes: exportar } = await import("./exportFrios.js");
+    await exportar({ pacientes, corte: fmtDate(corte), archivo: `frios_implantes_corte_${corte}.xlsx` });
   };
 
   const printDebts = () => {
