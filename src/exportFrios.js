@@ -1,26 +1,47 @@
-// Excel de pacientes fríos con implantes, con formato: un bloque por paciente
-// que baja varias filas. Primero y en negrita los implantes, multiunit y
-// coronas sobre implante con su suma; debajo el resto con su suma aparte.
+// Excel de pacientes fríos (con implantes o con ortodoncia), con formato: un
+// bloque por paciente que baja varias filas. Primero y en negrita el grupo
+// destacado con su suma; debajo el resto con su suma aparte.
 // Se usa ExcelJS porque SheetJS (xlsx) no escribe negritas ni colores. Se
 // carga solo al exportar, para no pesar en el arranque.
 
-// Implantes, multiunit y lo que va sobre implante (coronas, aditamentos...).
-export const esDeImplante = (nombre = "") => /implant|multi\s*-?\s*unit/i.test(nombre);
+// Cada exportación destaca un grupo de tratamientos: primero y en negrita,
+// con su suma; el resto va debajo con su suma aparte.
+const ORTO_RX = /ortodoncia|orthodontic|invisalign|invisaling|invisible\s|ortod|placa expansiva|hass/i;
+export const GRUPOS = {
+  implantes: {
+    hoja: "Fríos con implantes",
+    titulo: "Pacientes fríos con implantes",
+    seccion: "IMPLANTES · MULTIUNIT · CORONAS SOBRE IMPLANTE",
+    suma: "Suma implantes",
+    // Implantes, multiunit y lo que va sobre implante (coronas, aditamentos...).
+    entra: (nombre = "") => /implant|multi\s*-?\s*unit/i.test(nombre),
+    // Dentro del grupo: implantes, luego multiunit, luego coronas y el resto.
+    orden: (nombre = "") =>
+      /implant/i.test(nombre) && !/corona|aditamento|pilar/i.test(nombre) ? 0
+      : /multi\s*-?\s*unit/i.test(nombre) ? 1 : 2,
+    // Qué paciente sale: el que tiene un implante, no solo la corona.
+    paciente: items => items.some(t => /implant/i.test(t.name || "") && !/corona|aditamento/i.test(t.name || "")),
+  },
+  ortodoncia: {
+    hoja: "Fríos con ortodoncia",
+    titulo: "Pacientes fríos con ortodoncia",
+    seccion: "ORTODONCIA",
+    suma: "Suma ortodoncia",
+    entra: (nombre = "") => ORTO_RX.test(nombre),
+    orden: () => 0,
+    paciente: items => items.some(t => ORTO_RX.test(t.name || "")),
+  },
+};
 
-// Dentro del grupo: implantes, luego multiunit, luego coronas y el resto.
-const ordenImplante = (nombre = "") =>
-  /implant/i.test(nombre) && !/corona|aditamento|pilar/i.test(nombre) ? 0
-  : /multi\s*-?\s*unit/i.test(nombre) ? 1 : 2;
-
-export function separarTratamientos(items) {
+export function separarTratamientos(items, grupo = GRUPOS.implantes) {
   const limpios = items.filter(t => (t.name || "").trim());
-  const implantes = limpios.filter(t => esDeImplante(t.name))
+  const destacados = limpios.filter(t => grupo.entra(t.name))
     .map((t, i) => ({ t, i }))
-    .sort((a, b) => ordenImplante(a.t.name) - ordenImplante(b.t.name) || a.i - b.i)
+    .sort((a, b) => grupo.orden(a.t.name) - grupo.orden(b.t.name) || a.i - b.i)
     .map(x => x.t);
-  const otros = limpios.filter(t => !esDeImplante(t.name));
+  const otros = limpios.filter(t => !grupo.entra(t.name));
   const suma = arr => arr.reduce((a, t) => a + (parseFloat(t.value) || 0), 0);
-  return { implantes, otros, sumaImplantes: suma(implantes), sumaOtros: suma(otros) };
+  return { destacados, otros, sumaDestacados: suma(destacados), sumaOtros: suma(otros) };
 }
 
 const EUR = '#,##0.00 "€"';
@@ -35,23 +56,25 @@ const relleno = argb => ({ type: "pattern", pattern: "solid", fgColor: { argb } 
 /**
  * pacientes: [{ hc, nombre, telefono, fecha, presupuesto, items:[{name,value}],
  *               descuentoPct, descuentoImporte, total, pagado, comentarios:[string] }]
- * corte: "dd/mm/aaaa" para la cabecera; archivo: nombre del .xlsx
+ * tipo: "implantes" | "ortodoncia"; corte: "dd/mm/aaaa" para la cabecera;
+ * archivo: nombre del .xlsx
  */
-export async function exportarFriosImplantes({ pacientes, corte, archivo }) {
+export async function exportarFrios({ tipo = "implantes", pacientes, corte, archivo }) {
+  const grupo = GRUPOS[tipo];
   const { default: ExcelJS } = await import("exceljs");
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet("Fríos con implantes", {
+  const ws = wb.addWorksheet(grupo.hoja, {
     views: [{ showGridLines: false }],
     pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
   });
   ws.columns = [{ width: 46 }, { width: 15 }, { width: 3 }, { width: 80 }];
 
-  const datos = pacientes.map(p => ({ ...p, ...separarTratamientos(p.items) }));
-  const totalImplantes = datos.reduce((a, p) => a + p.sumaImplantes, 0);
+  const datos = pacientes.map(p => ({ ...p, ...separarTratamientos(p.items, grupo) }));
+  const totalDestacados = datos.reduce((a, p) => a + p.sumaDestacados, 0);
 
-  const t1 = ws.addRow([`Pacientes fríos con implantes — fecha de corte: ${corte}`]);
+  const t1 = ws.addRow([`${grupo.titulo} — fecha de corte: ${corte}`]);
   t1.font = { bold: true, size: 15, color: { argb: COLOR.cabecera } };
-  const t2 = ws.addRow([`${datos.length} paciente(s) · suma de implantes de todos:`, totalImplantes]);
+  const t2 = ws.addRow([`${datos.length} paciente(s) · ${grupo.suma.toLowerCase()} de todos:`, totalDestacados]);
   t2.font = { italic: true, color: { argb: "FF666666" } };
   t2.getCell(2).numFmt = EUR;
   t2.getCell(2).font = { bold: true, color: { argb: COLOR.implantesTexto } };
@@ -73,9 +96,9 @@ export async function exportarFriosImplantes({ pacientes, corte, archivo }) {
 
     // Columna de la izquierda: tratamientos. Derecha: comentarios en paralelo.
     const lineas = [];
-    lineas.push({ tipo: "seccion", texto: "IMPLANTES · MULTIUNIT · CORONAS SOBRE IMPLANTE", fondo: COLOR.implantes, color: COLOR.implantesTexto });
-    p.implantes.forEach(t => lineas.push({ tipo: "imp", texto: t.name.trim(), valor: parseFloat(t.value) || 0 }));
-    lineas.push({ tipo: "suma", texto: "Suma implantes", valor: p.sumaImplantes, fondo: COLOR.implantes, color: COLOR.implantesTexto });
+    lineas.push({ tipo: "seccion", texto: grupo.seccion, fondo: COLOR.implantes, color: COLOR.implantesTexto });
+    p.destacados.forEach(t => lineas.push({ tipo: "imp", texto: t.name.trim(), valor: parseFloat(t.value) || 0 }));
+    lineas.push({ tipo: "suma", texto: grupo.suma, valor: p.sumaDestacados, fondo: COLOR.implantes, color: COLOR.implantesTexto });
     if (p.otros.length) {
       lineas.push({ tipo: "hueco" });
       lineas.push({ tipo: "seccion", texto: "OTROS TRATAMIENTOS", fondo: COLOR.otros, color: COLOR.otrosTexto });

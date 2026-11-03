@@ -6992,15 +6992,15 @@ function AppCompleta() {
   }), [patients, pagosPorPaciente]);
   /* eslint-enable react-hooks/preserve-manual-memoization */
 
-  // Excel de los fríos que tienen implantes en el presupuesto, con un bloque
-  // por paciente (ver exportFrios.js). La fecha de corte va en el nombre del
-  // archivo y en la cabecera, para que cada exportación quede aparte.
-  const exportarFriosImplantes = async () => {
-    const tieneImplante = p => getTxItems(p).some(t => /implant/i.test(t.name || "") && !/corona|aditamento/i.test(t.name || ""));
+  // Excel de los fríos que tienen implantes (u ortodoncia) en el presupuesto,
+  // con un bloque por paciente (ver exportFrios.js). La fecha de corte va en
+  // el nombre del archivo y en la cabecera, para que cada exportación quede aparte.
+  const exportarFriosExcel = async (tipo) => {
+    const { exportarFrios, GRUPOS } = await import("./exportFrios.js");
     const frios = archivedPatients
-      .filter(p => getStatus(p) === "frío" && tieneImplante(p))
+      .filter(p => getStatus(p) === "frío" && GRUPOS[tipo].paciente(getTxItems(p)))
       .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-    if (!frios.length) { alert("No hay pacientes fríos con implantes en el presupuesto."); return; }
+    if (!frios.length) { alert(`No hay pacientes fríos con ${tipo} en el presupuesto.`); return; }
     const corte = today();
     const pacientes = frios.map(p => {
       const items = getTxItems(p);
@@ -7018,8 +7018,7 @@ function AppCompleta() {
         comentarios: [...historial, ...(p.notes?.trim() ? [`Notas: ${p.notes.trim()}`] : [])],
       };
     });
-    const { exportarFriosImplantes: exportar } = await import("./exportFrios.js");
-    await exportar({ pacientes, corte: fmtDate(corte), archivo: `frios_implantes_corte_${corte}.xlsx` });
+    await exportarFrios({ tipo, pacientes, corte: fmtDate(corte), archivo: `frios_${tipo}_corte_${corte}.xlsx` });
   };
 
   const printDebts = () => {
@@ -7484,11 +7483,15 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
                         {activeTab.label.toUpperCase()} — {activeTab.list.length} presupuesto(s)
                       </div>
                       {activeTab.id === "frío" && archivedLoaded && (
-                        <button onClick={exportarFriosImplantes}
-                          title="Excel con los fríos que tienen implantes en el presupuesto. La fecha de corte va en el nombre del archivo."
-                          style={{fontSize:12,padding:"5px 12px",borderRadius:6,border:"1px solid #1d6f42",background:"#1d6f4214",color:"#1d6f42",fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
-                          📊 Exportar fríos con implantes
-                        </button>
+                        <div style={{display:"flex",gap:8}}>
+                          {[["implantes","📊 Exportar fríos con implantes"],["ortodoncia","📊 Exportar fríos con ortodoncia"]].map(([tipo,txt])=>(
+                            <button key={tipo} onClick={()=>exportarFriosExcel(tipo)}
+                              title={`Excel con los fríos que tienen ${tipo} en el presupuesto. La fecha de corte va en el nombre del archivo.`}
+                              style={{fontSize:12,padding:"5px 12px",borderRadius:6,border:"1px solid #1d6f42",background:"#1d6f4214",color:"#1d6f42",fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
+                              {txt}
+                            </button>
+                          ))}
+                        </div>
                       )}
                     </div>
                   )}
