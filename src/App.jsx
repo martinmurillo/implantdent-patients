@@ -6992,6 +6992,50 @@ function AppCompleta() {
   }), [patients, pagosPorPaciente]);
   /* eslint-enable react-hooks/preserve-manual-memoization */
 
+  // Excel de los fríos que tienen implantes en el presupuesto. La fecha de
+  // corte va en el nombre del archivo y en la primera fila, para que cada
+  // exportación quede aparte y no pise la anterior.
+  const exportarFriosImplantes = async () => {
+    const tieneImplante = p => getTxItems(p).some(t => /implant/i.test(t.name || "") && !/corona|aditamento/i.test(t.name || ""));
+    const frios = archivedPatients
+      .filter(p => getStatus(p) === "frío" && tieneImplante(p))
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    if (!frios.length) { alert("No hay pacientes fríos con implantes en el presupuesto."); return; }
+    const eur = v => `${(parseFloat(v) || 0).toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+    const corte = today();
+    const SALTO = String.fromCharCode(10);   // salto de línea dentro de la celda
+    const filas = frios.map(p => {
+      const items = getTxItems(p).filter(t => (t.name || "").trim());
+      const sub = items.reduce((a, t) => a + (parseFloat(t.value) || 0), 0);
+      const pct = getTxDiscountPct(p);
+      const { discAmt } = applyDiscount(sub, pct, isPdfPriced(p));
+      const tratamientos = items.map(t => `${t.name.trim()}: ${eur(t.value)}`);
+      if (discAmt) tratamientos.push(`Descuento ${pct}%: -${eur(discAmt)}`);
+      const historial = [...(p.history || [])]
+        .sort((a, b) => (a.date || "").localeCompare(b.date || ""))
+        .map(e => `${fmtDate(e.date)}: ${e.text}`);
+      const comentarios = [...historial, ...(p.notes?.trim() ? [`Notas: ${p.notes.trim()}`] : [])];
+      return [p.hc || "", p.name || "", p.phone || "", fmtDate(p.date), p.budget_no || p.budgetNo || "",
+              tratamientos.join(SALTO), patientGrand(p), comentarios.join(SALTO)];
+    });
+    const XLSX = await cargarXLSX();
+    const ws = XLSX.utils.aoa_to_sheet([
+      [`Pacientes fríos con implantes — fecha de corte: ${fmtDate(corte)}`],
+      [`${filas.length} paciente(s)`],
+      [],
+      ["HC", "Nombre completo", "Teléfono", "Fecha presupuesto", "Nº presupuesto", "Tratamientos y precios", "Valor total (€)", "Comentarios"],
+      ...filas,
+    ]);
+    ws["!cols"] = [{ wch: 9 }, { wch: 32 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 55 }, { wch: 14 }, { wch: 70 }];
+    for (let r = 4; r < 4 + filas.length; r++) {
+      const c = ws[XLSX.utils.encode_cell({ r, c: 6 })];
+      if (c) c.z = '#,##0.00 "€"';
+    }
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Fríos con implantes");
+    XLSX.writeFile(wb, `frios_implantes_corte_${corte}.xlsx`);
+  };
+
   const printDebts = () => {
     const fmt = (v) => v ? `€${parseFloat(v).toLocaleString("es-ES",{minimumFractionDigits:2})}` : "-";
     const today = new Date().toISOString().slice(0,10);
@@ -7449,8 +7493,17 @@ tfoot td{font-weight:700;border-top:2px solid #bbb;padding:4px 6px}
                     <div style={{fontSize:12,color:"#555",marginBottom:10}}>Resultados para "{filter}" — todos los estados</div>
                   )}
                   {!isSearching && (
-                    <div style={{fontSize:11,color: activeTab.color,letterSpacing:1,marginBottom:10,fontWeight:700}}>
-                      {activeTab.label.toUpperCase()} — {activeTab.list.length} presupuesto(s)
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:10}}>
+                      <div style={{fontSize:11,color: activeTab.color,letterSpacing:1,fontWeight:700}}>
+                        {activeTab.label.toUpperCase()} — {activeTab.list.length} presupuesto(s)
+                      </div>
+                      {activeTab.id === "frío" && archivedLoaded && (
+                        <button onClick={exportarFriosImplantes}
+                          title="Excel con los fríos que tienen implantes en el presupuesto. La fecha de corte va en el nombre del archivo."
+                          style={{fontSize:12,padding:"5px 12px",borderRadius:6,border:"1px solid #1d6f42",background:"#1d6f4214",color:"#1d6f42",fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
+                          📊 Exportar fríos con implantes
+                        </button>
+                      )}
                     </div>
                   )}
                   {tabList.length===0 && (
