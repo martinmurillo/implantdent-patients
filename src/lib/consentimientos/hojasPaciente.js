@@ -87,6 +87,83 @@ function aPar(doc) {
   }
 }
 
+// Hoja de tratamientos: la de la pestaña TRATAMIENTOS del Excel de la clínica
+// (docs/Hoja primeras nueva Y hoja de tratamientos.xlsm), donde se anota a
+// mano cada visita. Recuadro con paciente y nº de historia, y debajo Fecha /
+// Tratamiento / Doctor / Aux. con 23 filas; igual en las dos caras. Se dibuja
+// aquí con las proporciones de las columnas del Excel, con el nombre y la
+// historia ya puestos y el logo arriba. Salen `copias` juegos, cada uno en un
+// papel a doble cara.
+export async function anadirHojaTratamientos(pdfLib, doc, paciente, { copias = 3, cargar = cargarPorUrl } = {}) {
+  const { StandardFonts, rgb } = pdfLib;
+  const normal = await doc.embedFont(StandardFonts.Helvetica);
+  const negrita = await doc.embedFont(StandardFonts.HelveticaBold);
+  let logo = null;
+  try { logo = await doc.embedPng(await cargar("/logo.png")); } catch { /* sin logo también sirve */ }
+
+  const negro = rgb(0, 0, 0);
+  const tinta = rgb(0.10, 0.16, 0.36);
+  const W = 595.28, H = 841.89;
+  const izq = 28, der = W - 28, ancho = der - izq;
+  // Fecha, Tratamiento, Doctor, Aux./Higie.: lo que mide cada una en el Excel.
+  const cortes = [0.14, 0.71, 0.852].map(f => izq + ancho * f);
+  const xHistoria = izq + ancho * 0.574;
+  const FILAS_HOJA = 23;
+  const altoFila = 29;
+  const yCaja = H - 70;               // borde de arriba del recuadro del paciente
+  const yTitulos = yCaja - 30;        // línea entre el recuadro y los títulos
+  const yFilas = yTitulos - 18;       // empiezan las filas
+  const yFin = yFilas - FILAS_HOJA * altoFila;
+
+  const nombre = limpio(paciente.nombre);
+  const historia = limpio(paciente.historia);
+  const linea = (pagina, x1, y1, x2, y2) =>
+    pagina.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, thickness: 0.8, color: negro });
+  const centrado = (pagina, texto, x1, x2, y, fuente, tam) =>
+    pagina.drawText(texto, { x: (x1 + x2) / 2 - fuente.widthOfTextAtSize(texto, tam) / 2, y, size: tam, font: fuente, color: negro });
+
+  const cara = () => {
+    const p = doc.addPage([W, H]);
+    if (logo) {
+      const alto = 34, anchoLogo = alto * logo.width / logo.height;
+      p.drawImage(logo, { x: der - anchoLogo, y: yCaja + 8, width: anchoLogo, height: alto });
+    }
+    // Recuadro del paciente
+    p.drawRectangle({ x: izq, y: yTitulos, width: ancho, height: yCaja - yTitulos,
+      borderColor: negro, borderWidth: 0.8 });
+    const yTexto = yTitulos + 10;
+    p.drawText("PACIENTE:", { x: izq + 5, y: yTexto, size: 14, font: normal, color: negro });
+    const xNombre = izq + 5 + normal.widthOfTextAtSize("PACIENTE:", 14) + 8;
+    if (nombre) escribir(p, negrita, nombre,
+      { x: xNombre, y: yTexto, hasta: xHistoria - 10, tam: 13, min: 8, color: tinta, cortar: true });
+    p.drawText("Nº H.C.:", { x: xHistoria, y: yTexto, size: 14, font: normal, color: negro });
+    const xHc = xHistoria + normal.widthOfTextAtSize("Nº H.C.:", 14) + 8;
+    if (historia) escribir(p, negrita, historia,
+      { x: xHc, y: yTexto, hasta: der - 5, tam: 13, min: 8, color: tinta, cortar: true });
+
+    // Títulos de las columnas y filas
+    const bordes = [izq, ...cortes, der];
+    centrado(p, "Fecha", bordes[0], bordes[1], yFilas + 5, normal, 11);
+    centrado(p, "Tratamiento", bordes[1], bordes[2], yFilas + 5, normal, 11);
+    centrado(p, "Doctor", bordes[2], bordes[3], yFilas + 5, normal, 11);
+    centrado(p, "Aux./Higie.", bordes[3], bordes[4], yFilas + 5, normal, 9.5);
+    for (let i = 0; i <= FILAS_HOJA; i++) linea(p, izq, yFilas - i * altoFila, der, yFilas - i * altoFila);
+    for (const x of bordes) linea(p, x, yTitulos, x, yFin);
+    const fecha = bordes[1] - bordes[0];
+    for (let i = 0; i < FILAS_HOJA; i++) {
+      const y = yFilas - i * altoFila - altoFila / 2 - 4;
+      for (const f of [0.27, 0.70])
+        p.drawText("/", { x: bordes[0] + fecha * f, y, size: 11, font: normal, color: negro });
+    }
+  };
+
+  for (let c = 0; c < copias; c++) {
+    aPar(doc);
+    cara();
+    cara();
+  }
+}
+
 export async function anadirPostop(pdfLib, doc, idioma, cargar = cargarPorUrl) {
   const extra = await pdfLib.PDFDocument.load(await cargar(`/postoperatorio/implantes_${idioma}.pdf`));
   aPar(doc);

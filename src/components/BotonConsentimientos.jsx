@@ -3,7 +3,8 @@ import { supabase } from "../supabase";
 import { componerDocumento, fechaLarga } from "../lib/consentimientos/merge";
 import { consentimientosDelPresupuesto } from "../lib/consentimientos/sugerencias";
 import { hojasConformidad, NOMBRES_CATEGORIA } from "../lib/consentimientos/conformidad";
-import { IDIOMAS_HOJAS, anadirPostop, anadirConformidad } from "../lib/consentimientos/hojasPaciente";
+import { IDIOMAS_HOJAS, anadirPostop, anadirConformidad, anadirHojaTratamientos }
+  from "../lib/consentimientos/hojasPaciente";
 import { translateTreatment } from "../treatments";
 
 // @react-pdf/renderer pesa 1,2 MB. Este botón está en TODAS las fichas de
@@ -23,6 +24,8 @@ const cargarPdf = () => Promise.all([
 //   reconstrucción estética) que tenga el presupuesto, con el nombre, la
 //   historia y las piezas ya escritos. Ver lib/consentimientos/conformidad.js.
 // Las dos salen en el mismo idioma: es el del paciente.
+// - Y siempre, la última, la hoja de tratamientos de la historia (tres juegos
+//   a doble cara) con el nombre y el nº de historia puestos.
 const CODIGO_IMPLANTES = "IMPLANTES";
 
 const tratamientosDe = (paciente) => Array.isArray(paciente.treatments)
@@ -82,6 +85,7 @@ export function BotonConsentimientos({ paciente }) {
   const [postop, setPostop] = useState(false);
   const [conformidad, setConformidad] = useState(false);
   const [idioma, setIdioma] = useState("ES");
+  const [hojaTratamientos, setHojaTratamientos] = useState(true);
   const [generando, setGenerando] = useState(false);
   const [progreso, setProgreso] = useState(null);
   // Resultado listo para abrir. No se abre solo: ver el comentario de generar().
@@ -163,7 +167,8 @@ export function BotonConsentimientos({ paciente }) {
   // Las filas de la hoja de conformidad que pide el presupuesto. Los nombres
   // solo hacen falta al imprimir; aquí basta con saber cuáles salen.
   const filasConformidad = hojasConformidad(tratamientosDe(paciente));
-  const hojasExtra = (postop ? 1 : 0) + (conformidad ? filasConformidad.length : 0);
+  const hojasExtra = (postop ? 1 : 0) + (conformidad ? filasConformidad.length : 0)
+    + (hojaTratamientos ? 1 : 0);
   const faltaDoctor = ids.some(id => !elegidos[id]);
 
   // Los del presupuesto arriba, el resto debajo con su separador.
@@ -246,7 +251,7 @@ export function BotonConsentimientos({ paciente }) {
         : await pdf(<DocumentoConjunto docs={paraImprimir} logoUrl={config.logo_url}/>).toBlob();
 
       const hojas = conformidad ? hojasConformidad(tratamientosDe(paciente), traductor(idioma)) : [];
-      if (postop || hojas.length) {
+      if (postop || hojas.length || hojaTratamientos) {
         setProgreso("añadiendo las hojas del paciente");
         const pdfLib = await import("pdf-lib");
         const doc = juntos
@@ -260,6 +265,10 @@ export function BotonConsentimientos({ paciente }) {
           await anadirConformidad(pdfLib, doc, idioma, hojas,
             { nombre: paciente.name, historia: paciente.hc });
           for (const h of hojas) titulos.push(`Conformidad · ${NOMBRES_CATEGORIA[h.categoria]} (${idioma}, x2)`);
+        }
+        if (hojaTratamientos) {
+          await anadirHojaTratamientos(pdfLib, doc, { nombre: paciente.name, historia: paciente.hc });
+          titulos.push("Hoja de tratamientos (x3)");
         }
         juntos = new Blob([await doc.save()], { type: "application/pdf" });
       }
@@ -291,6 +300,7 @@ export function BotonConsentimientos({ paciente }) {
     setPostop(false);
     setConformidad(false);
     setIdioma("ES");
+    setHojaTratamientos(true);
     setAbierto(false);
   };
 
@@ -430,12 +440,12 @@ export function BotonConsentimientos({ paciente }) {
               </div>
             )}
 
-            {!resultado && (filasConformidad.length > 0 || postop) && (
+            {!resultado && (
               <div style={{border:"1px solid #dde4ef", borderRadius:8, marginBottom:14,
                 padding:"8px 10px", fontSize:13}}>
                 {filasConformidad.length > 0 && (
                   <label style={{display:"flex", alignItems:"flex-start", gap:8, cursor:"pointer",
-                    marginBottom:(postop || conformidad) ? 8 : 0}}>
+                    marginBottom:8}}>
                     <input type="checkbox" checked={conformidad} style={{marginTop:3}}
                       onChange={()=>setConformidad(!conformidad)}/>
                     <span>
@@ -447,6 +457,15 @@ export function BotonConsentimientos({ paciente }) {
                     </span>
                   </label>
                 )}
+                <label style={{display:"flex", alignItems:"flex-start", gap:8, cursor:"pointer",
+                  marginBottom:(postop || conformidad) ? 8 : 0}}>
+                  <input type="checkbox" checked={hojaTratamientos} style={{marginTop:3}}
+                    onChange={()=>setHojaTratamientos(!hojaTratamientos)}/>
+                  <span>
+                    Hoja de tratamientos
+                    <span style={{color:"#888", fontSize:11.5}}> · tres copias a doble cara, al final</span>
+                  </span>
+                </label>
                 {(postop || conformidad) && (
                   <div style={{display:"flex", alignItems:"center", gap:8, fontSize:12.5}}>
                     <span style={{color:"#777"}}>Idioma de las hojas del paciente:</span>
