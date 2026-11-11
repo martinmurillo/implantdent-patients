@@ -259,7 +259,7 @@ export function BotonConsentimientos({ paciente }) {
         if (hojas.length) {
           await anadirConformidad(pdfLib, doc, idioma, hojas,
             { nombre: paciente.name, historia: paciente.hc });
-          for (const h of hojas) titulos.push(`Conformidad · ${NOMBRES_CATEGORIA[h.categoria]} (${idioma})`);
+          for (const h of hojas) titulos.push(`Conformidad · ${NOMBRES_CATEGORIA[h.categoria]} (${idioma}, x2)`);
         }
         juntos = new Blob([await doc.save()], { type: "application/pdf" });
       }
@@ -441,7 +441,7 @@ export function BotonConsentimientos({ paciente }) {
                     <span>
                       Conformidad con el resultado
                       <span style={{color:"#888", fontSize:11.5}}>
-                        {" · "}{filasConformidad.length === 1 ? "1 hoja" : `${filasConformidad.length} hojas`}:
+                        {" · "}{filasConformidad.length === 1 ? "1 hoja" : `${filasConformidad.length} hojas`}, dos copias de cada una:
                         {" "}{filasConformidad.map(h => NOMBRES_CATEGORIA[h.categoria]).join(", ")}
                       </span>
                     </span>

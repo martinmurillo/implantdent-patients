@@ -34,6 +34,30 @@ const FIN_HISTORIA = 564;
 const X_DETALLE = 220;          // columna "Nº de piezas / detalles"
 const FIN_DETALLE = 553;
 
+// Casillas de la declaración del paciente. No se marcan: el paciente la lee y
+// firma. Se tapan con blanco, y también el "Marque cada casilla" del rótulo.
+// Son las líneas base de los números 1 a 7 de cada punto; la casilla queda a
+// su izquierda, de x 31 a 43 y de 4 pt por debajo a 7 por encima.
+const DECLARACION = {
+  ES: { puntos: [433.9, 405.4, 376.9, 348.4, 309.4, 269.7, 241.2], aviso: [499.3, 470.7] },
+  CA: { puntos: [433.9, 405.4, 376.9, 348.4, 309.4, 269.7, 241.2], aviso: [499.3, 470.7] },
+  FR: { puntos: [433.9, 405.4, 376.9, 348.4, 298.2, 269.7, 241.2], aviso: [496.1, 470.7] },
+  EN: { puntos: [424.9, 406.2, 377.7, 349.2, 310.2, 270.4, 242.7], aviso: [518.8, 462.4] },
+};
+const FIN_AVISO = 566;
+
+function quitarCasillas(pagina, idioma, rgb) {
+  const d = DECLARACION[idioma] || DECLARACION.ES;
+  const blanco = rgb(1, 1, 1);
+  for (const y of d.puntos)
+    pagina.drawRectangle({ x: 29.5, y: y - 6, width: 15.5, height: 15, color: blanco });
+  const [x, y] = d.aviso;
+  pagina.drawRectangle({ x: x - 3, y: y - 3, width: FIN_AVISO - x + 3, height: 11, color: blanco });
+  // La raya del rótulo acababa donde empezaba el aviso: se alarga hasta el margen.
+  pagina.drawLine({ start: { x: x - 14, y: y + 2.4 }, end: { x: 564.1, y: y + 2.4 },
+    thickness: 0.6, color: rgb(0.85, 0.87, 0.91) });
+}
+
 // Helvetica de pdf-lib codifica en WinAnsi: lo que no está ahí revienta al
 // escribir. Los nombres son castellano/catalán/francés, que sí entran; esto
 // es por si acaso llega algo raro de la base.
@@ -71,6 +95,9 @@ export async function anadirPostop(pdfLib, doc, idioma, cargar = cargarPorUrl) {
 
 // Una hoja por fila del presupuesto, con nombre, historia y el detalle de esa
 // fila ya escritos. `hojas` es lo que devuelve hojasConformidad().
+//
+// Cada una sale dos veces: se firma por duplicado, un ejemplar para el
+// paciente y otro para la clínica.
 export async function anadirConformidad(pdfLib, doc, idioma, hojas, paciente, cargar = cargarPorUrl) {
   const { PDFDocument, StandardFonts, rgb } = pdfLib;
   const plantilla = await PDFDocument.load(await cargar(`/conformidad/conformidad_${idioma}.pdf`));
@@ -80,10 +107,11 @@ export async function anadirConformidad(pdfLib, doc, idioma, hojas, paciente, ca
   const nombre = limpio(paciente.nombre);
   const historia = limpio(paciente.historia);
 
-  for (const h of hojas) {
+  for (const h of hojas) for (let copia = 0; copia < 2; copia++) {
     aPar(doc);
     const [pagina] = await doc.copyPages(plantilla, [0]);
     doc.addPage(pagina);
+    quitarCasillas(pagina, idioma, rgb);
     if (nombre) escribir(pagina, fuente, nombre,
       { x: pos.nombre + 8, y: Y_DATOS + 1.5, hasta: FIN_NOMBRE, tam: 10.5, color, cortar: true });
     if (historia) escribir(pagina, fuente, historia,
