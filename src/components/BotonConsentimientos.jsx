@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
 import { componerDocumento, fechaLarga } from "../lib/consentimientos/merge";
 import { consentimientosDelPresupuesto } from "../lib/consentimientos/sugerencias";
+import { hojasConformidad, NOMBRES_CATEGORIA } from "../lib/consentimientos/conformidad";
+import { IDIOMAS_HOJAS, anadirPostop, anadirConformidad } from "../lib/consentimientos/hojasPaciente";
+import { translateTreatment } from "../treatments";
 
 // @react-pdf/renderer pesa 1,2 MB. Este botón está en TODAS las fichas de
 // paciente, así que importarlo arriba metía esos 1,2 MB en el bundle
@@ -13,12 +16,23 @@ const cargarPdf = () => Promise.all([
   import("../lib/consentimientos/DocumentoPDF"),
 ]);
 
-// Hoja de recomendaciones postoperatorias de implantes. No es un
-// consentimiento: es una hoja ya maquetada, en cuatro idiomas, que se lleva el
-// paciente. Va siempre que se imprime el de implantes, pegada al final del
-// mismo PDF para que no se olvide. Los archivos están en public/postoperatorio.
+// Al final del PDF van dos tipos de hoja ya maquetada, en cuatro idiomas:
+// - Recomendaciones postoperatorias, siempre que se imprime el de implantes.
+// - Conformidad con el resultado, una por cada fila de la hoja (prótesis
+//   sobre implantes, removible, coronas, carillas, blanqueamiento,
+//   reconstrucción estética) que tenga el presupuesto, con el nombre, la
+//   historia y las piezas ya escritos. Ver lib/consentimientos/conformidad.js.
+// Las dos salen en el mismo idioma: es el del paciente.
 const CODIGO_IMPLANTES = "IMPLANTES";
-const IDIOMAS_POSTOP = [["ES","Español"], ["CA","Català"], ["FR","Français"], ["EN","English"]];
+
+const tratamientosDe = (paciente) => Array.isArray(paciente.treatments)
+  ? paciente.treatments : (paciente.treatments?.items || []);
+
+// Los nombres del presupuesto están en castellano. Para la hoja francesa o
+// inglesa se traducen con el diccionario de la app; catalán no tiene, y se
+// quedan en castellano.
+const traductor = (idioma) => (idioma === "EN" || idioma === "FR")
+  ? (n) => translateTreatment(n, idioma.toLowerCase()) : (n) => n;
 
 // Botón de la ficha del paciente: salen los consentimientos, se marcan los que
 // hagan falta, y cada uno lleva su propio profesional. Sale un archivo con
@@ -64,8 +78,10 @@ export function BotonConsentimientos({ paciente }) {
   // id de plantilla → id de doctor. Estar en el mapa es estar seleccionado.
   const [elegidos, setElegidos] = useState({});
   const [firmante, setFirmante] = useState("paciente");
-  // Idioma de la hoja postoperatoria, o null si no va.
-  const [postop, setPostop] = useState(null);
+  // Hojas para el paciente al final del PDF, y en qué idioma.
+  const [postop, setPostop] = useState(false);
+  const [conformidad, setConformidad] = useState(false);
+  const [idioma, setIdioma] = useState("ES");
   const [generando, setGenerando] = useState(false);
   const [progreso, setProgreso] = useState(null);
   // Resultado listo para abrir. No se abre solo: ver el comentario de generar().
@@ -113,7 +129,8 @@ export function BotonConsentimientos({ paciente }) {
       }
       setElegidos(marcados);
       const impl = todas.find(x => x.codigo === CODIGO_IMPLANTES);
-      setPostop(impl && impl.id in marcados ? "ES" : null);
+      setPostop(!!impl && impl.id in marcados);
+      setConformidad(hojasConformidad(tratamientosDe(paciente)).length > 0);
     })();
     // paciente.treatments queda fuera a proposito: el presupuesto se lee una
     // vez, al abrir. Si cambiara con el modal abierto y esto se repitiera,
@@ -127,7 +144,7 @@ export function BotonConsentimientos({ paciente }) {
   const alternar = (id) => {
     // Marcar implantes trae la hoja postoperatoria; desmarcarlo la quita.
     if (plantillas.find(x => x.id === id)?.codigo === CODIGO_IMPLANTES) {
-      setPostop(id in elegidos ? null : (postop || "ES"));
+      setPostop(!(id in elegidos));
     }
     setElegidos(prev => alternarEn(prev, id));
   };
@@ -143,6 +160,10 @@ export function BotonConsentimientos({ paciente }) {
   const ponerDoctor = (id, docId) => setElegidos(prev => ({ ...prev, [id]: docId }));
 
   const ids = Object.keys(elegidos);
+  // Las filas de la hoja de conformidad que pide el presupuesto. Los nombres
+  // solo hacen falta al imprimir; aquí basta con saber cuáles salen.
+  const filasConformidad = hojasConformidad(tratamientosDe(paciente));
+  const hojasExtra = (postop ? 1 : 0) + (conformidad ? filasConformidad.length : 0);
   const faltaDoctor = ids.some(id => !elegidos[id]);
 
   // Los del presupuesto arriba, el resto debajo con su separador.
@@ -158,7 +179,7 @@ export function BotonConsentimientos({ paciente }) {
   ];
 
   async function generar() {
-    if (!config || ids.length === 0 || faltaDoctor) return;
+    if (!config || ids.length + hojasExtra === 0 || faltaDoctor) return;
     setGenerando(true);
     setError(null);
     try {
@@ -218,15 +239,29 @@ export function BotonConsentimientos({ paciente }) {
       // cuesta es maquetar el PDF, y hacerlo una vez en lugar de una por
       // consentimiento es la diferencia entre un segundo y diez.
       setProgreso("montando el PDF");
-      let juntos = paraImprimir.length === 1
+      const titulos = paraImprimir.map(d => d.titulo);
+      let juntos = paraImprimir.length === 0 ? null
+        : paraImprimir.length === 1
         ? await pdf(<DocumentoPDF {...paraImprimir[0]} logoUrl={config.logo_url}/>).toBlob()
         : await pdf(<DocumentoConjunto docs={paraImprimir} logoUrl={config.logo_url}/>).toBlob();
 
-      const titulos = paraImprimir.map(d => d.titulo);
-      if (postop) {
-        setProgreso("añadiendo la hoja postoperatoria");
-        juntos = await anadirPostop(juntos, postop);
-        titulos.push(`Recomendaciones postoperatorias (${postop})`);
+      const hojas = conformidad ? hojasConformidad(tratamientosDe(paciente), traductor(idioma)) : [];
+      if (postop || hojas.length) {
+        setProgreso("añadiendo las hojas del paciente");
+        const pdfLib = await import("pdf-lib");
+        const doc = juntos
+          ? await pdfLib.PDFDocument.load(await juntos.arrayBuffer())
+          : await pdfLib.PDFDocument.create();
+        if (postop) {
+          await anadirPostop(pdfLib, doc, idioma);
+          titulos.push(`Recomendaciones postoperatorias (${idioma})`);
+        }
+        if (hojas.length) {
+          await anadirConformidad(pdfLib, doc, idioma, hojas,
+            { nombre: paciente.name, historia: paciente.hc });
+          for (const h of hojas) titulos.push(`Conformidad · ${NOMBRES_CATEGORIA[h.categoria]} (${idioma})`);
+        }
+        juntos = new Blob([await doc.save()], { type: "application/pdf" });
       }
 
       // No se abre aquí. Generar el PDF lleva su tiempo —con diez, varios
@@ -253,7 +288,9 @@ export function BotonConsentimientos({ paciente }) {
     if (resultado) URL.revokeObjectURL(resultado.url);
     setResultado(null);
     setElegidos({});
-    setPostop(null);
+    setPostop(false);
+    setConformidad(false);
+    setIdioma("ES");
     setAbierto(false);
   };
 
@@ -378,26 +415,47 @@ export function BotonConsentimientos({ paciente }) {
                         background: postop ? "#f7f3e6" : "transparent", flexWrap:"wrap"}}>
                         <label style={{display:"flex", alignItems:"center", gap:8, flex:1,
                           minWidth:180, fontSize:13, cursor:"pointer"}}>
-                          <input type="checkbox" checked={!!postop}
-                            onChange={()=>setPostop(postop ? null : "ES")}/>
+                          <input type="checkbox" checked={postop}
+                            onChange={()=>setPostop(!postop)}/>
                           <span>
                             Recomendaciones postoperatorias
                             <span style={{color:"#888", fontSize:11}}> · hoja para el paciente</span>
                           </span>
                         </label>
-                        {postop && (
-                          <select value={postop} style={est.sel} aria-label="Idioma"
-                            onChange={e=>setPostop(e.target.value)}>
-                            {IDIOMAS_POSTOP.map(([v, t]) => (
-                              <option key={v} value={v}>{t}</option>
-                            ))}
-                          </select>
-                        )}
                       </div>
                     )}
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {!resultado && (filasConformidad.length > 0 || postop) && (
+              <div style={{border:"1px solid #dde4ef", borderRadius:8, marginBottom:14,
+                padding:"8px 10px", fontSize:13}}>
+                {filasConformidad.length > 0 && (
+                  <label style={{display:"flex", alignItems:"flex-start", gap:8, cursor:"pointer",
+                    marginBottom:(postop || conformidad) ? 8 : 0}}>
+                    <input type="checkbox" checked={conformidad} style={{marginTop:3}}
+                      onChange={()=>setConformidad(!conformidad)}/>
+                    <span>
+                      Conformidad con el resultado
+                      <span style={{color:"#888", fontSize:11.5}}>
+                        {" · "}{filasConformidad.length === 1 ? "1 hoja" : `${filasConformidad.length} hojas`}:
+                        {" "}{filasConformidad.map(h => NOMBRES_CATEGORIA[h.categoria]).join(", ")}
+                      </span>
+                    </span>
+                  </label>
+                )}
+                {(postop || conformidad) && (
+                  <div style={{display:"flex", alignItems:"center", gap:8, fontSize:12.5}}>
+                    <span style={{color:"#777"}}>Idioma de las hojas del paciente:</span>
+                    <select value={idioma} style={est.sel} aria-label="Idioma de las hojas"
+                      onChange={e=>setIdioma(e.target.value)}>
+                      {IDIOMAS_HOJAS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
             )}
 
@@ -415,10 +473,10 @@ export function BotonConsentimientos({ paciente }) {
                 </span>
               )}
               <button onClick={cerrar} style={est.gris}>Cancelar</button>
-              <button onClick={generar} disabled={generando || ids.length === 0 || faltaDoctor}
+              <button onClick={generar} disabled={generando || ids.length + hojasExtra === 0 || faltaDoctor}
                 style={{...est.oro,
-                  opacity:(generando || ids.length === 0 || faltaDoctor) ? 0.5 : 1}}>
-                {generando ? `Generando ${progreso || ""}...` : `Generar ${ids.length || ""}`}
+                  opacity:(generando || ids.length + hojasExtra === 0 || faltaDoctor) ? 0.5 : 1}}>
+                {generando ? `Generando ${progreso || ""}...` : `Generar ${(ids.length + hojasExtra) || ""}`}
               </button>
             </div>
             )}
@@ -429,25 +487,3 @@ export function BotonConsentimientos({ paciente }) {
   );
 }
 
-// Pega la hoja postoperatoria al final del PDF ya generado. pdf-lib se carga
-// aquí y no arriba por lo mismo que @react-pdf: solo lo descarga quien imprime.
-async function anadirPostop(blob, idioma) {
-  const [{ PDFDocument }, hoja] = await Promise.all([
-    import("pdf-lib"),
-    fetch(`/postoperatorio/implantes_${idioma}.pdf`).then(r => {
-      if (!r.ok) throw new Error("no se encuentra la hoja postoperatoria");
-      return r.arrayBuffer();
-    }),
-  ]);
-  const doc = await PDFDocument.load(await blob.arrayBuffer());
-  const extra = await PDFDocument.load(hoja);
-  // Si lo anterior acaba en cara impar, la hoja se imprimiría en su reverso:
-  // se mete una en blanco para que salga en papel aparte.
-  if (doc.getPageCount() % 2 === 1) {
-    const { width, height } = doc.getPage(0).getSize();
-    doc.addPage([width, height]);
-  }
-  const paginas = await doc.copyPages(extra, extra.getPageIndices());
-  paginas.forEach(p => doc.addPage(p));
-  return new Blob([await doc.save()], { type: "application/pdf" });
-}
