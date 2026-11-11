@@ -13,6 +13,13 @@ const cargarPdf = () => Promise.all([
   import("../lib/consentimientos/DocumentoPDF"),
 ]);
 
+// Hoja de recomendaciones postoperatorias de implantes. No es un
+// consentimiento: es una hoja ya maquetada, en cuatro idiomas, que se lleva el
+// paciente. Va siempre que se imprime el de implantes, pegada al final del
+// mismo PDF para que no se olvide. Los archivos están en public/postoperatorio.
+const CODIGO_IMPLANTES = "IMPLANTES";
+const IDIOMAS_POSTOP = [["ES","Español"], ["CA","Català"], ["FR","Français"], ["EN","English"]];
+
 // Botón de la ficha del paciente: salen los consentimientos, se marcan los que
 // hagan falta, y cada uno lleva su propio profesional. Sale un archivo con
 // todos los marcados, cada uno en hoja nueva, listo para imprimir y firmar.
@@ -57,6 +64,8 @@ export function BotonConsentimientos({ paciente }) {
   // id de plantilla → id de doctor. Estar en el mapa es estar seleccionado.
   const [elegidos, setElegidos] = useState({});
   const [firmante, setFirmante] = useState("paciente");
+  // Idioma de la hoja postoperatoria, o null si no va.
+  const [postop, setPostop] = useState(null);
   const [generando, setGenerando] = useState(false);
   const [progreso, setProgreso] = useState(null);
   // Resultado listo para abrir. No se abre solo: ver el comentario de generar().
@@ -103,6 +112,8 @@ export function BotonConsentimientos({ paciente }) {
         marcados[pl.id] = (fijo || delPresu)?.id || "";
       }
       setElegidos(marcados);
+      const impl = todas.find(x => x.codigo === CODIGO_IMPLANTES);
+      setPostop(impl && impl.id in marcados ? "ES" : null);
     })();
     // paciente.treatments queda fuera a proposito: el presupuesto se lee una
     // vez, al abrir. Si cambiara con el modal abierto y esto se repitiera,
@@ -113,7 +124,14 @@ export function BotonConsentimientos({ paciente }) {
   // Al marcar un consentimiento entra ya con su profesional habitual, si lo
   // tiene: implantes siempre los pone Sergio, la implantosoportada Leticia.
   // Sigue siendo un desplegable, así que se puede cambiar.
-  const alternar = (id) => setElegidos(prev => {
+  const alternar = (id) => {
+    // Marcar implantes trae la hoja postoperatoria; desmarcarlo la quita.
+    if (plantillas.find(x => x.id === id)?.codigo === CODIGO_IMPLANTES) {
+      setPostop(id in elegidos ? null : (postop || "ES"));
+    }
+    setElegidos(prev => alternarEn(prev, id));
+  };
+  const alternarEn = (prev, id) => {
     const n = { ...prev };
     if (id in n) { delete n[id]; return n; }
     const p = plantillas.find(x => x.id === id);
@@ -121,7 +139,7 @@ export function BotonConsentimientos({ paciente }) {
     const delPresu = doctores.find(d => d.colegiado && d.colegiado === paciente.doctor_colegiado);
     n[id] = (fijo || delPresu)?.id || "";
     return n;
-  });
+  };
   const ponerDoctor = (id, docId) => setElegidos(prev => ({ ...prev, [id]: docId }));
 
   const ids = Object.keys(elegidos);
@@ -200,9 +218,16 @@ export function BotonConsentimientos({ paciente }) {
       // cuesta es maquetar el PDF, y hacerlo una vez en lugar de una por
       // consentimiento es la diferencia entre un segundo y diez.
       setProgreso("montando el PDF");
-      const juntos = paraImprimir.length === 1
+      let juntos = paraImprimir.length === 1
         ? await pdf(<DocumentoPDF {...paraImprimir[0]} logoUrl={config.logo_url}/>).toBlob()
         : await pdf(<DocumentoConjunto docs={paraImprimir} logoUrl={config.logo_url}/>).toBlob();
+
+      const titulos = paraImprimir.map(d => d.titulo);
+      if (postop) {
+        setProgreso("añadiendo la hoja postoperatoria");
+        juntos = await anadirPostop(juntos, postop);
+        titulos.push(`Recomendaciones postoperatorias (${postop})`);
+      }
 
       // No se abre aquí. Generar el PDF lleva su tiempo —con diez, varios
       // segundos— y para cuando termina el navegador ya no considera que haya
@@ -211,7 +236,7 @@ export function BotonConsentimientos({ paciente }) {
       // nuevo y no se puede bloquear.
       setResultado({
         url: URL.createObjectURL(juntos),
-        titulos: paraImprimir.map(d => d.titulo),
+        titulos,
         apretados: paraImprimir.filter(d => d.escala < 1).map(d => d.titulo),
         conRelleno: paraImprimir.filter(d => d.relleno).map(d => d.titulo),
       });
@@ -228,6 +253,7 @@ export function BotonConsentimientos({ paciente }) {
     if (resultado) URL.revokeObjectURL(resultado.url);
     setResultado(null);
     setElegidos({});
+    setPostop(null);
     setAbierto(false);
   };
 
@@ -346,6 +372,29 @@ export function BotonConsentimientos({ paciente }) {
                         </select>
                       )}
                     </div>
+                    {p.codigo === CODIGO_IMPLANTES && (
+                      <div style={{display:"flex", alignItems:"center", gap:8,
+                        padding:"6px 10px 6px 30px", borderTop:"1px solid #f0f2f7",
+                        background: postop ? "#f7f3e6" : "transparent", flexWrap:"wrap"}}>
+                        <label style={{display:"flex", alignItems:"center", gap:8, flex:1,
+                          minWidth:180, fontSize:13, cursor:"pointer"}}>
+                          <input type="checkbox" checked={!!postop}
+                            onChange={()=>setPostop(postop ? null : "ES")}/>
+                          <span>
+                            Recomendaciones postoperatorias
+                            <span style={{color:"#888", fontSize:11}}> · hoja para el paciente</span>
+                          </span>
+                        </label>
+                        {postop && (
+                          <select value={postop} style={est.sel} aria-label="Idioma"
+                            onChange={e=>setPostop(e.target.value)}>
+                            {IDIOMAS_POSTOP.map(([v, t]) => (
+                              <option key={v} value={v}>{t}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    )}
                     </div>
                   );
                 })}
@@ -378,4 +427,27 @@ export function BotonConsentimientos({ paciente }) {
       )}
     </>
   );
+}
+
+// Pega la hoja postoperatoria al final del PDF ya generado. pdf-lib se carga
+// aquí y no arriba por lo mismo que @react-pdf: solo lo descarga quien imprime.
+async function anadirPostop(blob, idioma) {
+  const [{ PDFDocument }, hoja] = await Promise.all([
+    import("pdf-lib"),
+    fetch(`/postoperatorio/implantes_${idioma}.pdf`).then(r => {
+      if (!r.ok) throw new Error("no se encuentra la hoja postoperatoria");
+      return r.arrayBuffer();
+    }),
+  ]);
+  const doc = await PDFDocument.load(await blob.arrayBuffer());
+  const extra = await PDFDocument.load(hoja);
+  // Si lo anterior acaba en cara impar, la hoja se imprimiría en su reverso:
+  // se mete una en blanco para que salga en papel aparte.
+  if (doc.getPageCount() % 2 === 1) {
+    const { width, height } = doc.getPage(0).getSize();
+    doc.addPage([width, height]);
+  }
+  const paginas = await doc.copyPages(extra, extra.getPageIndices());
+  paginas.forEach(p => doc.addPage(p));
+  return new Blob([await doc.save()], { type: "application/pdf" });
 }
