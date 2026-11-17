@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../supabase";
-import { posicionPlantilla, esSuperior, agruparTratamientos, generarHojaRx, nombreDoctor } from "../lib/hojaRx";
+import { posicionPlantilla, esSuperior, agruparTratamientos, generarHojaRx, nombreDoctor, tablaTonos } from "../lib/hojaRx";
 import { separarPieza } from "../lib/consentimientos/conformidad";
 import { IDIOMAS_HOJAS } from "../lib/consentimientos/hojasPaciente";
 import { translateTreatment } from "../treatments";
@@ -20,7 +20,7 @@ const traductor = (idioma) => (idioma === "EN" || idioma === "FR")
 const nombreDe = (t) => t?.name ?? t?.nombre ?? "";
 const MAX_LADO = 3000;
 
-// Archivo → { bytes JPEG, ancho, alto, url para verla }.
+// Archivo → lienzo con la imagen tal cual, reducida si es enorme.
 async function leerRadiografia(archivo) {
   const buf = await archivo.arrayBuffer();
   let lienzo;
@@ -50,8 +50,23 @@ async function leerRadiografia(archivo) {
   const ctx = out.getContext("2d");
   ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, out.width, out.height);
   ctx.drawImage(lienzo, 0, 0, out.width, out.height);
-  const blob = await new Promise((ok, mal) => out.toBlob(b => b ? ok(b) : mal(new Error("no se pudo convertir la imagen")), "image/jpeg", 0.92));
-  return { bytes: new Uint8Array(await blob.arrayBuffer()), ancho: out.width, alto: out.height, url: URL.createObjectURL(blob) };
+  return out;
+}
+
+// Lienzo original + aclarar/invertir → { bytes JPEG, ancho, alto, url }.
+async function procesar(original, aclarar, invertir) {
+  const c = document.createElement("canvas");
+  c.width = original.width; c.height = original.height;
+  const ctx = c.getContext("2d");
+  ctx.drawImage(original, 0, 0);
+  if (aclarar > 0 || invertir) {
+    const datos = ctx.getImageData(0, 0, c.width, c.height);
+    const t = tablaTonos(aclarar, invertir), d = datos.data;
+    for (let i = 0; i < d.length; i += 4) { d[i] = t[d[i]]; d[i + 1] = t[d[i + 1]]; d[i + 2] = t[d[i + 2]]; }
+    ctx.putImageData(datos, 0, 0);
+  }
+  const blob = await new Promise((ok, mal) => c.toBlob(b => b ? ok(b) : mal(new Error("no se pudo convertir la imagen")), "image/jpeg", 0.92));
+  return { bytes: new Uint8Array(await blob.arrayBuffer()), ancho: c.width, alto: c.height, url: URL.createObjectURL(blob) };
 }
 
 const est = {
@@ -85,6 +100,9 @@ export function BotonHojaRx({ paciente }) {
   const [resultado, setResultado] = useState(null);
   const [error, setError] = useState(null);
   const marco = useRef(null);
+  const [original, setOriginal] = useState(null);
+  const [aclarar, setAclarar] = useState(0.35);
+  const [invertir, setInvertir] = useState(false);
   const [doctores, setDoctores] = useState([]);
   const [doctorId, setDoctorId] = useState("");
 
@@ -109,15 +127,32 @@ export function BotonHojaRx({ paciente }) {
     .filter(p => p && posicionPlantilla(p)))].sort((a, b) => a - b);
   const posDe = (p) => marcas[p] || posicionPlantilla(p);
 
+  // Cada cambio de aclarar/invertir rehace la imagen, con un respiro para no
+  // repetirlo en cada paso del deslizador.
+  useEffect(() => {
+    if (!original) return;
+    let vale = true;
+    const t = setTimeout(async () => {
+      try {
+        const nueva = await procesar(original, aclarar, invertir);
+        if (!vale) { URL.revokeObjectURL(nueva.url); return; }
+        setRx(prev => { if (prev) URL.revokeObjectURL(prev.url); return nueva; });
+        setResultado(null);
+      } catch (err) {
+        console.error(err);
+        setError("No se ha podido preparar la imagen: " + (err?.message || "error desconocido"));
+      }
+    }, 120);
+    return () => { vale = false; clearTimeout(t); };
+  }, [original, aclarar, invertir]);
+
   async function elegirArchivo(e) {
     const archivo = e.target.files?.[0];
     e.target.value = "";
     if (!archivo) return;
     setLeyendo(true); setError(null);
     try {
-      const nueva = await leerRadiografia(archivo);
-      if (rx) URL.revokeObjectURL(rx.url);
-      setRx(nueva);
+      setOriginal(await leerRadiografia(archivo));
       setMarcas({});
       setResultado(null);
     } catch (err) {
@@ -174,7 +209,7 @@ export function BotonHojaRx({ paciente }) {
   const cerrar = () => {
     if (rx) URL.revokeObjectURL(rx.url);
     if (resultado) URL.revokeObjectURL(resultado);
-    setRx(null); setMarcas({}); setFuera(new Set()); setElegida(null);
+    setRx(null); setOriginal(null); setMarcas({}); setFuera(new Set()); setElegida(null);
     setResultado(null); setError(null); setIdioma("ES");
     setAbierto(false);
   };
@@ -253,12 +288,24 @@ export function BotonHojaRx({ paciente }) {
                     );
                   })}
                 </div>
-                {Object.keys(marcas).length > 0 && (
-                  <button onClick={()=>{ setMarcas({}); setResultado(null); }}
-                    style={{...est.gris, fontSize:12, padding:"5px 10px", marginTop:8}}>
-                    Volver a las posiciones propuestas
-                  </button>
-                )}
+                <div style={{display:"flex", alignItems:"center", gap:14, flexWrap:"wrap", marginTop:8, fontSize:12.5}}>
+                  <label style={{display:"flex", alignItems:"center", gap:8}}>
+                    <span style={{color:"#777"}}>Aclarar</span>
+                    <input type="range" min="0" max="1" step="0.05" value={aclarar}
+                      onChange={e=>setAclarar(Number(e.target.value))} style={{width:160}}/>
+                    <span style={{width:34, color:"#555"}}>{Math.round(aclarar * 100)}%</span>
+                  </label>
+                  <label style={{display:"flex", alignItems:"center", gap:6, cursor:"pointer"}}>
+                    <input type="checkbox" checked={invertir} onChange={()=>setInvertir(!invertir)}/>
+                    Invertir
+                  </label>
+                  {Object.keys(marcas).length > 0 && (
+                    <button onClick={()=>{ setMarcas({}); setResultado(null); }}
+                      style={{...est.gris, fontSize:12, padding:"5px 10px", marginLeft:"auto"}}>
+                      Volver a las posiciones propuestas
+                    </button>
+                  )}
+                </div>
               </>
             )}
 

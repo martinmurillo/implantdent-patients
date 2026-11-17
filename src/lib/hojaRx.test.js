@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { posicionPlantilla, esSuperior, agruparTratamientos, piezasDelPresupuesto, repartir, nombreDoctor } from "./hojaRx.js";
+import { posicionPlantilla, esSuperior, agruparTratamientos, piezasDelPresupuesto, repartir, nombreDoctor, tablaTonos } from "./hojaRx.js";
 
 test("las piezas de la derecha del paciente caen a la izquierda de la imagen", () => {
   assert.ok(posicionPlantilla(16).x < 0.5);
@@ -37,6 +37,16 @@ test("agrupa por tratamiento con sus piezas", () => {
     { nombre: "Limpieza", piezas: [], sinPieza: 2 },
   ]);
   assert.deepEqual(piezasDelPresupuesto([{ name: "Implante   26" }, { name: "Corona   16" }, { name: "Limpieza" }, { name: "X   99" }]), ["16", "26"]);
+});
+
+test("tabla de tonos: sin tocar, aclarada e invertida", () => {
+  const igual = tablaTonos(0, false);
+  assert.equal(igual[0], 0); assert.equal(igual[128], 128); assert.equal(igual[255], 255);
+  const clara = tablaTonos(0.5, false);
+  assert.ok(clara[0] > 50 && clara[128] > 128 && clara[255] === 255);
+  for (let v = 1; v < 256; v++) assert.ok(clara[v] >= clara[v - 1]);
+  const neg = tablaTonos(0, true);
+  assert.equal(neg[0], 255); assert.equal(neg[255], 0);
 });
 
 test("nombre del doctor sin el artículo", () => {

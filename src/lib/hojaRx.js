@@ -117,6 +117,23 @@ export function repartir(xs, sep, min, max) {
   return r;
 }
 
+// ── Aclarar para imprimir ──────────────────────────────────────────────────
+// Una panorámica es casi toda gris medio, y en una impresora láser en blanco
+// y negro los grises medios salen más oscuros que en pantalla. Aclarar sube
+// el negro (menos tóner, menos contraste) y abre los medios; invertir pasa a
+// negativo. Sidexis no guarda su inversión al exportar el TIF, por eso se
+// hace aquí. Devuelve la tabla de 256 valores que se aplica a cada píxel.
+export function tablaTonos(aclarar = 0, invertir = false) {
+  const a = Math.min(1, Math.max(0, Number(aclarar) || 0));
+  const suelo = a * 150, gamma = 1 - a * 0.45;
+  const t = new Uint8ClampedArray(256);
+  for (let v = 0; v < 256; v++) {
+    const base = invertir ? 255 - v : v;
+    t[v] = Math.round(suelo + (255 - suelo) * Math.pow(base / 255, gamma));
+  }
+  return t;
+}
+
 // "Dra. Laura Pérez" a partir de la fila de doctors. El tratamiento se guarda
 // con artículo ("la Dra.") para los consentimientos; aquí sobra.
 export function nombreDoctor(d) {
