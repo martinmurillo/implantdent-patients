@@ -117,6 +117,14 @@ export function repartir(xs, sep, min, max) {
   return r;
 }
 
+// "Dra. Laura Pérez" a partir de la fila de doctors. El tratamiento se guarda
+// con artículo ("la Dra.") para los consentimientos; aquí sobra.
+export function nombreDoctor(d) {
+  if (!d?.name) return "";
+  const titulo = String(d.tratamiento || "").replace(/^\s*(el|la)\s+/i, "").trim();
+  return titulo && !titulo.includes("/") ? `${titulo} ${d.name}` : d.name;
+}
+
 // ── Textos ─────────────────────────────────────────────────────────────────
 export const TEXTOS = {
   ES: { titulo: "PLAN DE TRATAMIENTO", paciente: "Paciente", historia: "Nº H.C.", fecha: "Fecha",
@@ -140,7 +148,7 @@ const MM = 72 / 25.4;
 // grupos: lo que devuelve agruparTratamientos.
 // clinica: fila de clinica_config. logo: bytes PNG o null.
 export async function generarHojaRx(pdfLib, { imagen, marcas = [], grupos = [], paciente = {},
-  clinica = {}, logo = null, idioma = "ES", fecha = new Date() }) {
+  clinica = {}, logo = null, idioma = "ES", fecha = new Date(), doctor = "" }) {
   const { PDFDocument, StandardFonts, rgb } = pdfLib;
   const T = TEXTOS[idioma] || TEXTOS.ES;
   const doc = await PDFDocument.create();
@@ -153,15 +161,16 @@ export async function generarHojaRx(pdfLib, { imagen, marcas = [], grupos = [], 
   // y desde arriba en mm → coordenada pdf
   const Y = (mm) => H - mm * MM;
 
-  // Cabecera: logo y clínica a la izquierda, paciente a la derecha.
+  // Cabecera: logo y clínica a la izquierda, paciente y doctor a la derecha.
   let xTexto = izq;
+  let imgLogo = null;
   if (logo) {
-    try {
-      const img = await doc.embedPng(logo);
-      const alto = 16 * MM, ancho = alto * img.width / img.height;
-      p.drawImage(img, { x: izq, y: Y(10) - alto, width: ancho, height: alto });
-      xTexto = izq + ancho + 5 * MM;
-    } catch { /* sin logo también sirve */ }
+    try { imgLogo = await doc.embedPng(logo); } catch { /* sin logo también sirve */ }
+  }
+  if (imgLogo) {
+    const alto = 16 * MM, ancho = alto * imgLogo.width / imgLogo.height;
+    p.drawImage(imgLogo, { x: izq, y: Y(10) - alto, width: ancho, height: alto });
+    xTexto = izq + ancho + 5 * MM;
   }
   const lineasClinica = [
     [limpio(clinica.nombre_comercial || clinica.razon_social), negrita, 11],
@@ -178,10 +187,12 @@ export async function generarHojaRx(pdfLib, { imagen, marcas = [], grupos = [], 
     p.drawText(t, { x: der - f.widthOfTextAtSize(t, tam), y, size: tam, font: f, color: negro });
   };
   const fechaTxt = `${String(fecha.getDate()).padStart(2, "0")}/${String(fecha.getMonth() + 1).padStart(2, "0")}/${fecha.getFullYear()}`;
-  alDerecha(limpio(paciente.nombre), Y(14), negrita, 12);
-  if (paciente.historia) alDerecha(`${T.historia}: ${limpio(paciente.historia)}`, Y(14) - 15, normal, 9.5);
-  alDerecha(`${T.fecha}: ${fechaTxt}`, Y(14) - 28, normal, 9.5);
-  p.drawLine({ start: { x: izq, y: Y(34) }, end: { x: der, y: Y(34) }, thickness: 0.6, color: gris });
+  let yd = Y(14);
+  alDerecha(limpio(paciente.nombre), yd, negrita, 12); yd -= 15;
+  if (paciente.historia) { alDerecha(`${T.historia}: ${limpio(paciente.historia)}`, yd, normal, 9.5); yd -= 13; }
+  alDerecha(`${T.fecha}: ${fechaTxt}`, yd, normal, 9.5); yd -= 13;
+  if (doctor) alDerecha(limpio(doctor), yd, negrita, 9.5);
+  p.drawLine({ start: { x: izq, y: Y(36) }, end: { x: der, y: Y(36) }, thickness: 0.6, color: gris });
 
   // Radiografía a todo el ancho, con una franja encima y otra debajo para los
   // números de las piezas.
@@ -189,78 +200,100 @@ export async function generarHojaRx(pdfLib, { imagen, marcas = [], grupos = [], 
   const altoImg = Math.min(anchoImg * imagen.alto / imagen.ancho, 120 * MM);
   const anchoReal = altoImg * imagen.ancho / imagen.alto;
   const xImg = (W - anchoReal) / 2;
-  const topImg = Y(48);                  // borde de arriba de la imagen
+  const topImg = Y(48.5);                // borde de arriba de la imagen
   const baseImg = topImg - altoImg;
   const rx = await doc.embedJpg(imagen.bytes);
   p.drawImage(rx, { x: xImg, y: baseImg, width: anchoReal, height: altoImg });
 
-  // Marcas: una elipse alrededor del diente (negra con un filo blanco para
-  // que se vea sobre el gris), una raya hasta la franja y el número dentro de
-  // un círculo negro.
-  const radio = 3.2 * MM;
-  const rxE = 3.6 * MM, ryE = 6.5 * MM;
+  // Marcas: el número de la pieza en un círculo pequeño fuera de la imagen,
+  // una raya fina hasta el diente y una X donde está. Raya y X llevan un filo
+  // blanco por debajo para que se vean sobre el gris.
+  const radio = 2.3 * MM;
+  const brazo = 1.4 * MM;
   const pinta = (lista, arriba) => {
     if (!lista.length) return;
-    const yEtq = arriba ? topImg + 7 * MM : baseImg - 7 * MM;
+    const yEtq = arriba ? topImg + 5 * MM : baseImg - 5 * MM;
     const xs = repartir(lista.map(m => xImg + m.x * anchoReal), 2 * radio + 1.5, izq + radio, der - radio);
     lista.forEach((m, i) => {
       const cx = xImg + m.x * anchoReal, cy = topImg - m.y * altoImg;
-      const borde = arriba ? cy + ryE : cy - ryE;
-      for (const [grosor, color] of [[3.4, blanco], [1.4, negro]]) {
-        p.drawEllipse({ x: cx, y: cy, xScale: rxE, yScale: ryE, borderColor: color, borderWidth: grosor });
+      for (const [grosor, color] of [[1.8, blanco], [0.6, negro]]) {
         p.drawLine({ start: { x: xs[i], y: arriba ? yEtq - radio : yEtq + radio },
-          end: { x: cx, y: borde }, thickness: grosor === 1.4 ? 0.9 : 2.6, color });
+          end: { x: cx, y: cy }, thickness: grosor, color });
+      }
+      for (const [grosor, color] of [[2.4, blanco], [0.9, negro]]) {
+        p.drawLine({ start: { x: cx - brazo, y: cy - brazo }, end: { x: cx + brazo, y: cy + brazo }, thickness: grosor, color });
+        p.drawLine({ start: { x: cx - brazo, y: cy + brazo }, end: { x: cx + brazo, y: cy - brazo }, thickness: grosor, color });
       }
       p.drawCircle({ x: xs[i], y: yEtq, size: radio, color: negro });
       const t = String(m.pieza);
-      const s = 8.5;
+      const s = 6.5;
       p.drawText(t, { x: xs[i] - negrita.widthOfTextAtSize(t, s) / 2, y: yEtq - s * 0.35, size: s, font: negrita, color: blanco });
     });
   };
   pinta(marcas.filter(m => esSuperior(m.pieza)), true);
   pinta(marcas.filter(m => !esSuperior(m.pieza)), false);
 
-  // Lista de tratamientos, a dos columnas, debajo.
-  let y = baseImg - 22 * MM;
+  // Lista de tratamientos, a dos columnas, cada uno con una casilla vacía
+  // delante para escribir a mano.
+  let y = baseImg - 18 * MM;
   p.drawText(T.titulo, { x: izq, y, size: 12, font: negrita, color: negro });
   y -= 6;
   p.drawLine({ start: { x: izq, y }, end: { x: der, y }, thickness: 0.6, color: gris });
-  y -= 16;
+  y -= 20;
   const filas = grupos.map(g => {
     const partes = [];
     if (g.piezas.length) partes.push(g.piezas.join(", "));
     if (g.sinPieza > 1) partes.push(`x${g.sinPieza}`);
     return { nombre: limpio(g.nombre), detalle: partes.join(" · ") };
   });
-  const fin = 22 * MM;
-  const colAncho = (der - izq - 8 * MM) / 2;
-  let tam = 10, alto = 14.5;
+  const yPie = 20 * MM;                 // raya del pie
+  const fin = yPie + 12 * MM;           // la última fila no baja de aquí
+  const sepCol = 10 * MM;
+  const colAncho = (der - izq - sepCol) / 2;
+  let tam = 10, alto = 21;
   const porColumna = () => Math.floor((y - fin) / alto) + 1;
-  while (filas.length > 2 * porColumna() && tam > 7) { tam -= 0.5; alto = tam * 1.45; }
-  const n = porColumna();
-  const caben = Math.min(filas.length, 2 * n);
-  const unaColumna = filas.length <= Math.min(n, 8);
+  while (filas.length > 2 * porColumna() && tam > 7) { tam -= 0.5; alto = tam * 2.1; }
+  const caben = Math.min(filas.length, 2 * porColumna());
+  const porCol = Math.ceil(caben / 2);
   for (let k = 0; k < caben; k++) {
-    const col = unaColumna ? 0 : Math.floor(k / Math.ceil(caben / 2));
-    const fila = unaColumna ? k : k % Math.ceil(caben / 2);
-    const x = izq + col * (colAncho + 8 * MM);
-    const yy = y - fila * alto;
+    const x = izq + Math.floor(k / porCol) * (colAncho + sepCol);
+    const yy = y - (k % porCol) * alto;
     const hasta = x + colAncho;
+    const lado = Math.min(13, alto - 5);
+    p.drawRectangle({ x, y: yy - (lado - tam * 0.72) / 2, width: lado, height: lado,
+      borderColor: negro, borderWidth: 0.7 });
+    const xNom = x + lado + 6;
     const det = filas[k].detalle;
     const anchoDet = det ? negrita.widthOfTextAtSize(det, tam) + 6 : 0;
-    p.drawCircle({ x: x + 2, y: yy + tam * 0.33, size: 1.3, color: negro });
     let nom = filas[k].nombre;
-    if (normal.widthOfTextAtSize(nom, tam) > hasta - x - 8 - anchoDet) {
-      while (nom.length > 1 && normal.widthOfTextAtSize(nom + "…", tam) > hasta - x - 8 - anchoDet) nom = nom.slice(0, -1);
+    if (normal.widthOfTextAtSize(nom, tam) > hasta - xNom - anchoDet) {
+      while (nom.length > 1 && normal.widthOfTextAtSize(nom + "…", tam) > hasta - xNom - anchoDet) nom = nom.slice(0, -1);
       nom = nom.trimEnd() + "…";
     }
-    p.drawText(nom, { x: x + 8, y: yy, size: tam, font: normal, color: negro });
+    p.drawText(nom, { x: xNom, y: yy, size: tam, font: normal, color: negro });
     if (det) p.drawText(det, { x: hasta - anchoDet + 6, y: yy, size: tam, font: negrita, color: negro });
   }
   if (filas.length > caben) {
-    p.drawText(`+ ${filas.length - caben}`, { x: der - 20, y: fin - 12, size: 9, font: normal, color: gris });
+    p.drawText(`+ ${filas.length - caben}`, { x: der - 20, y: fin - 14, size: 9, font: normal, color: gris });
   }
-  if (marcas.length) p.drawText(T.nota, { x: izq, y: 12 * MM, size: 7.5, font: normal, color: gris });
+  if (marcas.length) p.drawText(T.nota, { x: izq, y: yPie + 4 * MM, size: 7, font: normal, color: gris });
+
+  // Pie: logo pequeño a la izquierda y los datos de la clínica en una línea.
+  p.drawLine({ start: { x: izq, y: yPie }, end: { x: der, y: yPie }, thickness: 0.6, color: gris });
+  let xPie = izq;
+  if (imgLogo) {
+    const alto = 9 * MM, ancho = alto * imgLogo.width / imgLogo.height;
+    p.drawImage(imgLogo, { x: izq, y: yPie - 3 * MM - alto, width: ancho, height: alto });
+    xPie = izq + ancho + 5 * MM;
+  }
+  const datosPie = [clinica.razon_social, clinica.direccion, clinica.poblacion,
+    clinica.telefono ? `${T.tel} ${clinica.telefono}` : ""].map(limpio).filter(Boolean).join("  ·  ");
+  if (datosPie) {
+    let tp = 8;
+    while (tp > 6 && normal.widthOfTextAtSize(datosPie, tp) > der - xPie) tp -= 0.25;
+    p.drawText(datosPie, { x: der - normal.widthOfTextAtSize(datosPie, tp), y: yPie - 3 * MM - 4.5 * MM - tp * 0.35,
+      size: tp, font: normal, color: gris });
+  }
 
   return doc.save();
 }

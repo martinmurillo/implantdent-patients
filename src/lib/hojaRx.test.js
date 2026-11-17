@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { posicionPlantilla, esSuperior, agruparTratamientos, piezasDelPresupuesto, repartir } from "./hojaRx.js";
+import { posicionPlantilla, esSuperior, agruparTratamientos, piezasDelPresupuesto, repartir, nombreDoctor } from "./hojaRx.js";
 
 test("las piezas de la derecha del paciente caen a la izquierda de la imagen", () => {
   assert.ok(posicionPlantilla(16).x < 0.5);
@@ -37,6 +37,14 @@ test("agrupa por tratamiento con sus piezas", () => {
     { nombre: "Limpieza", piezas: [], sinPieza: 2 },
   ]);
   assert.deepEqual(piezasDelPresupuesto([{ name: "Implante   26" }, { name: "Corona   16" }, { name: "Limpieza" }, { name: "X   99" }]), ["16", "26"]);
+});
+
+test("nombre del doctor sin el artículo", () => {
+  assert.equal(nombreDoctor({ name: "Sergio Molina", tratamiento: "el Dr." }), "Dr. Sergio Molina");
+  assert.equal(nombreDoctor({ name: "Laura Pérez", tratamiento: "la Dra." }), "Dra. Laura Pérez");
+  assert.equal(nombreDoctor({ name: "Alex Roca", tratamiento: "el Dr./la Dra." }), "Alex Roca");
+  assert.equal(nombreDoctor({ name: "Alex Roca" }), "Alex Roca");
+  assert.equal(nombreDoctor(null), "");
 });
 
 test("repartir separa las que se pisan y deja quietas las que no", () => {

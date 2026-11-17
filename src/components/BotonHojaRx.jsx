@@ -1,6 +1,6 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "../supabase";
-import { posicionPlantilla, esSuperior, agruparTratamientos, generarHojaRx } from "../lib/hojaRx";
+import { posicionPlantilla, esSuperior, agruparTratamientos, generarHojaRx, nombreDoctor } from "../lib/hojaRx";
 import { separarPieza } from "../lib/consentimientos/conformidad";
 import { IDIOMAS_HOJAS } from "../lib/consentimientos/hojasPaciente";
 import { translateTreatment } from "../treatments";
@@ -85,6 +85,22 @@ export function BotonHojaRx({ paciente }) {
   const [resultado, setResultado] = useState(null);
   const [error, setError] = useState(null);
   const marco = useRef(null);
+  const [doctores, setDoctores] = useState([]);
+  const [doctorId, setDoctorId] = useState("");
+
+  // Los doctores, al abrir. Sale puesto el que firmó el presupuesto, por su
+  // nº de colegiado, como en los consentimientos.
+  useEffect(() => {
+    if (!abierto) return;
+    (async () => {
+      const { data } = await supabase.from("doctors").select("id, name, colegiado, tratamiento")
+        .eq("activo", true).order("name");
+      const docs = data || [];
+      setDoctores(docs);
+      const delPresu = docs.find(d => d.colegiado && d.colegiado === paciente.doctor_colegiado);
+      setDoctorId(delPresu?.id || "");
+    })();
+  }, [abierto, paciente.doctor_colegiado]);
 
   const tratamientos = tratamientosDe(paciente);
   const incluidos = tratamientos.filter((_, i) => !fuera.has(i));
@@ -144,6 +160,7 @@ export function BotonHojaRx({ paciente }) {
         clinica: conf.data || {},
         logo,
         idioma,
+        doctor: nombreDoctor(doctores.find(d => d.id === doctorId)),
       });
       if (resultado) URL.revokeObjectURL(resultado);
       // No se abre solo: ver el comentario de generar() en BotonConsentimientos.
@@ -196,7 +213,7 @@ export function BotonHojaRx({ paciente }) {
             {rx && (
               <>
                 <div style={{fontSize:12.5, color:"#555", marginBottom:8, lineHeight:1.45}}>
-                  Las marcas salen donde suele estar cada pieza. <b>Arrastrá</b> la que no haya
+                  Cada X sale donde suele estar esa pieza. <b>Arrastrá</b> la que no haya
                   caído en su diente, o tocá una pieza de la lista y después el diente.
                   {elegida && <b style={{color:"#a07830"}}> Tocá en la radiografía dónde está la {elegida}.</b>}
                 </div>
@@ -213,6 +230,7 @@ export function BotonHojaRx({ paciente }) {
                   {piezas.map(p => {
                     const { x, y } = posDe(p);
                     const arriba = esSuperior(p);
+                    const activa = arrastrando === p || elegida === p;
                     return (
                       <div key={p}
                         onPointerDown={e=>{ e.stopPropagation(); e.currentTarget.setPointerCapture?.(e.pointerId); setArrastrando(p); setResultado(null); }}
@@ -220,13 +238,16 @@ export function BotonHojaRx({ paciente }) {
                         onClick={e=>e.stopPropagation()}
                         title={`Pieza ${p}: arrastrar`}
                         style={{position:"absolute", left:`${x*100}%`, top:`${y*100}%`,
-                          width:"3.9%", height:"13.2%", transform:"translate(-50%,-50%)",
-                          border:"2px solid #000", outline:"2px solid #fff", borderRadius:"50%",
-                          cursor: arrastrando === p ? "grabbing" : "grab",
-                          boxShadow: elegida === p ? "0 0 0 4px #c9a84c" : "none"}}>
+                          width:26, height:26, transform:"translate(-50%,-50%)",
+                          display:"flex", alignItems:"center", justifyContent:"center",
+                          cursor: arrastrando === p ? "grabbing" : "grab"}}>
+                        <svg width="14" height="14" viewBox="0 0 14 14" style={{pointerEvents:"none", overflow:"visible"}}>
+                          <path d="M2 2L12 12M2 12L12 2" stroke="#fff" strokeWidth="4" strokeLinecap="round"/>
+                          <path d="M2 2L12 12M2 12L12 2" stroke={activa ? "#c9a84c" : "#000"} strokeWidth="1.8" strokeLinecap="round"/>
+                        </svg>
                         <span style={{position:"absolute", left:"50%", [arriba ? "bottom" : "top"]:"100%",
-                          transform:`translate(-50%, ${arriba ? "-4px" : "4px"})`, background:"#000",
-                          color:"#fff", borderRadius:10, fontSize:11, fontWeight:700, padding:"1px 6px",
+                          transform:"translateX(-50%)", background: activa ? "#c9a84c" : "#000",
+                          color:"#fff", borderRadius:9, fontSize:10, fontWeight:700, padding:"0 5px",
                           border:"1px solid #fff", pointerEvents:"none"}}>{p}</span>
                       </div>
                     );
@@ -272,8 +293,14 @@ export function BotonHojaRx({ paciente }) {
               })}
             </div>
 
-            <div style={{display:"flex", alignItems:"center", gap:8, fontSize:12.5, marginBottom:12}}>
-              <span style={{color:"#777"}}>Idioma de la hoja:</span>
+            <div style={{display:"flex", alignItems:"center", gap:8, fontSize:12.5, marginBottom:12, flexWrap:"wrap"}}>
+              <span style={{color:"#777"}}>Doctor:</span>
+              <select value={doctorId} style={est.sel} aria-label="Doctor"
+                onChange={e=>{ setDoctorId(e.target.value); setResultado(null); }}>
+                <option value="">Sin doctor</option>
+                {doctores.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+              <span style={{color:"#777", marginLeft:10}}>Idioma de la hoja:</span>
               <select value={idioma} style={est.sel} aria-label="Idioma de la hoja"
                 onChange={e=>{ setIdioma(e.target.value); setResultado(null); }}>
                 {IDIOMAS_HOJAS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
