@@ -16,6 +16,7 @@ import { escalaY, promediosPorTramo } from "./chartScale";
 import { comparaInteranual } from "./interanual";
 import PanelMutua from "./mutua/PanelMutua.jsx";
 import { BotonConsentimientos } from "./components/BotonConsentimientos";
+import { BotonHojaRx } from "./components/BotonHojaRx";
 import { EditorPlantillas } from "./components/EditorPlantillas";
 import { PLAZOS as FRAG_PLAZOS, financiable, motivoNoFinanciable,
          comisionFrakmenta, calcFrakmenta, lineaDeTiempo, fraseTramos,
@@ -1236,6 +1237,7 @@ function PatientCard({ patient, onEdit, onSetStatus, onDelete, patientPayments=[
                 )
             ))}
             <BotonConsentimientos paciente={patient}/>
+            <BotonHojaRx paciente={patient}/>
           </div>
         </div>
       </div>

@@ -1,0 +1,266 @@
+// Hoja de radiografía: un A4 con el logo y los datos de la clínica arriba, la
+// panorámica del paciente en medio con las piezas del presupuesto marcadas
+// sobre ella, y abajo la lista de tratamientos. Sale entera del botón, en
+// papel en blanco: la radiografía la sube quien imprime (el TIF que exporta
+// Sidexis) y no se guarda en ningún sitio.
+//
+// No hay IA: las piezas ya vienen en el presupuesto ("Corona zirconio   21").
+// Lo único que hay que saber es dónde cae cada una en la imagen. La app
+// propone una posición con la plantilla de abajo y en pantalla se arrastra la
+// marca encima del diente si no ha caído bien.
+//
+// pdf-lib llega por parámetro, con import() dinámico desde quien llama, igual
+// que en hojasPaciente.js.
+
+import { separarPieza } from "./consentimientos/conformidad.js";
+
+// ── Dónde cae cada pieza en una panorámica ─────────────────────────────────
+// Medido sobre una panorámica del aparato de la clínica (Sidexis, 2440×1292).
+// Distancia horizontal desde la línea media, en fracción del ancho de la
+// imagen, para las posiciones 1 (central) a 8 (cordal). El cuadrante 1 y el 4
+// (derecha del paciente) caen a la izquierda de la imagen.
+const DESDE_CENTRO = [0.013, 0.036, 0.062, 0.090, 0.120, 0.160, 0.205, 0.250];
+// Altura del centro de la marca: entre corona y raíz de cada arcada.
+const Y_SUPERIOR = 0.48;
+const Y_INFERIOR = 0.68;
+
+// Pieza FDI → { x, y } en fracción de la imagen (0..1), o null si no es una
+// pieza válida. Las temporales (51-85) van donde su permanente.
+export function posicionPlantilla(pieza) {
+  const n = Number(pieza);
+  if (!Number.isInteger(n)) return null;
+  let cuadrante = Math.floor(n / 10), pos = n % 10;
+  if (cuadrante >= 5 && cuadrante <= 8) {
+    if (pos > 5) return null;
+    cuadrante -= 4;
+  }
+  if (cuadrante < 1 || cuadrante > 4 || pos < 1 || pos > 8) return null;
+  const lado = (cuadrante === 1 || cuadrante === 4) ? -1 : 1;
+  return {
+    x: 0.5 + lado * DESDE_CENTRO[pos - 1],
+    y: cuadrante <= 2 ? Y_SUPERIOR : Y_INFERIOR,
+  };
+}
+
+export const esSuperior = (pieza) => [1, 2, 5, 6].includes(Math.floor(Number(pieza) / 10));
+
+// ── Tratamientos ───────────────────────────────────────────────────────────
+// Agrupa los tratamientos del presupuesto por nombre, con sus piezas. Los
+// repetidos sin pieza se cuentan. `traducir` pasa el nombre al idioma.
+export function agruparTratamientos(tratamientos = [], traducir = (x) => x) {
+  const grupos = new Map();
+  for (const t of tratamientos) {
+    const nombre = t?.name ?? t?.nombre ?? t;
+    if (!String(nombre || "").trim()) continue;
+    const { base, pieza } = separarPieza(nombre);
+    const nom = traducir(base);
+    const g = grupos.get(nom) || { nombre: nom, piezas: [], sinPieza: 0 };
+    grupos.set(nom, g);
+    if (pieza) { if (!g.piezas.includes(pieza)) g.piezas.push(pieza); }
+    else g.sinPieza++;
+  }
+  const lista = [...grupos.values()];
+  for (const g of lista) g.piezas.sort((a, b) => a - b);
+  return lista;
+}
+
+// Las piezas distintas que salen en el presupuesto y se pueden marcar.
+export function piezasDelPresupuesto(tratamientos = []) {
+  const set = new Set();
+  for (const t of tratamientos) {
+    const { pieza } = separarPieza(t?.name ?? t?.nombre ?? t);
+    if (pieza && posicionPlantilla(pieza)) set.add(pieza);
+  }
+  return [...set].sort((a, b) => a - b);
+}
+
+// Reparte etiquetas en una fila para que no se pisen: cada una queda lo más
+// cerca posible de su x, a `sep` como mínimo de la de al lado, y dentro de
+// [min, max]. Devuelve las x en el mismo orden en que llegan.
+export function repartir(xs, sep, min, max) {
+  const orden = xs.map((x, i) => ({ x, i })).sort((a, b) => a.x - b.x);
+  const n = orden.length;
+  if (!n) return [];
+  // Si no caben todas, se reparten a lo ancho.
+  if ((n - 1) * sep > max - min) {
+    const paso = n > 1 ? (max - min) / (n - 1) : 0;
+    const r = [];
+    orden.forEach((o, k) => { r[o.i] = min + k * paso; });
+    return r;
+  }
+  const pos = orden.map(o => Math.min(max, Math.max(min, o.x)));
+  // Se empuja a la derecha lo que se pisa y luego a la izquierda lo que se sale.
+  for (let k = 1; k < n; k++) pos[k] = Math.max(pos[k], pos[k - 1] + sep);
+  if (pos[n - 1] > max) {
+    pos[n - 1] = max;
+    for (let k = n - 2; k >= 0; k--) pos[k] = Math.min(pos[k], pos[k + 1] - sep);
+  }
+  // Y se centra cada bloque de etiquetas apiñadas sobre sus x reales, para que
+  // un grupo empujado no quede todo a un lado.
+  let a = 0;
+  while (a < n) {
+    let b = a;
+    while (b + 1 < n && pos[b + 1] - pos[b] <= sep + 1e-6) b++;
+    if (b > a) {
+      const media = orden.slice(a, b + 1).reduce((s, o) => s + o.x, 0) / (b - a + 1);
+      const centro = (pos[a] + pos[b]) / 2;
+      let d = media - centro;
+      const izq = a > 0 ? pos[a - 1] + sep : min;
+      const der = b < n - 1 ? pos[b + 1] - sep : max;
+      d = Math.max(izq - pos[a], Math.min(der - pos[b], d));
+      for (let k = a; k <= b; k++) pos[k] += d;
+    }
+    a = b + 1;
+  }
+  const r = [];
+  orden.forEach((o, k) => { r[o.i] = pos[k]; });
+  return r;
+}
+
+// ── Textos ─────────────────────────────────────────────────────────────────
+export const TEXTOS = {
+  ES: { titulo: "PLAN DE TRATAMIENTO", paciente: "Paciente", historia: "Nº H.C.", fecha: "Fecha",
+        nota: "Los números marcados sobre la radiografía son las piezas dentales (numeración FDI).", tel: "Tel." },
+  CA: { titulo: "PLA DE TRACTAMENT", paciente: "Pacient", historia: "Núm. H.C.", fecha: "Data",
+        nota: "Els números marcats sobre la radiografia són les peces dentals (numeració FDI).", tel: "Tel." },
+  FR: { titulo: "PLAN DE TRAITEMENT", paciente: "Patient", historia: "N° dossier", fecha: "Date",
+        nota: "Les numéros marqués sur la radiographie sont les dents (numérotation FDI).", tel: "Tél." },
+  EN: { titulo: "TREATMENT PLAN", paciente: "Patient", historia: "Record no.", fecha: "Date",
+        nota: "The numbers marked on the X-ray are the teeth (FDI numbering).", tel: "Tel." },
+};
+
+// Helvetica de pdf-lib codifica en WinAnsi: lo que no entra revienta.
+const limpio = (s) => String(s || "").replace(/\s+/g, " ").replace(/[^\x20-\x7E\xA0-\xFF·]/g, "").trim();
+
+const MM = 72 / 25.4;
+
+// ── El PDF ─────────────────────────────────────────────────────────────────
+// imagen: { bytes (JPEG), ancho, alto } en píxeles.
+// marcas: [{ pieza, x, y }] con x, y en fracción de la imagen.
+// grupos: lo que devuelve agruparTratamientos.
+// clinica: fila de clinica_config. logo: bytes PNG o null.
+export async function generarHojaRx(pdfLib, { imagen, marcas = [], grupos = [], paciente = {},
+  clinica = {}, logo = null, idioma = "ES", fecha = new Date() }) {
+  const { PDFDocument, StandardFonts, rgb } = pdfLib;
+  const T = TEXTOS[idioma] || TEXTOS.ES;
+  const doc = await PDFDocument.create();
+  const W = 595.28, H = 841.89;
+  const p = doc.addPage([W, H]);
+  const normal = await doc.embedFont(StandardFonts.Helvetica);
+  const negrita = await doc.embedFont(StandardFonts.HelveticaBold);
+  const negro = rgb(0, 0, 0), gris = rgb(0.35, 0.35, 0.35), blanco = rgb(1, 1, 1);
+  const izq = 12 * MM, der = W - 12 * MM;
+  // y desde arriba en mm → coordenada pdf
+  const Y = (mm) => H - mm * MM;
+
+  // Cabecera: logo y clínica a la izquierda, paciente a la derecha.
+  let xTexto = izq;
+  if (logo) {
+    try {
+      const img = await doc.embedPng(logo);
+      const alto = 16 * MM, ancho = alto * img.width / img.height;
+      p.drawImage(img, { x: izq, y: Y(10) - alto, width: ancho, height: alto });
+      xTexto = izq + ancho + 5 * MM;
+    } catch { /* sin logo también sirve */ }
+  }
+  const lineasClinica = [
+    [limpio(clinica.nombre_comercial || clinica.razon_social), negrita, 11],
+    [limpio(clinica.direccion), normal, 9],
+    [limpio([clinica.poblacion].filter(Boolean).join("")), normal, 9],
+    [clinica.telefono ? `${T.tel} ${limpio(clinica.telefono)}` : "", normal, 9],
+  ].filter(([t]) => t);
+  let yc = Y(14);
+  for (const [t, f, s] of lineasClinica) { p.drawText(t, { x: xTexto, y: yc, size: s, font: f, color: negro }); yc -= s + 3.5; }
+
+  const alDerecha = (t, y, f, s) => {
+    let tam = s;
+    while (tam > 7 && f.widthOfTextAtSize(t, tam) > der - W / 2) tam -= 0.25;
+    p.drawText(t, { x: der - f.widthOfTextAtSize(t, tam), y, size: tam, font: f, color: negro });
+  };
+  const fechaTxt = `${String(fecha.getDate()).padStart(2, "0")}/${String(fecha.getMonth() + 1).padStart(2, "0")}/${fecha.getFullYear()}`;
+  alDerecha(limpio(paciente.nombre), Y(14), negrita, 12);
+  if (paciente.historia) alDerecha(`${T.historia}: ${limpio(paciente.historia)}`, Y(14) - 15, normal, 9.5);
+  alDerecha(`${T.fecha}: ${fechaTxt}`, Y(14) - 28, normal, 9.5);
+  p.drawLine({ start: { x: izq, y: Y(34) }, end: { x: der, y: Y(34) }, thickness: 0.6, color: gris });
+
+  // Radiografía a todo el ancho, con una franja encima y otra debajo para los
+  // números de las piezas.
+  const anchoImg = der - izq;
+  const altoImg = Math.min(anchoImg * imagen.alto / imagen.ancho, 120 * MM);
+  const anchoReal = altoImg * imagen.ancho / imagen.alto;
+  const xImg = (W - anchoReal) / 2;
+  const topImg = Y(48);                  // borde de arriba de la imagen
+  const baseImg = topImg - altoImg;
+  const rx = await doc.embedJpg(imagen.bytes);
+  p.drawImage(rx, { x: xImg, y: baseImg, width: anchoReal, height: altoImg });
+
+  // Marcas: una elipse alrededor del diente (negra con un filo blanco para
+  // que se vea sobre el gris), una raya hasta la franja y el número dentro de
+  // un círculo negro.
+  const radio = 3.2 * MM;
+  const rxE = 3.6 * MM, ryE = 6.5 * MM;
+  const pinta = (lista, arriba) => {
+    if (!lista.length) return;
+    const yEtq = arriba ? topImg + 7 * MM : baseImg - 7 * MM;
+    const xs = repartir(lista.map(m => xImg + m.x * anchoReal), 2 * radio + 1.5, izq + radio, der - radio);
+    lista.forEach((m, i) => {
+      const cx = xImg + m.x * anchoReal, cy = topImg - m.y * altoImg;
+      const borde = arriba ? cy + ryE : cy - ryE;
+      for (const [grosor, color] of [[3.4, blanco], [1.4, negro]]) {
+        p.drawEllipse({ x: cx, y: cy, xScale: rxE, yScale: ryE, borderColor: color, borderWidth: grosor });
+        p.drawLine({ start: { x: xs[i], y: arriba ? yEtq - radio : yEtq + radio },
+          end: { x: cx, y: borde }, thickness: grosor === 1.4 ? 0.9 : 2.6, color });
+      }
+      p.drawCircle({ x: xs[i], y: yEtq, size: radio, color: negro });
+      const t = String(m.pieza);
+      const s = 8.5;
+      p.drawText(t, { x: xs[i] - negrita.widthOfTextAtSize(t, s) / 2, y: yEtq - s * 0.35, size: s, font: negrita, color: blanco });
+    });
+  };
+  pinta(marcas.filter(m => esSuperior(m.pieza)), true);
+  pinta(marcas.filter(m => !esSuperior(m.pieza)), false);
+
+  // Lista de tratamientos, a dos columnas, debajo.
+  let y = baseImg - 22 * MM;
+  p.drawText(T.titulo, { x: izq, y, size: 12, font: negrita, color: negro });
+  y -= 6;
+  p.drawLine({ start: { x: izq, y }, end: { x: der, y }, thickness: 0.6, color: gris });
+  y -= 16;
+  const filas = grupos.map(g => {
+    const partes = [];
+    if (g.piezas.length) partes.push(g.piezas.join(", "));
+    if (g.sinPieza > 1) partes.push(`x${g.sinPieza}`);
+    return { nombre: limpio(g.nombre), detalle: partes.join(" · ") };
+  });
+  const fin = 22 * MM;
+  const colAncho = (der - izq - 8 * MM) / 2;
+  let tam = 10, alto = 14.5;
+  const porColumna = () => Math.floor((y - fin) / alto) + 1;
+  while (filas.length > 2 * porColumna() && tam > 7) { tam -= 0.5; alto = tam * 1.45; }
+  const n = porColumna();
+  const caben = Math.min(filas.length, 2 * n);
+  const unaColumna = filas.length <= Math.min(n, 8);
+  for (let k = 0; k < caben; k++) {
+    const col = unaColumna ? 0 : Math.floor(k / Math.ceil(caben / 2));
+    const fila = unaColumna ? k : k % Math.ceil(caben / 2);
+    const x = izq + col * (colAncho + 8 * MM);
+    const yy = y - fila * alto;
+    const hasta = x + colAncho;
+    const det = filas[k].detalle;
+    const anchoDet = det ? negrita.widthOfTextAtSize(det, tam) + 6 : 0;
+    p.drawCircle({ x: x + 2, y: yy + tam * 0.33, size: 1.3, color: negro });
+    let nom = filas[k].nombre;
+    if (normal.widthOfTextAtSize(nom, tam) > hasta - x - 8 - anchoDet) {
+      while (nom.length > 1 && normal.widthOfTextAtSize(nom + "…", tam) > hasta - x - 8 - anchoDet) nom = nom.slice(0, -1);
+      nom = nom.trimEnd() + "…";
+    }
+    p.drawText(nom, { x: x + 8, y: yy, size: tam, font: normal, color: negro });
+    if (det) p.drawText(det, { x: hasta - anchoDet + 6, y: yy, size: tam, font: negrita, color: negro });
+  }
+  if (filas.length > caben) {
+    p.drawText(`+ ${filas.length - caben}`, { x: der - 20, y: fin - 12, size: 9, font: normal, color: gris });
+  }
+  if (marcas.length) p.drawText(T.nota, { x: izq, y: 12 * MM, size: 7.5, font: normal, color: gris });
+
+  return doc.save();
+}
