@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../supabase";
-import { posicionPlantilla, esSuperior, agruparTratamientos, generarHojaRx, nombreDoctor, tablaTonos } from "../lib/hojaRx";
-import { separarPieza } from "../lib/consentimientos/conformidad";
+import { generarHojaRx, nombreDoctor, tablaTonos, filasDelPresupuesto, simbolosIniciales,
+  agruparFilas, medidasImagenMm, piezasDeFila } from "../lib/hojaRx";
+import { dibujo, union, medidas, superior, PIEZAS_SUPERIOR, PIEZAS_INFERIOR } from "../lib/hojaRxDibujos";
 import { IDIOMAS_HOJAS } from "../lib/consentimientos/hojasPaciente";
 import { translateTreatment } from "../treatments";
 
 // Botón de la ficha, junto a consentimientos: se sube la panorámica (el TIF
-// que exporta Sidexis, o un JPG/PNG), la app pone sobre ella las piezas del
-// presupuesto, se arrastra la que no haya caído en su diente y sale un A4 con
-// logo, radiografía marcada y tratamientos. La imagen no sale del navegador:
-// no se sube ni se guarda.
+// que exporta Sidexis, o un JPG/PNG), la app dibuja sobre ella lo que pide el
+// presupuesto (implantes, coronas, prótesis, endodoncias, pernos, exodoncias,
+// letras para reconstrucciones y empastes), cada dibujo se arrastra y se
+// agranda por separado, y sale un A4 con logo, radiografía y tratamientos. La
+// imagen no sale del navegador: no se sube ni se guarda.
 //
 // utif y pdf-lib se cargan al usarlos, para no meterlos en el bundle de todas
 // las fichas.
@@ -17,8 +19,9 @@ import { translateTreatment } from "../treatments";
 const tratamientosDe = (p) => Array.isArray(p.treatments) ? p.treatments : (p.treatments?.items || []);
 const traductor = (idioma) => (idioma === "EN" || idioma === "FR")
   ? (n) => translateTreatment(n, idioma.toLowerCase()) : (n) => n;
-const nombreDe = (t) => t?.name ?? t?.nombre ?? "";
 const MAX_LADO = 3000;
+const NOMBRE_TIPO = { implante: "Implante", corona: "Corona", protesis: "Prótesis", endo: "Endodoncia",
+  perno: "Perno", x: "Exodoncia", letra: "Letra" };
 
 // Archivo → lienzo con la imagen tal cual, reducida si es enorme.
 async function leerRadiografia(archivo) {
@@ -85,15 +88,47 @@ const est = {
            padding:"9px 16px", fontSize:13, cursor:"pointer" },
 };
 
+
+// Un símbolo en SVG, con las mismas rutas que el PDF: trazo ancho blanco y
+// fino negro encima. `activo` lo pinta en dorado.
+function Simbolo({ s, x, y, escala, activo }) {
+  const dib = dibujo(s, x, y, escala);
+  const color = activo ? "#c9a84c" : "#000";
+  return (
+    <>
+      {dib.trazos.map((t, k) => {
+        const fino = t.fino ?? (s.tipo === "x" ? 0.38 : 0.28);
+        return (
+          <g key={k}>
+            <path d={t.d} fill="none" stroke="#fff" strokeWidth={fino + 0.47} strokeLinecap="round"/>
+            <path d={t.d} fill={t.relleno ? color : "none"} stroke={color} strokeWidth={fino} strokeLinecap="round"/>
+          </g>
+        );
+      })}
+      {dib.texto && (
+        <text x={dib.texto.x} y={dib.texto.y} fontSize={dib.texto.tam * 1.15} fontWeight="700"
+          fontFamily="Helvetica, Arial, sans-serif" textAnchor="middle" dominantBaseline="central"
+          fill={color} stroke="#fff" strokeWidth={0.5} paintOrder="stroke">{dib.texto.letra}</text>
+      )}
+    </>
+  );
+}
+
 export function BotonHojaRx({ paciente }) {
   const [abierto, setAbierto] = useState(false);
   const [rx, setRx] = useState(null);
   const [leyendo, setLeyendo] = useState(false);
-  // pieza → { x, y } en fracción de la imagen
-  const [marcas, setMarcas] = useState({});
-  // índices de tratamientos que NO salen (ya hechos, o que no se quieren poner)
+  // id de símbolo → { x?, y?, escala? } lo que se ha movido o agrandado a mano
+  const [ajustes, setAjustes] = useState({});
+  // fila → piezas elegidas a mano (prótesis que vienen sin pieza)
+  const [elegidas, setElegidas] = useState({});
+  const [eligiendoPiezas, setEligiendoPiezas] = useState(null);
+  const [escalaGlobal, setEscalaGlobal] = useState(1);
+  // filas del presupuesto que NO salen (ya hechas, o que no se quieren poner)
   const [fuera, setFuera] = useState(new Set());
-  const [elegida, setElegida] = useState(null);
+  const [seleccion, setSeleccion] = useState(null);
+  const [colocando, setColocando] = useState(null);
+  const arrastre = useRef(null);
   const [arrastrando, setArrastrando] = useState(null);
   const [idioma, setIdioma] = useState("ES");
   const [generando, setGenerando] = useState(false);
@@ -120,12 +155,12 @@ export function BotonHojaRx({ paciente }) {
     })();
   }, [abierto, paciente.doctor_colegiado]);
 
-  const tratamientos = tratamientosDe(paciente);
-  const incluidos = tratamientos.filter((_, i) => !fuera.has(i));
-  // Piezas que se marcan: las de los tratamientos que salen y que son piezas de verdad.
-  const piezas = [...new Set(incluidos.map(t => separarPieza(nombreDe(t)).pieza)
-    .filter(p => p && posicionPlantilla(p)))].sort((a, b) => a - b);
-  const posDe = (p) => marcas[p] || posicionPlantilla(p);
+  const filas = filasDelPresupuesto(tratamientosDe(paciente));
+  const incluidas = filas.filter(f => !fuera.has(f.i));
+  const simbolos = simbolosIniciales(incluidas, elegidas).map(s => ({ ...s, ...ajustes[s.id] }));
+  const mm = rx ? medidasImagenMm(rx.ancho, rx.alto) : { w: 186, h: 98 };
+  const sel = simbolos.find(s => s.id === seleccion);
+  const cambia = () => setResultado(null);
 
   // Cada cambio de aclarar/invertir rehace la imagen, con un respiro para no
   // repetirlo en cada paso del deslizador.
@@ -153,7 +188,7 @@ export function BotonHojaRx({ paciente }) {
     setLeyendo(true); setError(null);
     try {
       setOriginal(await leerRadiografia(archivo));
-      setMarcas({});
+      setAjustes({});
       setResultado(null);
     } catch (err) {
       console.error(err);
@@ -168,14 +203,42 @@ export function BotonHojaRx({ paciente }) {
       y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)),
     };
   };
-  const mover = (e) => {
-    if (!arrastrando) return;
-    setMarcas(m => ({ ...m, [arrastrando]: fraccion(e) }));
+  const ajustar = (id, cambio) => { setAjustes(a => ({ ...a, [id]: { ...a[id], ...cambio } })); cambia(); };
+
+  // Arrastre: se guarda dónde se agarró el símbolo para que no salte al
+  // puntero.
+  const empezar = (e, s) => {
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    const f = fraccion(e);
+    arrastre.current = { id: s.id, dx: f.x - s.x, dy: f.y - s.y };
+    setArrastrando(s.id);
+    setSeleccion(s.id);
+    setColocando(null);
   };
+  const mover = (e) => {
+    const a = arrastre.current;
+    if (!a) return;
+    const f = fraccion(e);
+    ajustar(a.id, { x: Math.min(1, Math.max(0, f.x - a.dx)), y: Math.min(1, Math.max(0, f.y - a.dy)) });
+  };
+  const soltar = () => { arrastre.current = null; setArrastrando(null); };
   const clicImagen = (e) => {
-    if (!elegida || arrastrando) return;
-    setMarcas(m => ({ ...m, [elegida]: fraccion(e) }));
-    setElegida(null);
+    if (colocando) { ajustar(colocando, fraccion(e)); setSeleccion(colocando); setColocando(null); }
+    else setSeleccion(null);
+  };
+
+  const alternarFila = (i) => {
+    setFuera(prev => { const n = new Set(prev); if (n.has(i)) n.delete(i); else n.add(i); return n; });
+    cambia();
+  };
+  const alternarPieza = (i, pieza) => {
+    setElegidas(prev => {
+      const actual = prev[i] || [];
+      const nuevas = actual.includes(pieza) ? actual.filter(p => p !== pieza) : [...actual, pieza];
+      return { ...prev, [i]: nuevas.sort((a, b) => a - b) };
+    });
+    cambia();
   };
 
   async function generar() {
@@ -189,8 +252,9 @@ export function BotonHojaRx({ paciente }) {
       ]);
       const bytes = await generarHojaRx(pdfLib, {
         imagen: rx,
-        marcas: piezas.map(p => ({ pieza: p, ...posDe(p) })),
-        grupos: agruparTratamientos(incluidos, traductor(idioma)),
+        simbolos,
+        escalaGlobal,
+        grupos: agruparFilas(incluidas, elegidas, traductor(idioma)),
         paciente: { nombre: paciente.name, historia: paciente.hc },
         clinica: conf.data || {},
         logo,
@@ -209,15 +273,28 @@ export function BotonHojaRx({ paciente }) {
   const cerrar = () => {
     if (rx) URL.revokeObjectURL(rx.url);
     if (resultado) URL.revokeObjectURL(resultado);
-    setRx(null); setOriginal(null); setMarcas({}); setFuera(new Set()); setElegida(null);
+    setRx(null); setOriginal(null); setAjustes({}); setElegidas({}); setFuera(new Set());
+    setSeleccion(null); setColocando(null); setEligiendoPiezas(null);
     setResultado(null); setError(null); setIdioma("ES");
     setAbierto(false);
   };
 
-  const alternar = (i) => {
-    setFuera(prev => { const n = new Set(prev); if (n.has(i)) n.delete(i); else n.add(i); return n; });
-    setResultado(null);
-  };
+  // Uniones de las prótesis, en pantalla igual que en el PDF.
+  const uniones = [];
+  for (const f of incluidas) {
+    const suyos = simbolos.filter(s => s.fila === f.i && s.tipo === "protesis");
+    for (const arriba of [true, false]) {
+      const d = union(suyos.filter(s => superior(s.pieza) === arriba)
+        .map(s => ({ x: s.x * mm.w, y: s.y * mm.h, s, escala: s.escala })), escalaGlobal);
+      if (d) uniones.push(d);
+    }
+  }
+
+  const chip = (activo, apagado) => ({
+    fontSize:11.5, fontWeight:700, borderRadius:10, padding:"1px 8px", border:"1px solid #2c3250",
+    background: activo ? "#c9a84c" : "#fff", color:"#2c3250", cursor: apagado ? "default" : "pointer",
+    opacity: apagado ? 0.4 : 1,
+  });
 
   return (
     <>
@@ -248,92 +325,137 @@ export function BotonHojaRx({ paciente }) {
             {rx && (
               <>
                 <div style={{fontSize:12.5, color:"#555", marginBottom:8, lineHeight:1.45}}>
-                  Cada X sale donde suele estar esa pieza. <b>Arrastrá</b> la que no haya
-                  caído en su diente, o tocá una pieza de la lista y después el diente.
-                  {elegida && <b style={{color:"#a07830"}}> Tocá en la radiografía dónde está la {elegida}.</b>}
+                  Cada dibujo sale donde suele estar esa pieza. <b>Arrastrá</b> el que no haya caído
+                  en su sitio; tocándolo se puede cambiar su tamaño.
+                  {colocando && <b style={{color:"#a07830"}}> Tocá en la radiografía dónde va.</b>}
                 </div>
-                <div ref={marco}
-                  onPointerMove={mover}
-                  onPointerUp={()=>setArrastrando(null)}
-                  onPointerLeave={()=>setArrastrando(null)}
-                  onClick={clicImagen}
+                <div ref={marco} onClick={clicImagen}
                   style={{position:"relative", width:"100%", aspectRatio:`${rx.ancho} / ${rx.alto}`,
                     background:"#000", borderRadius:6, overflow:"hidden", touchAction:"none",
-                    cursor: elegida ? "crosshair" : "default", userSelect:"none"}}>
+                    cursor: colocando ? "crosshair" : "default", userSelect:"none"}}>
                   <img src={rx.url} alt="Radiografía" draggable={false}
                     style={{position:"absolute", inset:0, width:"100%", height:"100%", pointerEvents:"none"}}/>
-                  {piezas.map(p => {
-                    const { x, y } = posDe(p);
-                    const arriba = esSuperior(p);
-                    const activa = arrastrando === p || elegida === p;
-                    return (
-                      <div key={p}
-                        onPointerDown={e=>{ e.stopPropagation(); e.currentTarget.setPointerCapture?.(e.pointerId); setArrastrando(p); setResultado(null); }}
-                        onPointerUp={e=>{ e.stopPropagation(); setArrastrando(null); }}
-                        onClick={e=>e.stopPropagation()}
-                        title={`Pieza ${p}: arrastrar`}
-                        style={{position:"absolute", left:`${x*100}%`, top:`${y*100}%`,
-                          width:26, height:26, transform:"translate(-50%,-50%)",
-                          display:"flex", alignItems:"center", justifyContent:"center",
-                          cursor: arrastrando === p ? "grabbing" : "grab"}}>
-                        <svg width="14" height="14" viewBox="0 0 14 14" style={{pointerEvents:"none", overflow:"visible"}}>
-                          <path d="M2 2L12 12M2 12L12 2" stroke="#fff" strokeWidth="4" strokeLinecap="round"/>
-                          <path d="M2 2L12 12M2 12L12 2" stroke={activa ? "#c9a84c" : "#000"} strokeWidth="1.8" strokeLinecap="round"/>
-                        </svg>
-                        <span style={{position:"absolute", left:"50%", [arriba ? "bottom" : "top"]:"100%",
-                          transform:"translateX(-50%)", background: activa ? "#c9a84c" : "#000",
-                          color:"#fff", borderRadius:9, fontSize:10, fontWeight:700, padding:"0 5px",
-                          border:"1px solid #fff", pointerEvents:"none"}}>{p}</span>
-                      </div>
-                    );
-                  })}
+                  <svg viewBox={`0 0 ${mm.w} ${mm.h}`} preserveAspectRatio="none"
+                    onPointerMove={mover} onPointerUp={soltar} onPointerCancel={soltar}
+                    style={{position:"absolute", inset:0, width:"100%", height:"100%"}}>
+                    {uniones.map((d, k) => (
+                      <g key={k} pointerEvents="none">
+                        <path d={d} fill="none" stroke="#fff" strokeWidth={0.75} strokeLinecap="round"/>
+                        <path d={d} fill="none" stroke="#000" strokeWidth={0.28} strokeLinecap="round"/>
+                      </g>
+                    ))}
+                    {simbolos.map(s => {
+                      const x = s.x * mm.w, y = s.y * mm.h, e = (s.escala || 1) * escalaGlobal;
+                      const { w, h } = medidas(s, e);
+                      const activo = s.id === seleccion || s.id === colocando;
+                      return (
+                        <g key={s.id} onPointerDown={ev=>empezar(ev, s)} onClick={ev=>ev.stopPropagation()}
+                          style={{cursor: arrastrando === s.id ? "grabbing" : "grab"}}>
+                          <rect x={x - w / 2 - 1} y={y - h / 2 - 1} width={w + 2} height={h + 2}
+                            fill="transparent" stroke={activo ? "#c9a84c" : "none"} strokeWidth={0.25}
+                            strokeDasharray="0.8 0.6"/>
+                          <Simbolo s={s} x={x} y={y} escala={e} activo={activo}/>
+                          <text x={x + w / 2 + 0.6} y={superior(s.pieza) ? y - h / 2 : y + h / 2}
+                            fontSize={2.4} fill="#fff" stroke="#000" strokeWidth={0.35} paintOrder="stroke"
+                            fontFamily="Helvetica, Arial, sans-serif" fontWeight="700"
+                            dominantBaseline="central" pointerEvents="none">{s.pieza}</text>
+                        </g>
+                      );
+                    })}
+                  </svg>
                 </div>
+
                 <div style={{display:"flex", alignItems:"center", gap:14, flexWrap:"wrap", marginTop:8, fontSize:12.5}}>
                   <label style={{display:"flex", alignItems:"center", gap:8}}>
                     <span style={{color:"#777"}}>Aclarar</span>
                     <input type="range" min="0" max="1" step="0.05" value={aclarar}
-                      onChange={e=>setAclarar(Number(e.target.value))} style={{width:160}}/>
+                      onChange={e=>setAclarar(Number(e.target.value))} style={{width:130}}/>
                     <span style={{width:34, color:"#555"}}>{Math.round(aclarar * 100)}%</span>
                   </label>
                   <label style={{display:"flex", alignItems:"center", gap:6, cursor:"pointer"}}>
                     <input type="checkbox" checked={invertir} onChange={()=>setInvertir(!invertir)}/>
                     Invertir
                   </label>
-                  {Object.keys(marcas).length > 0 && (
-                    <button onClick={()=>{ setMarcas({}); setResultado(null); }}
+                  <label style={{display:"flex", alignItems:"center", gap:8}}>
+                    <span style={{color:"#777"}}>Tamaño de los dibujos</span>
+                    <input type="range" min="0.5" max="2" step="0.05" value={escalaGlobal}
+                      onChange={e=>{ setEscalaGlobal(Number(e.target.value)); cambia(); }} style={{width:130}}/>
+                    <span style={{width:40, color:"#555"}}>{Math.round(escalaGlobal * 100)}%</span>
+                  </label>
+                  {Object.keys(ajustes).length > 0 && (
+                    <button onClick={()=>{ setAjustes({}); setSeleccion(null); cambia(); }}
                       style={{...est.gris, fontSize:12, padding:"5px 10px", marginLeft:"auto"}}>
                       Volver a las posiciones propuestas
                     </button>
                   )}
                 </div>
+
+                {sel && (
+                  <div style={{display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginTop:8,
+                    padding:"7px 10px", background:"#f7f3e6", borderRadius:8, fontSize:12.5}}>
+                    <b>{NOMBRE_TIPO[sel.tipo]}{sel.tipo === "letra" ? ` ${sel.letra}` : ""} · {sel.pieza}</b>
+                    <span style={{color:"#777", marginLeft:8}}>Tamaño</span>
+                    <button style={{...est.gris, padding:"2px 10px"}}
+                      onClick={()=>ajustar(sel.id, { escala: Math.max(0.3, (sel.escala || 1) - 0.1) })}>–</button>
+                    <span style={{width:40, textAlign:"center"}}>{Math.round((sel.escala || 1) * 100)}%</span>
+                    <button style={{...est.gris, padding:"2px 10px"}}
+                      onClick={()=>ajustar(sel.id, { escala: Math.min(3, (sel.escala || 1) + 0.1) })}>+</button>
+                    {ajustes[sel.id] && (
+                      <button style={{...est.gris, padding:"2px 10px", fontSize:12}}
+                        onClick={()=>{ setAjustes(a => { const n = { ...a }; delete n[sel.id]; return n; }); cambia(); }}>
+                        Restablecer
+                      </button>
+                    )}
+                    <button style={{...est.gris, padding:"2px 10px", fontSize:12, marginLeft:"auto"}}
+                      onClick={()=>setSeleccion(null)}>Listo</button>
+                  </div>
+                )}
               </>
             )}
 
-            <div style={{border:"1px solid #dde4ef", borderRadius:8, margin:"14px 0", maxHeight:220, overflowY:"auto"}}>
-              {tratamientos.length === 0 ? (
+            <div style={{border:"1px solid #dde4ef", borderRadius:8, margin:"14px 0", maxHeight:260, overflowY:"auto"}}>
+              {filas.length === 0 ? (
                 <div style={{padding:"9px 12px", fontSize:13, color:"#888"}}>El presupuesto no tiene tratamientos.</div>
-              ) : tratamientos.map((t, i) => {
-                const { base, pieza } = separarPieza(nombreDe(t));
-                const sale = !fuera.has(i);
-                const marcable = pieza && posicionPlantilla(pieza);
+              ) : filas.map((f, k) => {
+                const sale = !fuera.has(f.i);
+                const piezas = piezasDeFila(f, elegidas);
+                const sinPieza = !f.pieza && f.simbolo;
+                const arcadas = f.arcada === "superior" ? [PIEZAS_SUPERIOR]
+                  : f.arcada === "inferior" ? [PIEZAS_INFERIOR] : [PIEZAS_SUPERIOR, PIEZAS_INFERIOR];
                 return (
-                  <div key={t.id || i} style={{display:"flex", alignItems:"center", gap:8, padding:"5px 10px",
-                    borderTop: i ? "1px solid #f0f2f7" : "none", background: sale ? "#f7f3e6" : "transparent",
-                    fontSize:13}}>
-                    <label style={{display:"flex", alignItems:"center", gap:8, flex:1, cursor:"pointer"}}>
-                      <input type="checkbox" checked={sale} onChange={()=>alternar(i)}/>
-                      <span>{base}</span>
-                    </label>
-                    {pieza && (
-                      <button disabled={!sale || !marcable || !rx}
-                        onClick={()=>setElegida(elegida === pieza ? null : pieza)}
-                        title={marcable ? "Colocar esta pieza en la radiografía" : "No es una pieza válida"}
-                        style={{fontSize:12, fontWeight:700, borderRadius:10, padding:"1px 9px",
-                          border:"1px solid #2c3250", cursor: sale && marcable && rx ? "pointer" : "default",
-                          background: elegida === pieza ? "#c9a84c" : "#fff", color:"#2c3250",
-                          opacity: sale && marcable ? 1 : 0.4}}>
-                        {pieza}
-                      </button>
+                  <div key={f.i} style={{borderTop: k ? "1px solid #f0f2f7" : "none",
+                    background: sale ? "#f7f3e6" : "transparent"}}>
+                    <div style={{display:"flex", alignItems:"center", gap:6, padding:"5px 10px", fontSize:13, flexWrap:"wrap"}}>
+                      <label style={{display:"flex", alignItems:"center", gap:8, flex:1, minWidth:200, cursor:"pointer"}}>
+                        <input type="checkbox" checked={sale} onChange={()=>alternarFila(f.i)}/>
+                        <span>{f.base}</span>
+                      </label>
+                      {f.simbolo && piezas.map(p => {
+                        const id = `${f.i}:${p}`;
+                        return (
+                          <button key={p} disabled={!sale || !rx} title="Colocar en la radiografía"
+                            onClick={()=>{ setColocando(colocando === id ? null : id); setSeleccion(id); }}
+                            style={chip(colocando === id || seleccion === id, !sale || !rx)}>{p}</button>
+                        );
+                      })}
+                      {sinPieza && (
+                        <button disabled={!sale} onClick={()=>setEligiendoPiezas(eligiendoPiezas === f.i ? null : f.i)}
+                          style={{...est.gris, padding:"2px 9px", fontSize:11.5, opacity: sale ? 1 : 0.4}}>
+                          {eligiendoPiezas === f.i ? "Listo" : piezas.length ? "Cambiar piezas" : "Elegir piezas"}
+                        </button>
+                      )}
+                    </div>
+                    {eligiendoPiezas === f.i && sale && (
+                      <div style={{padding:"2px 10px 8px 34px"}}>
+                        {arcadas.map((fila, a) => (
+                          <div key={a} style={{display:"flex", gap:4, flexWrap:"wrap", marginBottom:4}}>
+                            {fila.map((p, j) => (
+                              <button key={p} onClick={()=>alternarPieza(f.i, p)}
+                                style={{...chip(piezas.includes(p), false), marginLeft: j === 8 ? 10 : 0}}>{p}</button>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 );
@@ -343,13 +465,13 @@ export function BotonHojaRx({ paciente }) {
             <div style={{display:"flex", alignItems:"center", gap:8, fontSize:12.5, marginBottom:12, flexWrap:"wrap"}}>
               <span style={{color:"#777"}}>Doctor:</span>
               <select value={doctorId} style={est.sel} aria-label="Doctor"
-                onChange={e=>{ setDoctorId(e.target.value); setResultado(null); }}>
+                onChange={e=>{ setDoctorId(e.target.value); cambia(); }}>
                 <option value="">Sin doctor</option>
                 {doctores.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
               <span style={{color:"#777", marginLeft:10}}>Idioma de la hoja:</span>
               <select value={idioma} style={est.sel} aria-label="Idioma de la hoja"
-                onChange={e=>{ setIdioma(e.target.value); setResultado(null); }}>
+                onChange={e=>{ setIdioma(e.target.value); cambia(); }}>
                 {IDIOMAS_HOJAS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
               </select>
             </div>

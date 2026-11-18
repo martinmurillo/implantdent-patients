@@ -13,6 +13,7 @@
 // que en hojasPaciente.js.
 
 import { separarPieza } from "./consentimientos/conformidad.js";
+import { simboloDe, arcadaDe, alturaPorDefecto, dibujo, union, medidas } from "./hojaRxDibujos.js";
 
 // ── Dónde cae cada pieza en una panorámica ─────────────────────────────────
 // Medido sobre una panorámica del aparato de la clínica (Sidexis, 2440×1292).
@@ -72,6 +73,66 @@ export function piezasDelPresupuesto(tratamientos = []) {
     if (pieza && posicionPlantilla(pieza)) set.add(pieza);
   }
   return [...set].sort((a, b) => a - b);
+}
+
+// ── Símbolos ───────────────────────────────────────────────────────────────
+// Cada fila del presupuesto, con su pieza (si la trae en el nombre), su
+// símbolo y, para las que no traen pieza, la arcada que dice el nombre.
+export function filasDelPresupuesto(tratamientos = []) {
+  return tratamientos.map((t, i) => {
+    const nombre = t?.name ?? t?.nombre ?? t;
+    const { base, pieza } = separarPieza(nombre);
+    return { i, base, pieza: pieza && posicionPlantilla(pieza) ? pieza : null,
+      simbolo: simboloDe(base), arcada: arcadaDe(base) };
+  }).filter(f => String(f.base || "").trim());
+}
+
+// Las piezas de cada fila: la del nombre o, si no trae, las que se eligieron
+// a mano (prótesis removibles, que vienen como "superior"/"inferior").
+export const piezasDeFila = (f, elegidas = {}) =>
+  f.pieza ? [f.pieza] : (elegidas[f.i] || []).filter(p => posicionPlantilla(p));
+
+// Los símbolos de las filas, colocados donde suele caer cada cosa. Una pieza
+// con varias letras (R y EN) las apila hacia la raíz.
+export function simbolosIniciales(filas = [], elegidas = {}) {
+  const lista = [];
+  const letrasPorPieza = {};
+  for (const f of filas) {
+    if (!f.simbolo) continue;
+    for (const pieza of piezasDeFila(f, elegidas)) {
+      const s = { id: `${f.i}:${pieza}`, fila: f.i, pieza, ...f.simbolo };
+      let apilado = 0;
+      if (s.tipo === "letra") { apilado = letrasPorPieza[pieza] || 0; letrasPorPieza[pieza] = apilado + 1; }
+      lista.push({ ...s, x: posicionPlantilla(pieza).x, y: alturaPorDefecto(s, apilado), escala: 1 });
+    }
+  }
+  return lista;
+}
+
+// Agrupa las filas por nombre para la lista de abajo, con sus piezas y el
+// símbolo que llevan en la radiografía. `traducir` pasa el nombre al idioma.
+export function agruparFilas(filas = [], elegidas = {}, traducir = (x) => x) {
+  const grupos = new Map();
+  for (const f of filas) {
+    const nom = traducir(f.base);
+    const g = grupos.get(nom) || { nombre: nom, piezas: [], sinPieza: 0, simbolo: null };
+    grupos.set(nom, g);
+    const piezas = piezasDeFila(f, elegidas);
+    if (piezas.length) {
+      for (const p of piezas) if (!g.piezas.includes(p)) g.piezas.push(p);
+      g.simbolo = g.simbolo || f.simbolo;
+    } else g.sinPieza++;
+  }
+  const lista = [...grupos.values()];
+  for (const g of lista) g.piezas.sort((a, b) => a - b);
+  return lista;
+}
+
+// Medidas de la radiografía en el papel, en mm: a todo el ancho entre
+// márgenes de 12 mm, y como mucho 120 mm de alto.
+export function medidasImagenMm(ancho, alto) {
+  const h = Math.min(186 * alto / ancho, 120);
+  return { w: h * ancho / alto, h };
 }
 
 // Reparte etiquetas en una fila para que no se pisen: cada una queda lo más
@@ -161,10 +222,11 @@ const MM = 72 / 25.4;
 
 // ── El PDF ─────────────────────────────────────────────────────────────────
 // imagen: { bytes (JPEG), ancho, alto } en píxeles.
-// marcas: [{ pieza, x, y }] con x, y en fracción de la imagen.
+// simbolos: los de simbolosIniciales(), ya movidos; x, y en fracción de la imagen.
+// escalaGlobal: tamaño de todos los dibujos (1 = normal).
 // grupos: lo que devuelve agruparTratamientos.
 // clinica: fila de clinica_config. logo: bytes PNG o null.
-export async function generarHojaRx(pdfLib, { imagen, marcas = [], grupos = [], paciente = {},
+export async function generarHojaRx(pdfLib, { imagen, simbolos = [], escalaGlobal = 1, grupos = [], paciente = {},
   clinica = {}, logo = null, idioma = "ES", fecha = new Date(), doctor = "" }) {
   const { PDFDocument, StandardFonts, rgb } = pdfLib;
   const T = TEXTOS[idioma] || TEXTOS.ES;
@@ -222,33 +284,75 @@ export async function generarHojaRx(pdfLib, { imagen, marcas = [], grupos = [], 
   const rx = await doc.embedJpg(imagen.bytes);
   p.drawImage(rx, { x: xImg, y: baseImg, width: anchoReal, height: altoImg });
 
-  // Marcas: el número de la pieza en un círculo pequeño fuera de la imagen,
-  // una raya fina hasta el diente y una X donde está. Raya y X llevan un filo
-  // blanco por debajo para que se vean sobre el gris.
+  // Símbolos sobre la radiografía. Van en mm de la imagen (origen arriba a la
+  // izquierda, y hacia abajo), igual que en pantalla: drawSvgPath con escala
+  // MM y origen en la esquina de la imagen. Cada trazo se pinta dos veces,
+  // ancho en blanco y fino en negro, para que se vea sobre el gris.
+  const mmImg = { w: anchoReal / MM, h: altoImg / MM };
+  const enMm = (s) => ({ x: s.x * mmImg.w, y: s.y * mmImg.h, e: (s.escala || 1) * escalaGlobal });
+  const traza = (d, fino = 0.28, relleno = false) => {
+    p.drawSvgPath(d, { x: xImg, y: topImg, scale: MM, borderColor: blanco, borderWidth: fino + 0.47, borderLineCap: 1 });
+    p.drawSvgPath(d, { x: xImg, y: topImg, scale: MM, borderColor: negro, borderWidth: fino, borderLineCap: 1,
+      ...(relleno ? { color: negro } : {}) });
+  };
+  const letra = (t, cx, cy, tam) => {
+    const s = tam * MM * 1.15;            // altura de mayúscula ≈ tam mm
+    const w = negrita.widthOfTextAtSize(t, s);
+    const x0 = xImg + cx * MM - w / 2, y0 = topImg - cy * MM - s * 0.36;
+    const r = 0.35 * MM;
+    for (let k = 0; k < 8; k++) {
+      const a = k * Math.PI / 4;
+      p.drawText(t, { x: x0 + r * Math.cos(a), y: y0 + r * Math.sin(a), size: s, font: negrita, color: blanco });
+    }
+    p.drawText(t, { x: x0, y: y0, size: s, font: negrita, color: negro });
+  };
+  // Primero las uniones de las prótesis, para que los dientes queden encima.
+  const porFila = new Map();
+  for (const s of simbolos) if (s.tipo === "protesis") {
+    const l = porFila.get(s.fila) || []; porFila.set(s.fila, l);
+    const m = enMm(s); l.push({ x: m.x, y: m.y, s, escala: s.escala });
+  }
+  for (const l of porFila.values()) {
+    for (const arriba of [true, false]) {
+      const d = union(l.filter(q => esSuperior(q.s.pieza) === arriba), escalaGlobal);
+      if (d) traza(d);
+    }
+  }
+  for (const s of simbolos) {
+    const m = enMm(s);
+    const dib = dibujo(s, m.x, m.y, m.e);
+    for (const t of dib.trazos) traza(t.d, t.fino ?? (s.tipo === "x" ? 0.38 : 0.28), t.relleno);
+    if (dib.texto) letra(dib.texto.letra, dib.texto.x, dib.texto.y, dib.texto.tam);
+  }
+
+  // Números de las piezas: un círculo pequeño fuera de la imagen y una raya
+  // fina hasta el símbolo de esa pieza más cercano.
   const radio = 2.3 * MM;
-  const brazo = 1.4 * MM;
-  const pinta = (lista, arriba) => {
+  const piezas = [...new Set(simbolos.map(s => s.pieza))];
+  const numeros = (lista, arriba) => {
     if (!lista.length) return;
     const yEtq = arriba ? topImg + 5 * MM : baseImg - 5 * MM;
-    const xs = repartir(lista.map(m => xImg + m.x * anchoReal), 2 * radio + 1.5, izq + radio, der - radio);
-    lista.forEach((m, i) => {
-      const cx = xImg + m.x * anchoReal, cy = topImg - m.y * altoImg;
-      for (const [grosor, color] of [[1.8, blanco], [0.6, negro]]) {
+    const destinos = lista.map(pieza => {
+      const suyos = simbolos.filter(s => s.pieza === pieza).map(s => {
+        const m = enMm(s);
+        const { h } = medidas(s, m.e);
+        return { x: m.x, y: arriba ? m.y - h / 2 : m.y + h / 2 };
+      });
+      const d = suyos.reduce((a, b) => (arriba ? b.y < a.y : b.y > a.y) ? b : a);
+      return { x: xImg + d.x * MM, y: topImg - d.y * MM };
+    });
+    const xs = repartir(destinos.map(d => d.x), 2 * radio + 1.5, izq + radio, der - radio);
+    lista.forEach((pieza, i) => {
+      for (const [grosor, color] of [[1.6, blanco], [0.5, negro]])
         p.drawLine({ start: { x: xs[i], y: arriba ? yEtq - radio : yEtq + radio },
-          end: { x: cx, y: cy }, thickness: grosor, color });
-      }
-      for (const [grosor, color] of [[2.4, blanco], [0.9, negro]]) {
-        p.drawLine({ start: { x: cx - brazo, y: cy - brazo }, end: { x: cx + brazo, y: cy + brazo }, thickness: grosor, color });
-        p.drawLine({ start: { x: cx - brazo, y: cy + brazo }, end: { x: cx + brazo, y: cy - brazo }, thickness: grosor, color });
-      }
+          end: destinos[i], thickness: grosor, color });
       p.drawCircle({ x: xs[i], y: yEtq, size: radio, color: negro });
-      const t = String(m.pieza);
-      const s = 6.5;
+      const t = String(pieza), s = 6.5;
       p.drawText(t, { x: xs[i] - negrita.widthOfTextAtSize(t, s) / 2, y: yEtq - s * 0.35, size: s, font: negrita, color: blanco });
     });
   };
-  pinta(marcas.filter(m => esSuperior(m.pieza)), true);
-  pinta(marcas.filter(m => !esSuperior(m.pieza)), false);
+  numeros(piezas.filter(esSuperior), true);
+  numeros(piezas.filter(q => !esSuperior(q)), false);
 
   // Lista de tratamientos, a dos columnas, cada uno con una casilla vacía
   // delante para escribir a mano.
@@ -261,8 +365,24 @@ export async function generarHojaRx(pdfLib, { imagen, marcas = [], grupos = [], 
     const partes = [];
     if (g.piezas.length) partes.push(g.piezas.join(", "));
     if (g.sinPieza > 1) partes.push(`x${g.sinPieza}`);
-    return { nombre: limpio(g.nombre), detalle: partes.join(" · ") };
+    return { nombre: limpio(g.nombre), detalle: partes.join(" · "),
+      simbolo: g.simbolo && g.piezas.length ? { ...g.simbolo, pieza: g.piezas[0] } : null };
   });
+  // El símbolo de cada tratamiento, pequeño, al lado de su nombre: hace de
+  // leyenda de lo que hay dibujado en la radiografía.
+  const icono = (s, cx, cy, altoMax) => {
+    const e = Math.min(0.75, altoMax / medidas(s, 1).h);
+    const dib = dibujo(s, 0, 0, e);
+    for (const t of dib.trazos) {
+      p.drawSvgPath(t.d, { x: cx, y: cy, scale: MM, borderColor: negro,
+        borderWidth: Math.min(t.fino ?? 0.28, 0.4), borderLineCap: 1, ...(t.relleno ? { color: negro } : {}) });
+    }
+    if (dib.texto) {
+      const s2 = 8, w = negrita.widthOfTextAtSize(dib.texto.letra, s2);
+      p.drawText(dib.texto.letra, { x: cx - w / 2, y: cy - s2 * 0.36, size: s2, font: negrita, color: negro });
+    }
+  };
+  const ANCHO_ICONO = 8 * MM;
   const yPie = 20 * MM;                 // raya del pie
   const fin = yPie + 12 * MM;           // la última fila no baja de aquí
   const sepCol = 10 * MM;
@@ -279,7 +399,8 @@ export async function generarHojaRx(pdfLib, { imagen, marcas = [], grupos = [], 
     const lado = Math.min(13, alto - 5);
     p.drawRectangle({ x, y: yy - (lado - tam * 0.72) / 2, width: lado, height: lado,
       borderColor: negro, borderWidth: 0.7 });
-    const xNom = x + lado + 6;
+    if (filas[k].simbolo) icono(filas[k].simbolo, x + lado + 4 + ANCHO_ICONO / 2, yy + tam * 0.36, (alto - 3) / MM);
+    const xNom = x + lado + 6 + ANCHO_ICONO;
     const det = filas[k].detalle;
     const anchoDet = det ? negrita.widthOfTextAtSize(det, tam) + 6 : 0;
     let nom = filas[k].nombre;
@@ -293,7 +414,7 @@ export async function generarHojaRx(pdfLib, { imagen, marcas = [], grupos = [], 
   if (filas.length > caben) {
     p.drawText(`+ ${filas.length - caben}`, { x: der - 20, y: fin - 14, size: 9, font: normal, color: gris });
   }
-  if (marcas.length) p.drawText(T.nota, { x: izq, y: yPie + 4 * MM, size: 7, font: normal, color: gris });
+  if (simbolos.length) p.drawText(T.nota, { x: izq, y: yPie + 4 * MM, size: 7, font: normal, color: gris });
 
   // Pie: logo pequeño a la izquierda y los datos de la clínica en una línea.
   p.drawLine({ start: { x: izq, y: yPie }, end: { x: der, y: yPie }, thickness: 0.6, color: gris });
