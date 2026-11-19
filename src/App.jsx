@@ -50,7 +50,24 @@ const parsePDF = async (file) => {
   // número de colegiado: "NIF : B17962564 Colegiado : 9239 WEB : ...". Se
   // guarda el número y no el nombre porque es clave exacta contra
   // doctors.colegiado; emparejar por nombre es lo que ya falló con "Dr Sergio".
-  const doctorColegiado = get(/Colegiado\s*:\s*(\d{3,6})/i);
+  let doctorColegiado = get(/Colegiado\s*:\s*(\d{3,6})/i);
+  // Excepción: hay doctores que firman presupuestos pero cuyos consentimientos
+  // salen a nombre de otro. "DRA OLGA BUTKO" → Leticia Molina. Está en
+  // doctors.alias_presupuesto, y se busca el alias tal cual en el nombre de la
+  // cabecera ("Dra. Yassmine Benkaddour c/ Sta. Eugenia..."), no un parecido:
+  // solo cambia algo si alguien lo puso en esa lista.
+  const doctorNombre = get(/\b(?:Dra?|DRA?)\.?\s+((?:[A-ZÁÉÍÓÚÑÜ][A-Za-zÁÉÍÓÚÑÜáéíóúñü'-]+\s*){1,4})/);
+  if (doctorNombre) {
+    const plano = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .toUpperCase().replace(/\s+/g, " ").trim();
+    try {
+      const { data } = await supabase.from("doctors").select("colegiado, alias_presupuesto")
+        .not("alias_presupuesto", "is", null);
+      const suyo = (data || []).find(d => d.colegiado &&
+        (d.alias_presupuesto || []).some(a => a && plano(doctorNombre).includes(plano(a))));
+      if (suyo) doctorColegiado = suyo.colegiado;
+    } catch { /* sin alias, queda el colegiado del presupuesto */ }
+  }
   return { hc, name, dni, budgetNo, date, time:"", phone, treatments, doctorColegiado };
 };
 
