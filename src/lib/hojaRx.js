@@ -328,6 +328,8 @@ export const TEXTOS = {
 const limpio = (s) => String(s || "").replace(/\s+/g, " ").replace(/[^\x20-\x7E\xA0-\xFF·]/g, "").trim();
 
 const MM = 72 / 25.4;
+// El verde del logo, para la franja del pie.
+const VERDE_PIE = "#6c9333";
 
 // ── El PDF ─────────────────────────────────────────────────────────────────
 // imagen: { bytes (JPEG), ancho, alto } en píxeles.
@@ -335,7 +337,8 @@ const MM = 72 / 25.4;
 // barras: lo que devuelve barrasDe(). escalaGlobal: tamaño de todos los dibujos (1 = normal).
 // grupos: lo que devuelve agruparTratamientos.
 // clinica: fila de clinica_config. logo: bytes PNG o null (el de fondo
-// blanco, arriba). logoPie: bytes PNG o null (el de fondo verde, en el pie).
+// blanco, arriba). logoPie: bytes PNG o null (las letras blancas del logo, con
+// fondo transparente, para la franja verde del pie).
 export async function generarHojaRx(pdfLib, { imagen, simbolos = [], barras = [], escalaGlobal = 1, grupos = [], paciente = {},
   clinica = {}, logo = null, logoPie = null, idioma = "ES", fecha = new Date(), doctor = "" }) {
   const { PDFDocument, StandardFonts, rgb } = pdfLib;
@@ -359,9 +362,8 @@ export async function generarHojaRx(pdfLib, { imagen, simbolos = [], barras = []
   }
   let imgPie = null;
   if (logoPie) {
-    try { imgPie = await doc.embedPng(logoPie); } catch { /* el pie lleva el otro, o ninguno */ }
+    try { imgPie = await doc.embedPng(logoPie); } catch { /* el pie sale solo con los datos */ }
   }
-  imgPie = imgPie || imgLogo;
   if (imgLogo) {
     const alto = 16 * MM, ancho = alto * imgLogo.width / imgLogo.height;
     p.drawImage(imgLogo, { x: izq, y: Y(10) - alto, width: ancho, height: alto });
@@ -493,7 +495,7 @@ export async function generarHojaRx(pdfLib, { imagen, simbolos = [], barras = []
     }
   };
   const ANCHO_ICONO = 8 * MM;
-  const yPie = 20 * MM;                 // raya del pie
+  const yPie = 27 * MM;                 // borde de arriba de la franja del pie
   const fin = yPie + 12 * MM;           // la última fila no baja de aquí
   const sepCol = 10 * MM;
   const colAncho = (der - izq - sepCol) / 2;
@@ -534,22 +536,22 @@ export async function generarHojaRx(pdfLib, { imagen, simbolos = [], barras = []
   }
   if (simbolos.length) p.drawText(T.nota, { x: izq, y: yPie + 4 * MM, size: 7, font: normal, color: gris });
 
-  // Pie: el logo de fondo verde, pequeño, a la izquierda y los datos de la
-  // clínica en una línea.
-  p.drawLine({ start: { x: izq, y: yPie }, end: { x: der, y: yPie }, thickness: 0.6, color: gris });
-  let xPie = izq;
+  // Pie: una franja verde de lado a lado de la hoja, con el logo en blanco
+  // centrado y debajo los datos de la clínica. Las impresoras no llegan al
+  // borde del papel: la franja se corta donde llegue, por eso lo de dentro
+  // queda a más de 6 mm del borde.
+  p.drawRectangle({ x: 0, y: 0, width: W, height: yPie, color: rgb(...rgbDe(VERDE_PIE)) });
   if (imgPie) {
-    const alto = 9 * MM, ancho = alto * imgPie.width / imgPie.height;
-    p.drawImage(imgPie, { x: izq, y: yPie - 3 * MM - alto, width: ancho, height: alto });
-    xPie = izq + ancho + 5 * MM;
+    const alto = 11 * MM, ancho = alto * imgPie.width / imgPie.height;
+    p.drawImage(imgPie, { x: (W - ancho) / 2, y: yPie - 3.5 * MM - alto, width: ancho, height: alto });
   }
   const datosPie = [clinica.razon_social, clinica.direccion, clinica.poblacion,
     clinica.telefono ? `${T.tel} ${clinica.telefono}` : ""].map(limpio).filter(Boolean).join("  ·  ");
   if (datosPie) {
     let tp = 8;
-    while (tp > 6 && normal.widthOfTextAtSize(datosPie, tp) > der - xPie) tp -= 0.25;
-    p.drawText(datosPie, { x: der - normal.widthOfTextAtSize(datosPie, tp), y: yPie - 3 * MM - 4.5 * MM - tp * 0.35,
-      size: tp, font: normal, color: gris });
+    while (tp > 6 && normal.widthOfTextAtSize(datosPie, tp) > der - izq) tp -= 0.25;
+    p.drawText(datosPie, { x: (W - normal.widthOfTextAtSize(datosPie, tp)) / 2, y: 7 * MM,
+      size: tp, font: normal, color: blanco });
   }
 
   return doc.save();
