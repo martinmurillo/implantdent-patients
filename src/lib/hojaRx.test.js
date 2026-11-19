@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { posicionPlantilla, esSuperior, agruparTratamientos, piezasDelPresupuesto, repartir, nombreDoctor, tablaTonos } from "./hojaRx.js";
+import { posicionPlantilla, esSuperior, agruparTratamientos, piezasDelPresupuesto, repartir, nombreDoctor, tablaTonos, textoPiezas } from "./hojaRx.js";
 
 test("las piezas de la derecha del paciente caen a la izquierda de la imagen", () => {
   assert.ok(posicionPlantilla(16).x < 0.5);
@@ -66,4 +66,12 @@ test("repartir separa las que se pisan y deja quietas las que no", () => {
   assert.ok(borde[1] <= 100 && borde[1] - borde[0] >= 8 - 1e-9);
   const todas = repartir([5, 5, 5, 5], 50, 0, 100);
   assert.ok(Math.min(...todas) >= 0 && Math.max(...todas) <= 100);
+});
+
+test("piezas de la lista en el orden de la boca, con rangos por cuadrante", () => {
+  assert.equal(textoPiezas(["11", "12", "13", "14", "15", "16", "17", "21", "22", "23", "24", "25", "26", "27"]), "17–11, 21–27");
+  assert.equal(textoPiezas(["26", "16"]), "16, 26");
+  assert.equal(textoPiezas(["12", "11"]), "12, 11");
+  assert.equal(textoPiezas(["46", "44", "42", "32", "34", "36"]), "46, 44, 42, 32, 34, 36");
+  assert.equal(textoPiezas(["33", "34", "35", "36"]), "33–36");
 });

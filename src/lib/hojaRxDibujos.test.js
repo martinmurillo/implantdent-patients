@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { simboloDe, arcadaDe, formaDiente, dibujo, union, alturaPorDefecto } from "./hojaRxDibujos.js";
-import { filasDelPresupuesto, simbolosIniciales, agruparFilas } from "./hojaRx.js";
+import { filasDelPresupuesto, simbolosIniciales, agruparFilas, barrasDe } from "./hojaRx.js";
+import { partesDePack } from "./hojaRxDibujos.js";
 
 const tipo = (n) => simboloDe(n)?.tipo ?? null;
 const letra = (n) => simboloDe(n)?.letra;
@@ -17,7 +18,7 @@ test("cada tratamiento del catálogo lleva su dibujo", () => {
   assert.equal(tipo("Protesis Parcial acrilica 1 a 3 piezas superior"), "protesis");
   assert.equal(tipo("Protesis Parcial Esqueletica 4 a 6 piezas inferior"), "protesis");
   assert.equal(tipo("Protesis Completa Acrílic provisional superior"), "protesis");
-  assert.equal(tipo("Ataches + Sobredentadura metal acrílica superior"), "protesis");
+  assert.equal(tipo("Sobredentadura metal acrílica superior"), "protesis");
   assert.equal(tipo("6 IMPLANTES + ARCADA CERAMICA 12 PIEZAS SUPERIOR"), "protesis");
   assert.equal(tipo("Endodoncia (1-2-3)"), "endo");
   assert.equal(tipo("Reendodoncia (6-7)"), "endo");
@@ -85,7 +86,7 @@ test("varias letras en una pieza se apilan", () => {
 test("las prótesis sin pieza salen con las piezas elegidas, unidas", () => {
   const filas = filasDelPresupuesto([{ name: "Protesis Parcial Esqueletica 4 a 6 piezas inferior" }, { name: "Limpieza" }]);
   assert.equal(simbolosIniciales(filas).length, 0);
-  const elegidas = { 0: ["31", "41"] };
+  const elegidas = { "0:0": ["31", "41"] };
   const s = simbolosIniciales(filas, elegidas);
   assert.deepEqual(s.map(x => x.pieza), ["31", "41"]);
   assert.ok(union(s.map(x => ({ x: x.x * 186, y: x.y * 98, s: x }))).startsWith("M"));
@@ -93,4 +94,64 @@ test("las prótesis sin pieza salen con las piezas elegidas, unidas", () => {
   assert.deepEqual(g[0].piezas, ["31", "41"]);
   assert.equal(g[0].simbolo.tipo, "protesis");
   assert.equal(g[1].sinPieza, 1);
+});
+
+test("lo que dice arcada pero no es prótesis no se dibuja", () => {
+  assert.equal(simboloDe("Blanqueamiento Promo 2 arcadas"), null);
+  assert.equal(simboloDe("Curetaje arcada superior"), null);
+  assert.equal(simboloDe("Pack Tratamiento ortodoncia brackets metálicos 18 visitas"), null);
+  assert.equal(simboloDe("PACK PROMO Rev+Rad+CURETAGE+BLANQUEAMIENTO"), null);
+  assert.equal(partesDePack("PACK PROMO Rev+Rad+CURETAGE+BLANQUEAMIENTO"), null);
+  assert.equal(partesDePack("EXODONCIA 3º MOLAR + COLGAJO+ODONTOSECCION"), null);
+});
+
+test("un pack se parte en lo que lleva, con piezas por defecto", () => {
+  const [f] = filasDelPresupuesto([{ name: "6 IMPLANTES + ARCADA CERAMICA 12 PIEZAS SUPERIOR" }]);
+  assert.equal(f.pack, true);
+  assert.deepEqual(f.partes.map(p => p.simbolo.tipo), ["implante", "protesis"]);
+  const s = simbolosIniciales([f]);
+  assert.deepEqual(s.filter(x => x.tipo === "implante").map(x => x.pieza), ["16", "14", "12", "22", "24", "26"]);
+  assert.equal(s.filter(x => x.tipo === "protesis").length, 12);
+
+  const [g] = filasDelPresupuesto([{ name: "8 IMPLANTES + ARCADA CERAMICA (14)+ EXOS + PROT. PROV. INFERIOR" }]);
+  assert.deepEqual(g.partes.map(p => p.simbolo.tipo), ["implante", "protesis", "x", "protesis"]);
+  assert.deepEqual(g.partes.map(p => p.nombre), ["8 implantes", "Arcada ceramica (14)", "Exodoncias", "Prótesis provisional inferior"]);
+  const sg = simbolosIniciales([g]);
+  assert.equal(sg.filter(x => x.tipo === "implante").length, 8);
+  assert.equal(sg.filter(x => x.tipo === "protesis").length, 14);   // la provisional, a mano
+  assert.equal(sg.filter(x => x.tipo === "x").length, 0);           // las exos, a mano
+  const lista = agruparFilas([g]);
+  assert.equal(lista.length, 4);
+});
+
+test("barra Ackerman entre los implantes, en pack o suelta", () => {
+  const [f] = filasDelPresupuesto([{ name: "4 IMPLANTES + BARRA ACKERMAN +SOBREDENTADURA METAL ACRILICA REMOVIBLE + EXOS + PROTESIS PROVISIONAL" }]);
+  assert.deepEqual(f.partes.map(p => p.simbolo.tipo), ["implante", "barra", "protesis", "x", "protesis"]);
+  // Sin arcada en el nombre: los implantes se eligen; con ellos sale la barra.
+  assert.equal(simbolosIniciales([f]).length, 0);
+  const s = simbolosIniciales([f], { "0:0": ["33", "43", "35", "45"] });
+  assert.equal(barrasDe([f], s)[0].length, 4);
+
+  const filas = filasDelPresupuesto([{ name: "Implante Titanio   33" }, { name: "Implante Titanio   43" },
+    { name: "Barra Ackerman con sobredentadura removible inferior" }]);
+  assert.deepEqual(filas[2].partes.map(p => p.simbolo.tipo), ["barra", "protesis"]);
+  const s2 = simbolosIniciales(filas);
+  assert.equal(barrasDe(filas, s2)[0].length, 2);
+  assert.equal(s2.filter(x => x.tipo === "protesis").length, 14);
+});
+
+test("arcada suelta sale con sus piezas puestas", () => {
+  const s = simbolosIniciales(filasDelPresupuesto([{ name: "Arcada cerámica sobre implantes (12) superior" }]));
+  assert.equal(s.length, 12);
+  assert.ok(s.every(x => x.tipo === "protesis"));
+});
+
+test("girar un dibujo mueve sus puntos alrededor del centro", () => {
+  const recto = dibujo({ tipo: "implante", pieza: "16" }, 50, 50, 1, 0).trazos[0].d;
+  const girado = dibujo({ tipo: "implante", pieza: "16" }, 50, 50, 1, 30).trazos[0].d;
+  assert.notEqual(recto, girado);
+  const xs = (d) => d.match(/-?\d+(\.\d+)?/g).map(Number).filter((_, i) => i % 2 === 0);
+  // Girado 90° el implante queda tumbado: mucho más ancho que alto.
+  const tumbado = xs(dibujo({ tipo: "implante", pieza: "16" }, 50, 50, 1, 90).trazos[0].d);
+  assert.ok(Math.max(...tumbado) - Math.min(...tumbado) > 7);
 });

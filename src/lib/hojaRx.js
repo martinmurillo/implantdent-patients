@@ -13,7 +13,8 @@
 // que en hojasPaciente.js.
 
 import { separarPieza } from "./consentimientos/conformidad.js";
-import { simboloDe, arcadaDe, alturaPorDefecto, dibujo, union, medidas } from "./hojaRxDibujos.js";
+import { simboloDe, arcadaDe, alturaPorDefecto, dibujo, union, medidas, barra, partesDePack,
+  piezasPorDefecto, cantidadDe } from "./hojaRxDibujos.js";
 
 // ── Dónde cae cada pieza en una panorámica ─────────────────────────────────
 // Medido sobre una panorámica del aparato de la clínica (Sidexis, 2440×1292).
@@ -76,56 +77,164 @@ export function piezasDelPresupuesto(tratamientos = []) {
 }
 
 // ── Símbolos ───────────────────────────────────────────────────────────────
-// Cada fila del presupuesto, con su pieza (si la trae en el nombre), su
-// símbolo y, para las que no traen pieza, la arcada que dice el nombre.
+// Cada fila del presupuesto, partida en lo que se dibuja. Una fila normal es
+// una sola parte: "Implante Titanio   16". Un pack son varias: "6 IMPLANTES +
+// ARCADA CERAMICA 12 PIEZAS SUPERIOR" da los implantes y la arcada, cada una
+// con su dibujo y sus piezas. Las piezas de una parte salen del nombre o, si
+// no trae, de las que dicen piezasPorDefecto (una arcada completa, el reparto
+// de los implantes de un pack) hasta que se eligen a mano.
 export function filasDelPresupuesto(tratamientos = []) {
   return tratamientos.map((t, i) => {
     const nombre = t?.name ?? t?.nombre ?? t;
-    const { base, pieza } = separarPieza(nombre);
-    return { i, base, pieza: pieza && posicionPlantilla(pieza) ? pieza : null,
-      simbolo: simboloDe(base), arcada: arcadaDe(base) };
+    const { base, pieza: p } = separarPieza(nombre);
+    const pieza = p && posicionPlantilla(p) ? p : null;
+    const arcada = arcadaDe(base);
+    const pack = pieza ? null : partesDePack(base);
+    const partes = pack
+      ? pack.map((x, k) => ({ k, nombre: nombreParte(x.nombre, x.simbolo), simbolo: x.simbolo,
+          arcada: arcadaDe(x.nombre) || arcada,
+          defecto: piezasPorDefecto(x.nombre, x.simbolo, arcadaDe(x.nombre) || arcada, x.cantidad) }))
+      : [{ k: 0, nombre: base, simbolo: simboloDe(base), arcada,
+          defecto: pieza ? [pieza] : piezasPorDefecto(base, simboloDe(base), arcada, cantidadDe(base)) }];
+    return { i, base, pieza, arcada, pack: !!pack, partes, simbolo: partes[0].simbolo };
   }).filter(f => String(f.base || "").trim());
 }
 
-// Las piezas de cada fila: la del nombre o, si no trae, las que se eligieron
-// a mano (prótesis removibles, que vienen como "superior"/"inferior").
+// "EXOS" → "Exodoncias", "PROT. PROV. INFERIOR" → "Prótesis provisional
+// inferior"; el resto, en minúsculas con la primera en mayúscula.
+function nombreParte(t, simbolo) {
+  const s = String(t).trim();
+  if (simbolo?.tipo === "x" && /^exos?$/i.test(s)) return "Exodoncias";
+  const largo = s.replace(/prot\.\s*prov\.?/i, "prótesis provisional");
+  const min = largo.toLocaleLowerCase("es");
+  return min.charAt(0).toLocaleUpperCase("es") + min.slice(1);
+}
+
+const clave = (f, p) => `${f.i}:${p.k}`;
+
+// ¿Se pueden elegir las piezas de esta parte? Las que no las traen en el
+// nombre y dibujan algo en una pieza (no la barra, que va entre implantes, ni
+// las iniciales de algo que no se sabe qué es).
+export const eligePiezas = (f, p) =>
+  !f.pieza && !!p.simbolo && p.simbolo.tipo !== "barra" && !p.simbolo.generico;
+
+// Piezas de una parte: la del nombre, las elegidas a mano, o las de por defecto.
+export function piezasDeParte(f, p, elegidas = {}) {
+  if (f.pieza) return [f.pieza];
+  const e = elegidas[clave(f, p)];
+  return (e ?? p.defecto ?? []).filter(x => posicionPlantilla(x));
+}
 export const piezasDeFila = (f, elegidas = {}) =>
-  f.pieza ? [f.pieza] : (elegidas[f.i] || []).filter(p => posicionPlantilla(p));
+  [...new Set(f.partes.flatMap(p => piezasDeParte(f, p, elegidas)))];
 
 // Los símbolos de las filas, colocados donde suele caer cada cosa. Una pieza
-// con varias letras (R y EN) las apila hacia la raíz.
+// con varias letras (R y EN) las apila hacia la raíz. `grupo` junta los de
+// una misma parte: los dientes de una prótesis se unen entre ellos.
 export function simbolosIniciales(filas = [], elegidas = {}) {
   const lista = [];
   const letrasPorPieza = {};
-  for (const f of filas) {
-    if (!f.simbolo) continue;
-    for (const pieza of piezasDeFila(f, elegidas)) {
-      const s = { id: `${f.i}:${pieza}`, fila: f.i, pieza, ...f.simbolo };
+  for (const f of filas) for (const p of f.partes) {
+    if (!p.simbolo || p.simbolo.tipo === "barra") continue;
+    for (const pieza of piezasDeParte(f, p, elegidas)) {
+      const { generico: _g, ...simb } = p.simbolo;
+      const s = { id: `${clave(f, p)}:${pieza}`, fila: f.i, grupo: clave(f, p), pieza, ...simb };
       let apilado = 0;
       if (s.tipo === "letra") { apilado = letrasPorPieza[pieza] || 0; letrasPorPieza[pieza] = apilado + 1; }
-      lista.push({ ...s, x: posicionPlantilla(pieza).x, y: alturaPorDefecto(s, apilado), escala: 1 });
+      lista.push({ ...s, x: posicionPlantilla(pieza).x, y: alturaPorDefecto(s, apilado), escala: 1, giro: 0 });
     }
   }
   return lista;
 }
 
-// Agrupa las filas por nombre para la lista de abajo, con sus piezas y el
-// símbolo que llevan en la radiografía. `traducir` pasa el nombre al idioma.
+// Las barras a dibujar: por cada parte "barra", los implantes de su arcada.
+// Si el nombre no dice la arcada, la de los implantes del mismo pack.
+// Devuelve listas de símbolos de implante (ya movidos).
+export function barrasDe(filas = [], simbolos = []) {
+  const implantes = simbolos.filter(s => s.tipo === "implante");
+  const res = [];
+  for (const f of filas) for (const p of f.partes) {
+    if (p.simbolo?.tipo !== "barra") continue;
+    let arcadas = p.arcada ? [p.arcada] : [...new Set(implantes.filter(s => s.fila === f.i)
+      .map(s => esSuperior(s.pieza) ? "superior" : "inferior"))];
+    if (!arcadas.length) arcadas = [...new Set(implantes.map(s => esSuperior(s.pieza) ? "superior" : "inferior"))];
+    for (const a of arcadas) {
+      const suyos = implantes.filter(s => esSuperior(s.pieza) === (a === "superior"));
+      if (suyos.length >= 2) res.push(suyos);
+    }
+  }
+  return res;
+}
+
+// La lista de abajo: una línea por parte (un pack sale en varias, una por
+// cosa), agrupando por nombre, con sus piezas y el símbolo que llevan en la
+// radiografía. `traducir` pasa el nombre al idioma.
 export function agruparFilas(filas = [], elegidas = {}, traducir = (x) => x) {
   const grupos = new Map();
-  for (const f of filas) {
-    const nom = traducir(f.base);
+  for (const f of filas) for (const p of f.partes) {
+    const nom = traducir(p.nombre);
     const g = grupos.get(nom) || { nombre: nom, piezas: [], sinPieza: 0, simbolo: null };
     grupos.set(nom, g);
-    const piezas = piezasDeFila(f, elegidas);
+    const piezas = p.simbolo?.tipo === "barra" ? [] : piezasDeParte(f, p, elegidas);
     if (piezas.length) {
-      for (const p of piezas) if (!g.piezas.includes(p)) g.piezas.push(p);
-      g.simbolo = g.simbolo || f.simbolo;
-    } else g.sinPieza++;
+      for (const x of piezas) if (!g.piezas.includes(x)) g.piezas.push(x);
+      g.simbolo = g.simbolo || p.simbolo;
+    } else {
+      g.sinPieza++;
+      if (p.simbolo?.tipo === "barra") g.simbolo = p.simbolo;
+    }
   }
   const lista = [...grupos.values()];
   for (const g of lista) g.piezas.sort((a, b) => a - b);
   return lista;
+}
+
+// Piezas para la lista, en el orden de la boca y con las seguidas de un mismo
+// cuadrante como rango: ["11".."17","21".."27"] → "17–11, 21–27". Dos
+// seguidas van sueltas.
+const ORDEN_BOCA = [
+  18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28,
+  55, 54, 53, 52, 51, 61, 62, 63, 64, 65,
+  48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38,
+  85, 84, 83, 82, 81, 71, 72, 73, 74, 75,
+].map(String);
+export function textoPiezas(piezas = []) {
+  const pos = (p) => { const i = ORDEN_BOCA.indexOf(String(p)); return i < 0 ? 999 + Number(p) : i; };
+  const orden = [...new Set(piezas.map(String))].sort((a, b) => pos(a) - pos(b));
+  const trozos = [];
+  let tramo = [];
+  const cierra = () => {
+    if (tramo.length >= 3) trozos.push(`${tramo[0]}–${tramo[tramo.length - 1]}`);
+    else trozos.push(...tramo);
+    tramo = [];
+  };
+  for (const p of orden) {
+    const ant = tramo[tramo.length - 1];
+    const seguida = ant && pos(p) === pos(ant) + 1 && Math.floor(p / 10) === Math.floor(ant / 10);
+    if (!seguida && tramo.length) cierra();
+    tramo.push(p);
+  }
+  if (tramo.length) cierra();
+  return trozos.join(", ");
+}
+
+// Lo que une símbolos, en mm de la imagen: los dientes de cada prótesis por
+// el cuello, y la barra entre implantes. Lo usan la pantalla y el PDF.
+export function trazosDeUnion(simbolos = [], barras = [], mmImg, escalaGlobal = 1) {
+  const enMm = (s) => ({ x: s.x * mmImg.w, y: s.y * mmImg.h, s, escala: s.escala, giro: s.giro });
+  const res = [];
+  const porGrupo = new Map();
+  for (const s of simbolos) if (s.tipo === "protesis") {
+    const l = porGrupo.get(s.grupo) || []; porGrupo.set(s.grupo, l); l.push(enMm(s));
+  }
+  for (const l of porGrupo.values()) for (const arriba of [true, false]) {
+    const d = union(l.filter(q => esSuperior(q.s.pieza) === arriba), escalaGlobal);
+    if (d) res.push({ d, fino: 0.28 });
+  }
+  for (const b of barras) {
+    const d = barra(b.map(enMm), escalaGlobal);
+    if (d) res.push({ d, fino: 0.7 });
+  }
+  return res;
 }
 
 // Medidas de la radiografía en el papel, en mm: a todo el ancho entre
@@ -223,10 +332,10 @@ const MM = 72 / 25.4;
 // ── El PDF ─────────────────────────────────────────────────────────────────
 // imagen: { bytes (JPEG), ancho, alto } en píxeles.
 // simbolos: los de simbolosIniciales(), ya movidos; x, y en fracción de la imagen.
-// escalaGlobal: tamaño de todos los dibujos (1 = normal).
+// barras: lo que devuelve barrasDe(). escalaGlobal: tamaño de todos los dibujos (1 = normal).
 // grupos: lo que devuelve agruparTratamientos.
 // clinica: fila de clinica_config. logo: bytes PNG o null.
-export async function generarHojaRx(pdfLib, { imagen, simbolos = [], escalaGlobal = 1, grupos = [], paciente = {},
+export async function generarHojaRx(pdfLib, { imagen, simbolos = [], barras = [], escalaGlobal = 1, grupos = [], paciente = {},
   clinica = {}, logo = null, idioma = "ES", fecha = new Date(), doctor = "" }) {
   const { PDFDocument, StandardFonts, rgb } = pdfLib;
   const T = TEXTOS[idioma] || TEXTOS.ES;
@@ -307,20 +416,10 @@ export async function generarHojaRx(pdfLib, { imagen, simbolos = [], escalaGloba
     p.drawText(t, { x: x0, y: y0, size: s, font: negrita, color: negro });
   };
   // Primero las uniones de las prótesis, para que los dientes queden encima.
-  const porFila = new Map();
-  for (const s of simbolos) if (s.tipo === "protesis") {
-    const l = porFila.get(s.fila) || []; porFila.set(s.fila, l);
-    const m = enMm(s); l.push({ x: m.x, y: m.y, s, escala: s.escala });
-  }
-  for (const l of porFila.values()) {
-    for (const arriba of [true, false]) {
-      const d = union(l.filter(q => esSuperior(q.s.pieza) === arriba), escalaGlobal);
-      if (d) traza(d);
-    }
-  }
+  for (const d of trazosDeUnion(simbolos, barras, mmImg, escalaGlobal)) traza(d.d, d.fino);
   for (const s of simbolos) {
     const m = enMm(s);
-    const dib = dibujo(s, m.x, m.y, m.e);
+    const dib = dibujo(s, m.x, m.y, m.e, s.giro);
     for (const t of dib.trazos) traza(t.d, t.fino ?? (s.tipo === "x" ? 0.38 : 0.28), t.relleno);
     if (dib.texto) letra(dib.texto.letra, dib.texto.x, dib.texto.y, dib.texto.tam);
   }
@@ -363,10 +462,11 @@ export async function generarHojaRx(pdfLib, { imagen, simbolos = [], escalaGloba
   y -= 20;
   const filas = grupos.map(g => {
     const partes = [];
-    if (g.piezas.length) partes.push(g.piezas.join(", "));
+    if (g.piezas.length) partes.push(textoPiezas(g.piezas));
     if (g.sinPieza > 1) partes.push(`x${g.sinPieza}`);
     return { nombre: limpio(g.nombre), detalle: partes.join(" · "),
-      simbolo: g.simbolo && g.piezas.length ? { ...g.simbolo, pieza: g.piezas[0] } : null };
+      simbolo: g.simbolo && (g.piezas.length || g.simbolo.tipo === "barra")
+        ? { ...g.simbolo, pieza: g.piezas[0] || "31" } : null };
   });
   // El símbolo de cada tratamiento, pequeño, al lado de su nombre: hace de
   // leyenda de lo que hay dibujado en la radiografía.
@@ -401,15 +501,23 @@ export async function generarHojaRx(pdfLib, { imagen, simbolos = [], escalaGloba
       borderColor: negro, borderWidth: 0.7 });
     if (filas[k].simbolo) icono(filas[k].simbolo, x + lado + 4 + ANCHO_ICONO / 2, yy + tam * 0.36, (alto - 3) / MM);
     const xNom = x + lado + 6 + ANCHO_ICONO;
-    const det = filas[k].detalle;
-    const anchoDet = det ? negrita.widthOfTextAtSize(det, tam) + 6 : 0;
+    // Las piezas, en negrita a la derecha, sin pasar de media columna: si no
+    // caben se achican y, como mucho, se cortan. El nombre ocupa el resto.
+    let det = filas[k].detalle, tDet = tam;
+    const maxDet = (hasta - xNom) * 0.55;
+    while (det && tDet > 7 && negrita.widthOfTextAtSize(det, tDet) > maxDet) tDet -= 0.25;
+    if (det && negrita.widthOfTextAtSize(det, tDet) > maxDet) {
+      while (det.length > 1 && negrita.widthOfTextAtSize(det + "…", tDet) > maxDet) det = det.slice(0, -1);
+      det = det.trimEnd() + "…";
+    }
+    const anchoDet = det ? negrita.widthOfTextAtSize(det, tDet) + 6 : 0;
     let nom = filas[k].nombre;
     if (normal.widthOfTextAtSize(nom, tam) > hasta - xNom - anchoDet) {
       while (nom.length > 1 && normal.widthOfTextAtSize(nom + "…", tam) > hasta - xNom - anchoDet) nom = nom.slice(0, -1);
       nom = nom.trimEnd() + "…";
     }
     p.drawText(nom, { x: xNom, y: yy, size: tam, font: normal, color: negro });
-    if (det) p.drawText(det, { x: hasta - anchoDet + 6, y: yy, size: tam, font: negrita, color: negro });
+    if (det) p.drawText(det, { x: hasta - anchoDet + 6, y: yy, size: tDet, font: negrita, color: negro });
   }
   if (filas.length > caben) {
     p.drawText(`+ ${filas.length - caben}`, { x: der - 20, y: fin - 14, size: 9, font: normal, color: gris });

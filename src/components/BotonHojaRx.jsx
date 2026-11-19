@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../supabase";
 import { generarHojaRx, nombreDoctor, tablaTonos, filasDelPresupuesto, simbolosIniciales,
-  agruparFilas, medidasImagenMm, piezasDeFila } from "../lib/hojaRx";
-import { dibujo, union, medidas, superior, PIEZAS_SUPERIOR, PIEZAS_INFERIOR } from "../lib/hojaRxDibujos";
+  agruparFilas, medidasImagenMm, piezasDeParte, eligePiezas, barrasDe, trazosDeUnion } from "../lib/hojaRx";
+import { dibujo, medidas, superior, PIEZAS_SUPERIOR, PIEZAS_INFERIOR } from "../lib/hojaRxDibujos";
 import { IDIOMAS_HOJAS } from "../lib/consentimientos/hojasPaciente";
 import { translateTreatment } from "../treatments";
 
@@ -92,7 +92,7 @@ const est = {
 // Un símbolo en SVG, con las mismas rutas que el PDF: trazo ancho blanco y
 // fino negro encima. `activo` lo pinta en dorado.
 function Simbolo({ s, x, y, escala, activo }) {
-  const dib = dibujo(s, x, y, escala);
+  const dib = dibujo(s, x, y, escala, s.giro);
   const color = activo ? "#c9a84c" : "#000";
   return (
     <>
@@ -159,6 +159,7 @@ export function BotonHojaRx({ paciente }) {
   const incluidas = filas.filter(f => !fuera.has(f.i));
   const simbolos = simbolosIniciales(incluidas, elegidas).map(s => ({ ...s, ...ajustes[s.id] }));
   const mm = rx ? medidasImagenMm(rx.ancho, rx.alto) : { w: 186, h: 98 };
+  const barras = barrasDe(incluidas, simbolos);
   const sel = simbolos.find(s => s.id === seleccion);
   const cambia = () => setResultado(null);
 
@@ -232,11 +233,14 @@ export function BotonHojaRx({ paciente }) {
     setFuera(prev => { const n = new Set(prev); if (n.has(i)) n.delete(i); else n.add(i); return n; });
     cambia();
   };
-  const alternarPieza = (i, pieza) => {
+  // Se parte de las piezas que tiene ahora la parte (las de por defecto, si
+  // no se tocó), así una arcada de 12 se corrige quitando o poniendo una.
+  const alternarPieza = (f, p, pieza) => {
+    const k = `${f.i}:${p.k}`;
     setElegidas(prev => {
-      const actual = prev[i] || [];
-      const nuevas = actual.includes(pieza) ? actual.filter(p => p !== pieza) : [...actual, pieza];
-      return { ...prev, [i]: nuevas.sort((a, b) => a - b) };
+      const actual = piezasDeParte(f, p, prev);
+      const nuevas = actual.includes(pieza) ? actual.filter(x => x !== pieza) : [...actual, pieza];
+      return { ...prev, [k]: nuevas.sort((a, b) => a - b) };
     });
     cambia();
   };
@@ -253,6 +257,7 @@ export function BotonHojaRx({ paciente }) {
       const bytes = await generarHojaRx(pdfLib, {
         imagen: rx,
         simbolos,
+        barras,
         escalaGlobal,
         grupos: agruparFilas(incluidas, elegidas, traductor(idioma)),
         paciente: { nombre: paciente.name, historia: paciente.hc },
@@ -279,16 +284,8 @@ export function BotonHojaRx({ paciente }) {
     setAbierto(false);
   };
 
-  // Uniones de las prótesis, en pantalla igual que en el PDF.
-  const uniones = [];
-  for (const f of incluidas) {
-    const suyos = simbolos.filter(s => s.fila === f.i && s.tipo === "protesis");
-    for (const arriba of [true, false]) {
-      const d = union(suyos.filter(s => superior(s.pieza) === arriba)
-        .map(s => ({ x: s.x * mm.w, y: s.y * mm.h, s, escala: s.escala })), escalaGlobal);
-      if (d) uniones.push(d);
-    }
-  }
+  // Uniones de las prótesis y barras entre implantes, igual que en el PDF.
+  const uniones = trazosDeUnion(simbolos, barras, mm, escalaGlobal);
 
   const chip = (activo, apagado) => ({
     fontSize:11.5, fontWeight:700, borderRadius:10, padding:"1px 8px", border:"1px solid #2c3250",
@@ -326,7 +323,7 @@ export function BotonHojaRx({ paciente }) {
               <>
                 <div style={{fontSize:12.5, color:"#555", marginBottom:8, lineHeight:1.45}}>
                   Cada dibujo sale donde suele estar esa pieza. <b>Arrastrá</b> el que no haya caído
-                  en su sitio; tocándolo se puede cambiar su tamaño.
+                  en su sitio; tocándolo se puede cambiar su tamaño y girarlo.
                   {colocando && <b style={{color:"#a07830"}}> Tocá en la radiografía dónde va.</b>}
                 </div>
                 <div ref={marco} onClick={clicImagen}
@@ -340,8 +337,8 @@ export function BotonHojaRx({ paciente }) {
                     style={{position:"absolute", inset:0, width:"100%", height:"100%"}}>
                     {uniones.map((d, k) => (
                       <g key={k} pointerEvents="none">
-                        <path d={d} fill="none" stroke="#fff" strokeWidth={0.75} strokeLinecap="round"/>
-                        <path d={d} fill="none" stroke="#000" strokeWidth={0.28} strokeLinecap="round"/>
+                        <path d={d.d} fill="none" stroke="#fff" strokeWidth={d.fino + 0.47} strokeLinecap="round"/>
+                        <path d={d.d} fill="none" stroke="#000" strokeWidth={d.fino} strokeLinecap="round"/>
                       </g>
                     ))}
                     {simbolos.map(s => {
@@ -400,6 +397,18 @@ export function BotonHojaRx({ paciente }) {
                     <span style={{width:40, textAlign:"center"}}>{Math.round((sel.escala || 1) * 100)}%</span>
                     <button style={{...est.gris, padding:"2px 10px"}}
                       onClick={()=>ajustar(sel.id, { escala: Math.min(3, (sel.escala || 1) + 0.1) })}>+</button>
+                    {sel.tipo !== "letra" && (
+                      <>
+                        <span style={{color:"#777", marginLeft:8}}>Girar</span>
+                        <button style={{...est.gris, padding:"2px 9px"}} title="Girar a la izquierda"
+                          onClick={()=>ajustar(sel.id, { giro: Math.max(-90, (sel.giro || 0) - 5) })}>⟲</button>
+                        <input type="range" min="-90" max="90" step="1" value={sel.giro || 0} aria-label="Giro"
+                          onChange={e=>ajustar(sel.id, { giro: Number(e.target.value) })} style={{width:110}}/>
+                        <button style={{...est.gris, padding:"2px 9px"}} title="Girar a la derecha"
+                          onClick={()=>ajustar(sel.id, { giro: Math.min(90, (sel.giro || 0) + 5) })}>⟳</button>
+                        <span style={{width:34, textAlign:"center"}}>{Math.round(sel.giro || 0)}°</span>
+                      </>
+                    )}
                     {ajustes[sel.id] && (
                       <button style={{...est.gris, padding:"2px 10px", fontSize:12}}
                         onClick={()=>{ setAjustes(a => { const n = { ...a }; delete n[sel.id]; return n; }); cambia(); }}>
@@ -418,10 +427,52 @@ export function BotonHojaRx({ paciente }) {
                 <div style={{padding:"9px 12px", fontSize:13, color:"#888"}}>El presupuesto no tiene tratamientos.</div>
               ) : filas.map((f, k) => {
                 const sale = !fuera.has(f.i);
-                const piezas = piezasDeFila(f, elegidas);
-                const sinPieza = !f.pieza && f.simbolo;
-                const arcadas = f.arcada === "superior" ? [PIEZAS_SUPERIOR]
-                  : f.arcada === "inferior" ? [PIEZAS_INFERIOR] : [PIEZAS_SUPERIOR, PIEZAS_INFERIOR];
+                // Los controles de una parte: sus piezas (para colocarlas en la
+                // radiografía) y, si no vienen en el nombre, el botón para elegirlas.
+                const controles = (p) => {
+                  if (!p.simbolo) return null;
+                  const clave = `${f.i}:${p.k}`;
+                  const piezas = p.simbolo.tipo === "barra" ? [] : piezasDeParte(f, p, elegidas);
+                  return (
+                    <>
+                      {p.simbolo.tipo === "barra" && (
+                        <span style={{fontSize:11.5, color:"#888"}}>une los implantes de su arcada</span>
+                      )}
+                      {piezas.map(x => {
+                        const id = `${clave}:${x}`;
+                        return (
+                          <button key={x} disabled={!sale || !rx} title="Colocar en la radiografía"
+                            onClick={()=>{ setColocando(colocando === id ? null : id); setSeleccion(id); }}
+                            style={chip(colocando === id || seleccion === id, !sale || !rx)}>{x}</button>
+                        );
+                      })}
+                      {eligePiezas(f, p) && (
+                        <button disabled={!sale} onClick={()=>setEligiendoPiezas(eligiendoPiezas === clave ? null : clave)}
+                          style={{...est.gris, padding:"2px 9px", fontSize:11.5, opacity: sale ? 1 : 0.4}}>
+                          {eligiendoPiezas === clave ? "Listo" : piezas.length ? "Cambiar piezas" : "Elegir piezas"}
+                        </button>
+                      )}
+                    </>
+                  );
+                };
+                const selector = (p) => {
+                  if (eligiendoPiezas !== `${f.i}:${p.k}` || !sale) return null;
+                  const piezas = piezasDeParte(f, p, elegidas);
+                  const arcadas = p.arcada === "superior" ? [PIEZAS_SUPERIOR]
+                    : p.arcada === "inferior" ? [PIEZAS_INFERIOR] : [PIEZAS_SUPERIOR, PIEZAS_INFERIOR];
+                  return (
+                    <div style={{padding:"2px 10px 8px 34px"}}>
+                      {arcadas.map((fila, a) => (
+                        <div key={a} style={{display:"flex", gap:4, flexWrap:"wrap", marginBottom:4}}>
+                          {fila.map((x, j) => (
+                            <button key={x} onClick={()=>alternarPieza(f, p, x)}
+                              style={{...chip(piezas.includes(x), false), marginLeft: j === 8 ? 10 : 0}}>{x}</button>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                };
                 return (
                   <div key={f.i} style={{borderTop: k ? "1px solid #f0f2f7" : "none",
                     background: sale ? "#f7f3e6" : "transparent"}}>
@@ -429,34 +480,21 @@ export function BotonHojaRx({ paciente }) {
                       <label style={{display:"flex", alignItems:"center", gap:8, flex:1, minWidth:200, cursor:"pointer"}}>
                         <input type="checkbox" checked={sale} onChange={()=>alternarFila(f.i)}/>
                         <span>{f.base}</span>
+                        {f.pack && <span style={{fontSize:11, color:"#888"}}>· pack</span>}
                       </label>
-                      {f.simbolo && piezas.map(p => {
-                        const id = `${f.i}:${p}`;
-                        return (
-                          <button key={p} disabled={!sale || !rx} title="Colocar en la radiografía"
-                            onClick={()=>{ setColocando(colocando === id ? null : id); setSeleccion(id); }}
-                            style={chip(colocando === id || seleccion === id, !sale || !rx)}>{p}</button>
-                        );
-                      })}
-                      {sinPieza && (
-                        <button disabled={!sale} onClick={()=>setEligiendoPiezas(eligiendoPiezas === f.i ? null : f.i)}
-                          style={{...est.gris, padding:"2px 9px", fontSize:11.5, opacity: sale ? 1 : 0.4}}>
-                          {eligiendoPiezas === f.i ? "Listo" : piezas.length ? "Cambiar piezas" : "Elegir piezas"}
-                        </button>
-                      )}
+                      {!f.pack && controles(f.partes[0])}
                     </div>
-                    {eligiendoPiezas === f.i && sale && (
-                      <div style={{padding:"2px 10px 8px 34px"}}>
-                        {arcadas.map((fila, a) => (
-                          <div key={a} style={{display:"flex", gap:4, flexWrap:"wrap", marginBottom:4}}>
-                            {fila.map((p, j) => (
-                              <button key={p} onClick={()=>alternarPieza(f.i, p)}
-                                style={{...chip(piezas.includes(p), false), marginLeft: j === 8 ? 10 : 0}}>{p}</button>
-                            ))}
-                          </div>
-                        ))}
+                    {!f.pack && selector(f.partes[0])}
+                    {f.pack && f.partes.map(p => (
+                      <div key={p.k}>
+                        <div style={{display:"flex", alignItems:"center", gap:6, padding:"3px 10px 3px 34px",
+                          fontSize:12.5, flexWrap:"wrap", opacity: sale ? 1 : 0.5}}>
+                          <span style={{flex:1, minWidth:180, color:"#555"}}>↳ {p.nombre}</span>
+                          {controles(p)}
+                        </div>
+                        {selector(p)}
                       </div>
-                    )}
+                    ))}
                   </div>
                 );
               })}

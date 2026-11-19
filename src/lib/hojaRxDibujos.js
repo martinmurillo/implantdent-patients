@@ -40,7 +40,12 @@ const REGLAS = [
   [/injerto|regeneracion|hueso|membrana/, { tipo: "letra", letra: "INJ" }],
   [/gingivectom|alargamiento/, { tipo: "letra", letra: "G" }],
   [/pilar|aditamento/, { tipo: "letra", letra: "PI" }],
-  [/mantenimiento|limpieza|curetaje|pulido/, null],
+  [/mantenimiento|limpieza|curetaje|curetage|pulido/, null],
+  // Lo que no va en una pieza aunque diga "arcada": blanqueamiento de 2
+  // arcadas, ortodoncia, revisiones.
+  [/blanquea|ortodoncia|brackets|revision|radiograf|fluor|tartrectom/, null],
+  [/ataches?/, { tipo: "letra", letra: "AT" }],
+  [/barra/, { tipo: "barra" }],
   // Prótesis antes que corona e implante: "6 IMPLANTES + ARCADA CERAMICA" o
   // "PROTESIS INMEDIATA SOBRE IMPLANTES" son prótesis.
   [/protesis|prot\.|sobredentadura|ataches|arcada|hibrida|esqueletic|acrilic|flexible/, { tipo: "protesis" }],
@@ -55,7 +60,57 @@ export function simboloDe(nombre) {
   if (!t) return null;
   for (const [re, s] of REGLAS) if (re.test(t)) return s ? { ...s } : null;
   const ini = t.split(" ").filter(w => /^[a-z]/.test(w)).slice(0, 2).map(w => w[0].toUpperCase()).join("");
-  return ini ? { tipo: "letra", letra: ini } : null;
+  return ini ? { tipo: "letra", letra: ini, generico: true } : null;
+}
+
+// ── Packs ──────────────────────────────────────────────────────────────────
+// Un pack viene en una sola línea y sin piezas: "4 IMPLANTES + BARRA ACKERMAN
+// +SOBREDENTADURA METAL ACRILICA REMOVIBLE + EXOS + PROTESIS PROVISIONAL",
+// "8 IMPLANTES + ARCADA CERAMICA (14)+ EXOS + PROT. PROV. INFERIOR". Se parte
+// por los "+" y cada trozo lleva su dibujo. "Barra Ackerman con
+// sobredentadura" no lleva "+" pero son dos cosas.
+// Devuelve [{ nombre, simbolo, cantidad }] o null si no es un pack.
+export function partesDePack(nombre) {
+  let trozos = String(nombre || "").split("+").map(s => s.trim()).filter(Boolean);
+  trozos = trozos.flatMap(t => {
+    const m = t.match(/^(barra.*?)\s+con\s+(sobredentadura.*)$/i);
+    return m ? [m[1], m[2]] : [t];
+  });
+  if (trozos.length < 2) return null;
+  const partes = trozos.map(t => ({ nombre: t, simbolo: simboloDe(t), cantidad: cantidadDe(t) }));
+  // "Exodoncia 3er molar + colgajo" no es un pack: solo un trozo dibuja algo.
+  const conDibujo = partes.filter(p => p.simbolo && !p.simbolo.generico);
+  if (conDibujo.length < 2) return null;
+  return partes.filter(p => p.simbolo);
+}
+
+// "6 IMPLANTES", "12 PIEZAS", "ARCADA CERAMICA (14)" → el número.
+export function cantidadDe(t) {
+  const m = plano(t).match(/(\d+)\s*(implantes|piezas)|\((\d+)\)/);
+  return m ? Number(m[1] || m[3]) : null;
+}
+
+// Piezas que salen puestas sin elegirlas. Una arcada completa, sobredentadura
+// o híbrida: de 7 a 7 (14), o de 6 a 6 si dice 12. Los implantes de un pack,
+// en el reparto habitual para 4, 6 u 8. Lo demás (parciales, exodoncias,
+// provisionales) se elige a mano.
+const ARCADA = {
+  superior: { 10: "15 14 13 12 11 21 22 23 24 25", 12: "16 15 14 13 12 11 21 22 23 24 25 26", 14: "17 16 15 14 13 12 11 21 22 23 24 25 26 27" },
+  inferior: { 10: "45 44 43 42 41 31 32 33 34 35", 12: "46 45 44 43 42 41 31 32 33 34 35 36", 14: "47 46 45 44 43 42 41 31 32 33 34 35 36 37" },
+};
+const IMPLANTES = {
+  superior: { 4: "15 12 22 25", 6: "16 14 12 22 24 26", 8: "16 14 13 12 22 23 24 26" },
+  inferior: { 4: "45 42 32 35", 6: "46 44 42 32 34 36", 8: "46 44 43 42 32 33 34 36" },
+};
+export function piezasPorDefecto(nombre, simbolo, arcada, cantidad) {
+  if (!arcada || !simbolo) return [];
+  const t = plano(nombre);
+  if (simbolo.tipo === "protesis" && !/parcial|provisional|prov\b/.test(t)) {
+    const n = [10, 12, 14].includes(cantidad) ? cantidad : 14;
+    return ARCADA[arcada][n].split(" ");
+  }
+  if (simbolo.tipo === "implante" && IMPLANTES[arcada][cantidad]) return IMPLANTES[arcada][cantidad].split(" ");
+  return [];
 }
 
 // Arcada de una prótesis sin pieza, por su nombre: para ofrecer solo esas
@@ -130,20 +185,26 @@ export function medidas(s, escala = 1) {
     return { w: f.w * escala, h: f.h * escala };
   }
   if (s.tipo === "x") return { w: 2 * BRAZO_X * escala, h: 2 * BRAZO_X * escala };
+  if (s.tipo === "barra") return { w: 4.4 * escala, h: 1.5 * escala };
   return { w: LETRA * 0.7 * String(s.letra || "").length * escala, h: LETRA * escala };
 }
 
 // Un símbolo en (x, y) mm → { trazos: [{ d, fino?, relleno? }], texto? }.
 // Las rutas van en mm absolutos de la imagen.
-export function dibujo(s, x, y, escala = 1) {
-  const r = dibujoBruto(s, x, y, escala);
+// `giro` en grados, en el sentido de las agujas del reloj, alrededor del
+// centro del símbolo: un implante inclinado, un diente rotado. Las letras no
+// giran.
+export function dibujo(s, x, y, escala = 1, giro = 0) {
+  const r = dibujoBruto(s, x, y, escala, giro);
   return { ...r, trazos: r.trazos.map(t => typeof t === "string" ? { d: t } : t) };
 }
 
-function dibujoBruto(s, x, y, escala) {
+function dibujoBruto(s, x, y, escala, giro) {
   const sup = superior(s.pieza);
   const vy = sup ? 1 : -1;                 // los de abajo, dados la vuelta
-  const P = (u, v, w, h) => [x + u * w, y + vy * v * h];
+  const a = (Number(giro) || 0) * Math.PI / 180, cos = Math.cos(a), sin = Math.sin(a);
+  const gira = (px, py) => [x + (px - x) * cos - (py - y) * sin, y + (px - x) * sin + (py - y) * cos];
+  const P = (u, v, w, h) => gira(x + u * w, y + vy * v * h);
   if (s.tipo === "corona" || s.tipo === "protesis") {
     const f = formaDiente(s.pieza);
     const w = f.w * escala, h = f.h * escala;
@@ -184,9 +245,14 @@ function dibujoBruto(s, x, y, escala) {
     for (let v = -0.3; v < 0.36; v += 0.11) roscas.push(linea([P(-0.5, v, w, l), P(0.5, v + 0.07, w, l)]));
     return { trazos: [cuerpo, pilar, ...roscas] };
   }
+  if (s.tipo === "barra") {
+    // Solo para la leyenda: la barra de verdad la dibuja barra() entre implantes.
+    const b = 2.2 * escala;
+    return { trazos: [{ d: linea([gira(x - b, y), gira(x + b, y)]), fino: 0.7 }] };
+  }
   if (s.tipo === "x") {
     const b = BRAZO_X * escala;
-    return { trazos: [linea([[x - b, y - b], [x + b, y + b]]), linea([[x - b, y + b], [x + b, y - b]])] };
+    return { trazos: [linea([gira(x - b, y - b), gira(x + b, y + b)]), linea([gira(x - b, y + b), gira(x + b, y - b)])] };
   }
   return { trazos: [], texto: { letra: s.letra || "?", x, y, tam: LETRA * escala } };
 }
@@ -199,6 +265,20 @@ export function union(puntos, escala = 1) {
   return linea(orden.map(p => {
     const { h } = medidas(p.s, escala * (p.escala || 1));
     return [p.x, p.y + (superior(p.s.pieza) ? -1 : 1) * h * 0.5];
+  }));
+}
+
+// Barra (Ackerman) entre los implantes de una arcada: una línea gruesa por la
+// plataforma de cada uno, de izquierda a derecha. `puntos` son los implantes
+// ya colocados, en mm, con su escala y giro.
+export function barra(puntos, escala = 1) {
+  if (puntos.length < 2) return null;
+  const orden = [...puntos].sort((a, b) => a.x - b.x);
+  return linea(orden.map(p => {
+    const e = escala * (p.escala || 1);
+    const off = (superior(p.s.pieza) ? 1 : -1) * IMPLANTE.l * e * 0.5;
+    const ang = (Number(p.giro) || 0) * Math.PI / 180;
+    return [p.x - off * Math.sin(ang), p.y + off * Math.cos(ang)];
   }));
 }
 
