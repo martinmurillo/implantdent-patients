@@ -18,6 +18,30 @@
 // dibujo() devuelve trazos { d, fino?, relleno? }: la ruta, el grosor de la
 // línea en mm si no es el normal, y si va rellena de negro.
 
+// ── Colores ────────────────────────────────────────────────────────────────
+// Uno por tipo de dibujo: el mismo en la radiografía, en el icono de la lista
+// y en el nombre del tratamiento, para ver de un vistazo qué es cada cosa.
+// Todos oscuros y saturados: en una impresora en blanco y negro salen como
+// gris oscuro (luminancia entre 80 y 115 de 255) y se siguen viendo bien
+// sobre el papel y sobre la radiografía.
+export const COLORES = {
+  implante: "#1a56c4",   // azul
+  corona:   "#0f7a3a",   // verde
+  protesis: "#7b2fa8",   // morado
+  endo:     "#d35400",   // naranja
+  perno:    "#8b5a2b",   // marrón
+  x:        "#d01c1c",   // rojo
+  barra:    "#0b7f8a",   // turquesa
+  letra:    "#c2187a",   // fucsia
+};
+export const colorDe = (s) => COLORES[s?.tipo] || "#000000";
+
+// "#1a56c4" → [r, g, b] de 0 a 1, para pdf-lib.
+export function rgbDe(hex) {
+  const n = parseInt(String(hex).replace("#", ""), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(v => v / 255);
+}
+
 const plano = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 // Lo primero que casa gana. Van sobre el nombre sin la pieza, sin acentos y

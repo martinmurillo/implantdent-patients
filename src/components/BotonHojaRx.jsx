@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "../supabase";
 import { generarHojaRx, nombreDoctor, tablaTonos, filasDelPresupuesto, simbolosIniciales,
   agruparFilas, medidasImagenMm, piezasDeParte, eligePiezas, barrasDe, trazosDeUnion } from "../lib/hojaRx";
-import { dibujo, medidas, superior, PIEZAS_SUPERIOR, PIEZAS_INFERIOR } from "../lib/hojaRxDibujos";
+import { dibujo, medidas, superior, PIEZAS_SUPERIOR, PIEZAS_INFERIOR, colorDe } from "../lib/hojaRxDibujos";
 import { IDIOMAS_HOJAS } from "../lib/consentimientos/hojasPaciente";
 import { translateTreatment } from "../treatments";
 
@@ -90,10 +90,10 @@ const est = {
 
 
 // Un símbolo en SVG, con las mismas rutas que el PDF: trazo ancho blanco y
-// fino negro encima. `activo` lo pinta en dorado.
+// fino del color de su tipo encima. `activo` lo pinta en dorado.
 function Simbolo({ s, x, y, escala, activo }) {
   const dib = dibujo(s, x, y, escala, s.giro);
-  const color = activo ? "#c9a84c" : "#000";
+  const color = activo ? "#c9a84c" : colorDe(s);
   return (
     <>
       {dib.trazos.map((t, k) => {
@@ -249,10 +249,11 @@ export function BotonHojaRx({ paciente }) {
     if (!rx) return;
     setGenerando(true); setError(null);
     try {
-      const [pdfLib, conf, logo] = await Promise.all([
+      const [pdfLib, conf, logo, logoPie] = await Promise.all([
         import("pdf-lib"),
         supabase.from("clinica_config").select("*").single(),
         fetch("/logo.png").then(r => r.ok ? r.arrayBuffer() : null).catch(() => null),
+        fetch("/logo-pie.png").then(r => r.ok ? r.arrayBuffer() : null).catch(() => null),
       ]);
       const bytes = await generarHojaRx(pdfLib, {
         imagen: rx,
@@ -263,6 +264,7 @@ export function BotonHojaRx({ paciente }) {
         paciente: { nombre: paciente.name, historia: paciente.hc },
         clinica: conf.data || {},
         logo,
+        logoPie,
         idioma,
         doctor: nombreDoctor(doctores.find(d => d.id === doctorId)),
       });
@@ -338,7 +340,7 @@ export function BotonHojaRx({ paciente }) {
                     {uniones.map((d, k) => (
                       <g key={k} pointerEvents="none">
                         <path d={d.d} fill="none" stroke="#fff" strokeWidth={d.fino + 0.47} strokeLinecap="round"/>
-                        <path d={d.d} fill="none" stroke="#000" strokeWidth={d.fino} strokeLinecap="round"/>
+                        <path d={d.d} fill="none" stroke={d.color} strokeWidth={d.fino} strokeLinecap="round"/>
                       </g>
                     ))}
                     {simbolos.map(s => {

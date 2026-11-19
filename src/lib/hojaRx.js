@@ -14,7 +14,7 @@
 
 import { separarPieza } from "./consentimientos/conformidad.js";
 import { simboloDe, arcadaDe, alturaPorDefecto, dibujo, union, medidas, barra, partesDePack,
-  piezasPorDefecto, cantidadDe } from "./hojaRxDibujos.js";
+  piezasPorDefecto, cantidadDe, colorDe, COLORES, rgbDe } from "./hojaRxDibujos.js";
 
 // ── Dónde cae cada pieza en una panorámica ─────────────────────────────────
 // Medido sobre una panorámica del aparato de la clínica (Sidexis, 2440×1292).
@@ -228,11 +228,11 @@ export function trazosDeUnion(simbolos = [], barras = [], mmImg, escalaGlobal = 
   }
   for (const l of porGrupo.values()) for (const arriba of [true, false]) {
     const d = union(l.filter(q => esSuperior(q.s.pieza) === arriba), escalaGlobal);
-    if (d) res.push({ d, fino: 0.28 });
+    if (d) res.push({ d, fino: 0.28, color: COLORES.protesis });
   }
   for (const b of barras) {
     const d = barra(b.map(enMm), escalaGlobal);
-    if (d) res.push({ d, fino: 0.7 });
+    if (d) res.push({ d, fino: 0.7, color: COLORES.barra });
   }
   return res;
 }
@@ -334,9 +334,10 @@ const MM = 72 / 25.4;
 // simbolos: los de simbolosIniciales(), ya movidos; x, y en fracción de la imagen.
 // barras: lo que devuelve barrasDe(). escalaGlobal: tamaño de todos los dibujos (1 = normal).
 // grupos: lo que devuelve agruparTratamientos.
-// clinica: fila de clinica_config. logo: bytes PNG o null.
+// clinica: fila de clinica_config. logo: bytes PNG o null (el de fondo
+// blanco, arriba). logoPie: bytes PNG o null (el de fondo verde, en el pie).
 export async function generarHojaRx(pdfLib, { imagen, simbolos = [], barras = [], escalaGlobal = 1, grupos = [], paciente = {},
-  clinica = {}, logo = null, idioma = "ES", fecha = new Date(), doctor = "" }) {
+  clinica = {}, logo = null, logoPie = null, idioma = "ES", fecha = new Date(), doctor = "" }) {
   const { PDFDocument, StandardFonts, rgb } = pdfLib;
   const T = TEXTOS[idioma] || TEXTOS.ES;
   const doc = await PDFDocument.create();
@@ -345,6 +346,7 @@ export async function generarHojaRx(pdfLib, { imagen, simbolos = [], barras = []
   const normal = await doc.embedFont(StandardFonts.Helvetica);
   const negrita = await doc.embedFont(StandardFonts.HelveticaBold);
   const negro = rgb(0, 0, 0), gris = rgb(0.35, 0.35, 0.35), blanco = rgb(1, 1, 1);
+  const colorPdf = (hex) => rgb(...rgbDe(hex));
   const izq = 12 * MM, der = W - 12 * MM;
   // y desde arriba en mm → coordenada pdf
   const Y = (mm) => H - mm * MM;
@@ -355,6 +357,11 @@ export async function generarHojaRx(pdfLib, { imagen, simbolos = [], barras = []
   if (logo) {
     try { imgLogo = await doc.embedPng(logo); } catch { /* sin logo también sirve */ }
   }
+  let imgPie = null;
+  if (logoPie) {
+    try { imgPie = await doc.embedPng(logoPie); } catch { /* el pie lleva el otro, o ninguno */ }
+  }
+  imgPie = imgPie || imgLogo;
   if (imgLogo) {
     const alto = 16 * MM, ancho = alto * imgLogo.width / imgLogo.height;
     p.drawImage(imgLogo, { x: izq, y: Y(10) - alto, width: ancho, height: alto });
@@ -396,15 +403,15 @@ export async function generarHojaRx(pdfLib, { imagen, simbolos = [], barras = []
   // Símbolos sobre la radiografía. Van en mm de la imagen (origen arriba a la
   // izquierda, y hacia abajo), igual que en pantalla: drawSvgPath con escala
   // MM y origen en la esquina de la imagen. Cada trazo se pinta dos veces,
-  // ancho en blanco y fino en negro, para que se vea sobre el gris.
+  // ancho en blanco y fino en el color de su tipo, para que se vea sobre el gris.
   const mmImg = { w: anchoReal / MM, h: altoImg / MM };
   const enMm = (s) => ({ x: s.x * mmImg.w, y: s.y * mmImg.h, e: (s.escala || 1) * escalaGlobal });
-  const traza = (d, fino = 0.28, relleno = false) => {
+  const traza = (d, fino = 0.28, relleno = false, color = negro) => {
     p.drawSvgPath(d, { x: xImg, y: topImg, scale: MM, borderColor: blanco, borderWidth: fino + 0.47, borderLineCap: 1 });
-    p.drawSvgPath(d, { x: xImg, y: topImg, scale: MM, borderColor: negro, borderWidth: fino, borderLineCap: 1,
-      ...(relleno ? { color: negro } : {}) });
+    p.drawSvgPath(d, { x: xImg, y: topImg, scale: MM, borderColor: color, borderWidth: fino, borderLineCap: 1,
+      ...(relleno ? { color } : {}) });
   };
-  const letra = (t, cx, cy, tam) => {
+  const letra = (t, cx, cy, tam, color = negro) => {
     const s = tam * MM * 1.15;            // altura de mayúscula ≈ tam mm
     const w = negrita.widthOfTextAtSize(t, s);
     const x0 = xImg + cx * MM - w / 2, y0 = topImg - cy * MM - s * 0.36;
@@ -413,19 +420,20 @@ export async function generarHojaRx(pdfLib, { imagen, simbolos = [], barras = []
       const a = k * Math.PI / 4;
       p.drawText(t, { x: x0 + r * Math.cos(a), y: y0 + r * Math.sin(a), size: s, font: negrita, color: blanco });
     }
-    p.drawText(t, { x: x0, y: y0, size: s, font: negrita, color: negro });
+    p.drawText(t, { x: x0, y: y0, size: s, font: negrita, color });
   };
   // Primero las uniones de las prótesis, para que los dientes queden encima.
-  for (const d of trazosDeUnion(simbolos, barras, mmImg, escalaGlobal)) traza(d.d, d.fino);
+  for (const d of trazosDeUnion(simbolos, barras, mmImg, escalaGlobal)) traza(d.d, d.fino, false, colorPdf(d.color));
   for (const s of simbolos) {
     const m = enMm(s);
+    const c = colorPdf(colorDe(s));
     const dib = dibujo(s, m.x, m.y, m.e, s.giro);
-    for (const t of dib.trazos) traza(t.d, t.fino ?? (s.tipo === "x" ? 0.38 : 0.28), t.relleno);
-    if (dib.texto) letra(dib.texto.letra, dib.texto.x, dib.texto.y, dib.texto.tam);
+    for (const t of dib.trazos) traza(t.d, t.fino ?? (s.tipo === "x" ? 0.38 : 0.28), t.relleno, c);
+    if (dib.texto) letra(dib.texto.letra, dib.texto.x, dib.texto.y, dib.texto.tam, c);
   }
 
   // Números de las piezas: un círculo pequeño fuera de la imagen y una raya
-  // fina hasta el símbolo de esa pieza más cercano.
+  // fina, del color de ese símbolo, hasta el símbolo de esa pieza más cercano.
   const radio = 2.3 * MM;
   const piezas = [...new Set(simbolos.map(s => s.pieza))];
   const numeros = (lista, arriba) => {
@@ -435,16 +443,16 @@ export async function generarHojaRx(pdfLib, { imagen, simbolos = [], barras = []
       const suyos = simbolos.filter(s => s.pieza === pieza).map(s => {
         const m = enMm(s);
         const { h } = medidas(s, m.e);
-        return { x: m.x, y: arriba ? m.y - h / 2 : m.y + h / 2 };
+        return { x: m.x, y: arriba ? m.y - h / 2 : m.y + h / 2, color: colorDe(s) };
       });
       const d = suyos.reduce((a, b) => (arriba ? b.y < a.y : b.y > a.y) ? b : a);
-      return { x: xImg + d.x * MM, y: topImg - d.y * MM };
+      return { x: xImg + d.x * MM, y: topImg - d.y * MM, color: colorPdf(d.color) };
     });
     const xs = repartir(destinos.map(d => d.x), 2 * radio + 1.5, izq + radio, der - radio);
     lista.forEach((pieza, i) => {
-      for (const [grosor, color] of [[1.6, blanco], [0.5, negro]])
+      for (const [grosor, color] of [[1.6, blanco], [0.6, destinos[i].color]])
         p.drawLine({ start: { x: xs[i], y: arriba ? yEtq - radio : yEtq + radio },
-          end: destinos[i], thickness: grosor, color });
+          end: { x: destinos[i].x, y: destinos[i].y }, thickness: grosor, color });
       p.drawCircle({ x: xs[i], y: yEtq, size: radio, color: negro });
       const t = String(pieza), s = 6.5;
       p.drawText(t, { x: xs[i] - negrita.widthOfTextAtSize(t, s) / 2, y: yEtq - s * 0.35, size: s, font: negrita, color: blanco });
@@ -464,22 +472,24 @@ export async function generarHojaRx(pdfLib, { imagen, simbolos = [], barras = []
     const partes = [];
     if (g.piezas.length) partes.push(textoPiezas(g.piezas));
     if (g.sinPieza > 1) partes.push(`x${g.sinPieza}`);
-    return { nombre: limpio(g.nombre), detalle: partes.join(" · "),
-      simbolo: g.simbolo && (g.piezas.length || g.simbolo.tipo === "barra")
-        ? { ...g.simbolo, pieza: g.piezas[0] || "31" } : null };
+    const simbolo = g.simbolo && (g.piezas.length || g.simbolo.tipo === "barra")
+      ? { ...g.simbolo, pieza: g.piezas[0] || "31" } : null;
+    return { nombre: limpio(g.nombre), detalle: partes.join(" · "), simbolo,
+      color: simbolo ? colorPdf(colorDe(simbolo)) : negro };
   });
   // El símbolo de cada tratamiento, pequeño, al lado de su nombre: hace de
-  // leyenda de lo que hay dibujado en la radiografía.
-  const icono = (s, cx, cy, altoMax) => {
+  // leyenda de lo que hay dibujado en la radiografía. Icono, nombre y piezas
+  // van en el color de su dibujo.
+  const icono = (s, cx, cy, altoMax, color) => {
     const e = Math.min(0.75, altoMax / medidas(s, 1).h);
     const dib = dibujo(s, 0, 0, e);
     for (const t of dib.trazos) {
-      p.drawSvgPath(t.d, { x: cx, y: cy, scale: MM, borderColor: negro,
-        borderWidth: Math.min(t.fino ?? 0.28, 0.4), borderLineCap: 1, ...(t.relleno ? { color: negro } : {}) });
+      p.drawSvgPath(t.d, { x: cx, y: cy, scale: MM, borderColor: color,
+        borderWidth: Math.min(t.fino ?? 0.28, 0.4), borderLineCap: 1, ...(t.relleno ? { color } : {}) });
     }
     if (dib.texto) {
       const s2 = 8, w = negrita.widthOfTextAtSize(dib.texto.letra, s2);
-      p.drawText(dib.texto.letra, { x: cx - w / 2, y: cy - s2 * 0.36, size: s2, font: negrita, color: negro });
+      p.drawText(dib.texto.letra, { x: cx - w / 2, y: cy - s2 * 0.36, size: s2, font: negrita, color });
     }
   };
   const ANCHO_ICONO = 8 * MM;
@@ -499,7 +509,7 @@ export async function generarHojaRx(pdfLib, { imagen, simbolos = [], barras = []
     const lado = Math.min(13, alto - 5);
     p.drawRectangle({ x, y: yy - (lado - tam * 0.72) / 2, width: lado, height: lado,
       borderColor: negro, borderWidth: 0.7 });
-    if (filas[k].simbolo) icono(filas[k].simbolo, x + lado + 4 + ANCHO_ICONO / 2, yy + tam * 0.36, (alto - 3) / MM);
+    if (filas[k].simbolo) icono(filas[k].simbolo, x + lado + 4 + ANCHO_ICONO / 2, yy + tam * 0.36, (alto - 3) / MM, filas[k].color);
     const xNom = x + lado + 6 + ANCHO_ICONO;
     // Las piezas, en negrita a la derecha, sin pasar de media columna: si no
     // caben se achican y, como mucho, se cortan. El nombre ocupa el resto.
@@ -516,20 +526,21 @@ export async function generarHojaRx(pdfLib, { imagen, simbolos = [], barras = []
       while (nom.length > 1 && normal.widthOfTextAtSize(nom + "…", tam) > hasta - xNom - anchoDet) nom = nom.slice(0, -1);
       nom = nom.trimEnd() + "…";
     }
-    p.drawText(nom, { x: xNom, y: yy, size: tam, font: normal, color: negro });
-    if (det) p.drawText(det, { x: hasta - anchoDet + 6, y: yy, size: tDet, font: negrita, color: negro });
+    p.drawText(nom, { x: xNom, y: yy, size: tam, font: normal, color: filas[k].color });
+    if (det) p.drawText(det, { x: hasta - anchoDet + 6, y: yy, size: tDet, font: negrita, color: filas[k].color });
   }
   if (filas.length > caben) {
     p.drawText(`+ ${filas.length - caben}`, { x: der - 20, y: fin - 14, size: 9, font: normal, color: gris });
   }
   if (simbolos.length) p.drawText(T.nota, { x: izq, y: yPie + 4 * MM, size: 7, font: normal, color: gris });
 
-  // Pie: logo pequeño a la izquierda y los datos de la clínica en una línea.
+  // Pie: el logo de fondo verde, pequeño, a la izquierda y los datos de la
+  // clínica en una línea.
   p.drawLine({ start: { x: izq, y: yPie }, end: { x: der, y: yPie }, thickness: 0.6, color: gris });
   let xPie = izq;
-  if (imgLogo) {
-    const alto = 9 * MM, ancho = alto * imgLogo.width / imgLogo.height;
-    p.drawImage(imgLogo, { x: izq, y: yPie - 3 * MM - alto, width: ancho, height: alto });
+  if (imgPie) {
+    const alto = 9 * MM, ancho = alto * imgPie.width / imgPie.height;
+    p.drawImage(imgPie, { x: izq, y: yPie - 3 * MM - alto, width: ancho, height: alto });
     xPie = izq + ancho + 5 * MM;
   }
   const datosPie = [clinica.razon_social, clinica.direccion, clinica.poblacion,
